@@ -3,6 +3,7 @@ import SwiftUI
 struct FeedbackPill: View {
     let phase: AppPhase
     let reduceMotion: Bool
+    let onClose: () -> Void
     @State private var trace = false
     @State private var successPulse = false
     @State private var borderSweep = false
@@ -51,6 +52,7 @@ struct FeedbackPill: View {
                 .font(.system(size: 9, weight: .black, design: .monospaced))
                 .tracking(1.4)
                 .foregroundStyle(KColor.magenta)
+                .padding(.trailing, 28)
             Text("Well, you’re out of tokens xD")
                 .font(.system(size: 16, weight: .bold))
             HStack(spacing: 10) {
@@ -58,8 +60,18 @@ struct FeedbackPill: View {
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(KColor.secondary)
                 Spacer()
-                Button("GO UNLIMITED · $10") {
+                Button {
                     _ = PaddleCheckoutOpener().openStarterCheckout()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("UNLIMITED")
+                        Text("$10/mo")
+                            .foregroundStyle(.white.opacity(0.72))
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 9, weight: .bold))
+                    }
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }
@@ -70,6 +82,10 @@ struct FeedbackPill: View {
         .clipShape(RoundedRectangle(cornerRadius: 11))
         .overlay(RoundedRectangle(cornerRadius: 11).stroke(KColor.magenta.opacity(0.65)))
         .overlay(Rectangle().fill(KColor.magenta).frame(width: 2), alignment: .leading)
+        .overlay(alignment: .topTrailing) {
+            LimitDismissButton(action: onClose)
+                .padding(10)
+        }
         .padding(6)
     }
 
@@ -209,6 +225,31 @@ struct FeedbackPill: View {
         switch phase { case .permissionDenied: "OPEN SYSTEM SETTINGS"; case .limitReached: "SUBSCRIBE FOR UNLIMITED ACTIONS"; case .error(let message): message; default: nil }
     }
     private var borderColor: Color { if case .error = phase { return KColor.danger.opacity(0.7) }; return phase == .permissionDenied ? KColor.magenta.opacity(0.5) : KColor.line }
+}
+
+private struct LimitDismissButton: View {
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(isHovering ? KColor.ink : KColor.secondary)
+                .frame(width: 24, height: 24)
+                .background(isHovering ? KColor.surfaceHover : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(isHovering ? KColor.line : Color.clear)
+                }
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .help("Close")
+        .accessibilityLabel("Close subscription offer")
+    }
 }
 
 private struct CyberRewriteLabel: View {

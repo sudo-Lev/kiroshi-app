@@ -26,7 +26,12 @@ final class FeedbackWindowController: FeedbackPresenting {
             panel.hasShadow = true
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.hidesOnDeactivate = false
-            panel.contentView = NSHostingView(rootView: FeedbackHost(state: state))
+            panel.contentView = NSHostingView(
+                rootView: FeedbackHost(
+                    state: state,
+                    onClose: { [weak self] in self?.hide() }
+                )
+            )
             self.panel = panel
         }
         state.reduceMotion = reduceMotion
@@ -62,10 +67,15 @@ private final class FeedbackWindowState: ObservableObject {
 
 private struct FeedbackHost: View {
     @ObservedObject var state: FeedbackWindowState
+    let onClose: () -> Void
 
     var body: some View {
         ZStack {
-            FeedbackPill(phase: state.phase, reduceMotion: state.reduceMotion)
+            FeedbackPill(
+                phase: state.phase,
+                reduceMotion: state.reduceMotion,
+                onClose: onClose
+            )
                 .id(phaseKey)
                 .transition(
                     .asymmetric(
