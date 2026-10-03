@@ -1,6 +1,10 @@
 name = "qwixit-api"
 main = "worker.js"
 compatibility_date = "2026-10-03"
+preview_urls = false
+
+[observability.logs]
+enabled = true
 
 [[durable_objects.bindings]]
 name = "USAGE_LEDGER"
