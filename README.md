@@ -24,12 +24,25 @@ The project targets macOS 14 and has App Sandbox disabled because global Accessi
 - Non-activating feedback near the selected text
 - Processing, success, no-selection, permission, and error states
 - Three-step first-run onboarding
-- Focused settings for feedback, Accessibility access, and the OpenAI connection
+- Focused settings for feedback and Accessibility access
 - Reduced-motion-compatible SwiftUI animations
 
-Without an API key, `TextImprovementService` uses a deterministic local demo implementation. Add an `sk-…` key in **Settings → OpenAI Connection** to switch automatically to the OpenAI Responses API. The key is stored in macOS Keychain, requests use `store: false`, and secrets are never written to app preferences or logs.
+Qwixit includes 30 free AI actions per installation each calendar month. An active Unlimited subscription is $10/month and removes that limit. Every model request is counted server-side, including Quick Fix, palette actions, Peek translation/summary, and AI-generated refinement questions.
 
-For development-only runs, Qwixit also reads `OPENAI_API_KEY` from the Xcode scheme’s **Run → Arguments → Environment Variables**. Do not commit a real key or bundle a `.env` file with the app.
+Requests go through the Cloudflare Worker at `qwixit-api.levmisiliuk.workers.dev`; users do not configure or receive an OpenAI API key. The app keeps a random installation identity in macOS Keychain. A Durable Object atomically enforces the monthly quota, while signed Paddle webhooks are the only way to activate Unlimited access. OpenAI requests use `store: false`.
+
+## Worker deployment
+
+The Worker lives in `cloudflare-worker/` and requires the `USAGE_LEDGER` Durable Object binding from `wrangler.toml` plus two encrypted secrets:
+
+```sh
+cd cloudflare-worker
+npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put PADDLE_WEBHOOK_SECRET
+npx wrangler deploy
+```
+
+Configure Paddle to send `subscription.created`, `subscription.updated`, and `subscription.canceled` events to `https://qwixit-api.levmisiliuk.workers.dev/billing/webhook`. The checkout is currently wired to the Paddle sandbox; switch the client token, price ID, Paddle environment, and webhook secret together before a production release.
 
 ## Project structure
 

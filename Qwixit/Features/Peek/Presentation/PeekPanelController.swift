@@ -151,6 +151,7 @@ final class PeekPanelController {
         return switch state {
         case .idle: NSSize(width: 440, height: 150)
         case .loading, .loaded: NSSize(width: 440, height: 360)
+        case .limitReached: NSSize(width: 440, height: 270)
         case .failed: NSSize(width: 420, height: 220)
         }
     }

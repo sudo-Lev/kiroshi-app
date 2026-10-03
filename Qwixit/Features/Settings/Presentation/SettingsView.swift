@@ -11,7 +11,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 shortcutsSection
                 accessSection
-                connectionSection
+                billingSection
             }
             .padding(18)
 
@@ -128,47 +128,22 @@ struct SettingsView: View {
         }
     }
 
-    private var connectionSection: some View {
-        SettingsSection(title: "CONNECTION") {
-            VStack(spacing: 10) {
+    private var billingSection: some View {
+        SettingsSection(title: "PLAN · SANDBOX") {
+            VStack(spacing: 0) {
                 SettingRow(
-                    icon: viewModel.hasAPIKey ? "checkmark.circle.fill" : "key.fill",
-                    iconColor: viewModel.hasAPIKey ? KColor.success : KColor.violet,
-                    title: viewModel.hasAPIKey ? "OpenAI connected" : "Local demo mode",
-                    detail: viewModel.hasAPIKey
-                        ? "Your API key is stored securely in Keychain."
-                        : "Add an API key to enable live improvements."
+                    icon: "creditcard.fill",
+                    title: "30 free AI actions / month",
+                    detail: "Go unlimited for $10/month. Sandbox test payments only."
                 ) {
-                    if viewModel.hasAPIKey {
-                        Button("Remove") { viewModel.removeAPIKey() }
-                            .buttonStyle(SubtleButtonStyle())
-                            .foregroundStyle(KColor.danger)
-                    }
+                    Button("Go unlimited") { viewModel.openStarterCheckout() }
+                        .buttonStyle(PrimaryButtonStyle())
                 }
 
-                if !viewModel.hasAPIKey {
-                    HStack(spacing: 8) {
-                        SecureField("sk-…", text: $viewModel.apiKeyInput)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 10.5, design: .monospaced))
-                            .padding(.horizontal, 10)
-                            .frame(height: 32)
-                            .background(KColor.canvas)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(KColor.line))
-
-                        Button("Save") { viewModel.saveAPIKey() }
-                            .buttonStyle(PrimaryButtonStyle())
-                            .disabled(viewModel.apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 12)
-                }
-
-                if let message = viewModel.apiKeyMessage {
+                if let message = viewModel.checkoutMessage {
                     Text(message)
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(viewModel.hasAPIKey ? KColor.success : KColor.warning)
+                        .foregroundStyle(KColor.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)

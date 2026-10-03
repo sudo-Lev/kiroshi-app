@@ -232,6 +232,8 @@ struct PeekView: View {
                     skeleton
                 case .loaded:
                     resultContent
+                case .limitReached:
+                    limitView
                 case .failed(let message):
                     errorView(message)
                 }
@@ -240,6 +242,24 @@ struct PeekView: View {
             .padding(18)
         }
         .frame(maxHeight: viewModel.isPinned ? 500 : 250)
+    }
+
+    private var limitView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("30 / 30 · FREE MONTH COMPLETE")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .tracking(1.1)
+                .foregroundStyle(KColor.magenta)
+            Text("Well, you’re out of tokens xD")
+                .font(.system(size: 19, weight: .bold))
+            Text("Subscribe for unlimited Qwixit actions.")
+                .contentFont()
+                .foregroundStyle(PeekPalette.muted)
+            Button("GO UNLIMITED · $10/MONTH") {
+                _ = PaddleCheckoutOpener().openStarterCheckout()
+            }
+            .buttonStyle(PeekChipStyle(accent: KColor.magenta))
+        }
     }
 
     private var skeleton: some View {

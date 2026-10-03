@@ -56,10 +56,7 @@ final class AppContainer {
             improver: improver,
             hud: ResultHUDController(feedback: feedback)
         )
-        settingsViewModel = SettingsViewModel(
-            accessibility: accessibility,
-            apiKeyStore: KeychainAPIKeyStore()
-        )
+        settingsViewModel = SettingsViewModel(accessibility: accessibility)
         quickImproveViewModel = QuickImproveViewModel(
             accessibility: accessibility,
             improver: improver,

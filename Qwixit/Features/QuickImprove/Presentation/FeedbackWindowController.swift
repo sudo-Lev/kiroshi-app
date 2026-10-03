@@ -13,7 +13,8 @@ final class FeedbackWindowController: FeedbackPresenting {
         fallbackPoint: CGPoint? = nil
     ) {
         let size: NSSize
-        if case .error = phase { size = .init(width: 354, height: 116) }
+        if phase == .limitReached { size = .init(width: 354, height: 126) }
+        else if case .error = phase { size = .init(width: 354, height: 116) }
         else if phase == .permissionDenied { size = .init(width: 280, height: 68) }
         else if phase == .processing || phase == .success { size = .init(width: 236, height: 58) }
         else { size = .init(width: 260, height: 64) }
@@ -83,6 +84,7 @@ private struct FeedbackHost: View {
         case .success: "success"
         case .noSelection: "no-selection"
         case .permissionDenied: "permission"
+        case .limitReached: "limit-reached"
         case .error(let message): "error-\(message)"
         }
     }

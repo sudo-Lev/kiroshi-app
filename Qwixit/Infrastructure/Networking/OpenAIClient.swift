@@ -1,25 +1,46 @@
 import Foundation
 
-actor OpenAIClient {
-    static let defaultModel = "gpt-5.6-luna"
-    private let endpoint = URL(string: "https://api.openai.com/v1/responses")!
-    private let session: URLSession
+enum QwixitAPIError: LocalizedError {
+    case invalidResponse
+    case emptyOutput
+    case quotaExceeded(checkoutURL: URL?)
+    case api(status: Int, message: String)
 
-    enum ClientError: LocalizedError {
-        case missingKey
-        case invalidResponse
-        case emptyOutput
-        case api(status: Int, message: String)
-
-        var errorDescription: String? {
-            switch self {
-            case .missingKey: return "Add an OpenAI API key in Qwixit Settings."
-            case .invalidResponse: return "OpenAI returned an unreadable response. Your text is unchanged."
-            case .emptyOutput: return "OpenAI returned no improved text. Your text is unchanged."
-            case .api(let status, let message): return "OpenAI error \(status): \(message)"
-            }
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse: "The AI service returned an unreadable response. Your text is unchanged."
+        case .emptyOutput: "The AI service returned no text. Your text is unchanged."
+        case .quotaExceeded: "Well, you’re out of tokens xD Pls subscribe"
+        case .api(let status, let message): "Qwixit service error \(status): \(message)"
         }
     }
+}
+
+enum QwixitAPI {
+    static let endpoint = URL(string: "https://qwixit-api.levmisiliuk.workers.dev/v1/responses")!
+
+    static func prepare(_ request: inout URLRequest) throws {
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Qwixit/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue(try InstallationIdentity.current(), forHTTPHeaderField: "X-Qwixit-Installation-ID")
+    }
+
+    static func responseError(status: Int, data: Data) -> QwixitAPIError {
+        let envelope = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data)
+        if status == 402, envelope?.error.code == "free_limit_reached" {
+            return .quotaExceeded(checkoutURL: envelope?.error.checkoutURL.flatMap(URL.init(string:)))
+        }
+        return .api(
+            status: status,
+            message: envelope?.error.message ?? HTTPURLResponse.localizedString(forStatusCode: status)
+        )
+    }
+}
+
+actor OpenAIClient {
+    static let defaultModel = "gpt-5.6-luna"
+    static let endpoint = QwixitAPI.endpoint
+    private let session: URLSession
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -32,13 +53,9 @@ actor OpenAIClient {
     }
 
     func improve(_ text: String, instruction: String? = nil, model: String = defaultModel) async throws -> String {
-        guard let key = KeychainStore.apiKey(), !key.isEmpty else { throw ClientError.missingKey }
-
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("Qwixit/1.0", forHTTPHeaderField: "User-Agent")
+        try QwixitAPI.prepare(&request)
 
         let direction = instruction.map { "Direction: \($0)" } ?? ""
         let body = ResponseRequest(
@@ -57,31 +74,26 @@ actor OpenAIClient {
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
+        guard let http = response as? HTTPURLResponse else { throw QwixitAPIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
-            let envelope = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data)
-            throw ClientError.api(status: http.statusCode, message: envelope?.error.message ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode))
+            throw QwixitAPI.responseError(status: http.statusCode, data: data)
         }
 
-        guard let decoded = try? JSONDecoder().decode(ResponseEnvelope.self, from: data) else { throw ClientError.invalidResponse }
+        guard let decoded = try? JSONDecoder().decode(ResponseEnvelope.self, from: data) else { throw QwixitAPIError.invalidResponse }
         let output = decoded.output
             .flatMap { $0.content ?? [] }
             .filter { $0.type == "output_text" }
             .compactMap(\.text)
             .joined()
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !output.isEmpty else { throw ClientError.emptyOutput }
+        guard !output.isEmpty else { throw QwixitAPIError.emptyOutput }
         return output
     }
 
     func performAction(_ text: String, instruction: String, model: String = defaultModel) async throws -> String {
-        guard let key = KeychainStore.apiKey(), !key.isEmpty else { throw ClientError.missingKey }
-
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("Qwixit/1.0", forHTTPHeaderField: "User-Agent")
+        try QwixitAPI.prepare(&request)
         let body = ResponseRequest(
             model: model,
             instructions: """
@@ -98,27 +110,22 @@ actor OpenAIClient {
         )
         request.httpBody = try JSONEncoder().encode(body)
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
+        guard let http = response as? HTTPURLResponse else { throw QwixitAPIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
-            let envelope = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data)
-            throw ClientError.api(status: http.statusCode, message: envelope?.error.message ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode))
+            throw QwixitAPI.responseError(status: http.statusCode, data: data)
         }
-        guard let decoded = try? JSONDecoder().decode(ResponseEnvelope.self, from: data) else { throw ClientError.invalidResponse }
+        guard let decoded = try? JSONDecoder().decode(ResponseEnvelope.self, from: data) else { throw QwixitAPIError.invalidResponse }
         let output = decoded.output.flatMap { $0.content ?? [] }.filter { $0.type == "output_text" }.compactMap(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !output.isEmpty else { throw ClientError.emptyOutput }
+        guard !output.isEmpty else { throw QwixitAPIError.emptyOutput }
         return output
     }
 }
 
 extension OpenAIClient {
     func clarifyingQuestions(_ text: String, goal: String, model: String = defaultModel) async throws -> [RefineQuestion] {
-        guard let key = KeychainStore.apiKey(), !key.isEmpty else { throw ClientError.missingKey }
-
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("Qwixit/1.0", forHTTPHeaderField: "User-Agent")
+        try QwixitAPI.prepare(&request)
         let schema: [String: Any] = [
             "type": "object",
             "properties": ["questions": [
@@ -145,16 +152,15 @@ extension OpenAIClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
+        guard let http = response as? HTTPURLResponse else { throw QwixitAPIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
-            let envelope = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data)
-            throw ClientError.api(status: http.statusCode, message: envelope?.error.message ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode))
+            throw QwixitAPI.responseError(status: http.statusCode, data: data)
         }
-        guard let decoded = try? JSONDecoder().decode(ResponseEnvelope.self, from: data) else { throw ClientError.invalidResponse }
+        guard let decoded = try? JSONDecoder().decode(ResponseEnvelope.self, from: data) else { throw QwixitAPIError.invalidResponse }
         let json = decoded.output.flatMap { $0.content ?? [] }.filter { $0.type == "output_text" }.compactMap(\.text).joined()
         struct Envelope: Decodable { let questions: [RefineQuestion] }
         guard let questions = try? JSONDecoder().decode(Envelope.self, from: Data(json.utf8)).questions else {
-            throw ClientError.invalidResponse
+            throw QwixitAPIError.invalidResponse
         }
         return questions
             .map { RefineQuestion(question: $0.question, options: Array($0.options.prefix(4))) }
@@ -197,5 +203,14 @@ private struct ResponseEnvelope: Decodable {
 
 private struct APIErrorEnvelope: Decodable {
     let error: APIError
-    struct APIError: Decodable { let message: String }
+    struct APIError: Decodable {
+        let message: String
+        let code: String?
+        let checkoutURL: String?
+
+        enum CodingKeys: String, CodingKey {
+            case message, code
+            case checkoutURL = "checkout_url"
+        }
+    }
 }

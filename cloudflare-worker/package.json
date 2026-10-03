@@ -1,0 +1,12 @@
+{
+  "name": "qwixit-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check worker.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.147.0"
+  }
+}

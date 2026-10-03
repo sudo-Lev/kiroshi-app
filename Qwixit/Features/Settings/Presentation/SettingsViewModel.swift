@@ -1,23 +1,13 @@
 import Foundation
 
-protocol APIKeyStoring {
-    func apiKey() -> String?
-    func saveAPIKey(_ value: String) throws
-    func deleteAPIKey() throws
-}
-
-struct KeychainAPIKeyStore: APIKeyStoring {
-    func apiKey() -> String? { KeychainStore.apiKey() }
-    func saveAPIKey(_ value: String) throws { try KeychainStore.saveAPIKey(value) }
-    func deleteAPIKey() throws { try KeychainStore.deleteAPIKey() }
+protocol CheckoutOpening {
+    func openStarterCheckout() -> Bool
 }
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
     @Published private(set) var accessibilityGranted: Bool
-    @Published private(set) var hasAPIKey: Bool
-    @Published private(set) var apiKeyMessage: String?
-    @Published var apiKeyInput = ""
+    @Published private(set) var checkoutMessage: String?
     @Published var onboardingStep = 0
     @Published var showSuccess: Bool {
         didSet { defaults.set(showSuccess, forKey: AppPreferenceKey.showSuccess) }
@@ -68,20 +58,19 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private let accessibility: AccessibilityServicing
-    private let apiKeyStore: APIKeyStoring
+    private let checkout: CheckoutOpening
     private let defaults: UserDefaults
     private var permissionTask: Task<Void, Never>?
 
     init(
         accessibility: AccessibilityServicing,
-        apiKeyStore: APIKeyStoring,
+        checkout: CheckoutOpening = PaddleCheckoutOpener(),
         defaults: UserDefaults = .standard
     ) {
         self.accessibility = accessibility
-        self.apiKeyStore = apiKeyStore
+        self.checkout = checkout
         self.defaults = defaults
         accessibilityGranted = accessibility.isTrusted
-        hasAPIKey = apiKeyStore.apiKey() != nil
         showSuccess = defaults.object(forKey: AppPreferenceKey.showSuccess) as? Bool ?? true
         animationsEnabled = defaults.object(forKey: AppPreferenceKey.animationsEnabled) as? Bool ?? true
         priorityProcessing = defaults.bool(forKey: AppPreferenceKey.priorityProcessing)
@@ -135,25 +124,10 @@ final class SettingsViewModel: ObservableObject {
         pollAccessibilityPermission()
     }
 
-    func saveAPIKey() {
-        do {
-            try apiKeyStore.saveAPIKey(apiKeyInput)
-            hasAPIKey = true
-            apiKeyInput = ""
-            apiKeyMessage = "Connected securely"
-        } catch {
-            apiKeyMessage = error.localizedDescription
-        }
-    }
-
-    func removeAPIKey() {
-        do {
-            try apiKeyStore.deleteAPIKey()
-            hasAPIKey = false
-            apiKeyMessage = "API key removed"
-        } catch {
-            apiKeyMessage = error.localizedDescription
-        }
+    func openStarterCheckout() {
+        checkoutMessage = checkout.openStarterCheckout()
+            ? "Sandbox checkout opened. Subscription unlocks unlimited actions after webhook confirmation."
+            : "Could not open the sandbox checkout."
     }
 
     func pollAccessibilityPermission() {

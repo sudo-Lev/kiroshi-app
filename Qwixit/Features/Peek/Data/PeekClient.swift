@@ -24,7 +24,6 @@ protocol PeekClientProtocol: AnyObject {
 }
 
 actor PeekClient: PeekClientProtocol {
-    private let endpoint = URL(string: "https://api.openai.com/v1/responses")!
     private let session: URLSession
 
     init() {
@@ -39,18 +38,18 @@ actor PeekClient: PeekClientProtocol {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    guard let key = KeychainStore.apiKey(), !key.isEmpty else {
-                        throw OpenAIClient.ClientError.missingKey
-                    }
-                    var urlRequest = URLRequest(url: endpoint)
+                    var urlRequest = URLRequest(url: OpenAIClient.endpoint)
                     urlRequest.httpMethod = "POST"
-                    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    urlRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+                    try QwixitAPI.prepare(&urlRequest)
                     urlRequest.httpBody = try makeBody(request)
 
                     let (bytes, response) = try await session.bytes(for: urlRequest)
                     guard let http = response as? HTTPURLResponse else { throw PeekClientError.invalidResponse }
-                    guard (200..<300).contains(http.statusCode) else { throw PeekClientError.http(http.statusCode) }
+                    guard (200..<300).contains(http.statusCode) else {
+                        var body = Data()
+                        for try await byte in bytes.prefix(8_192) { body.append(byte) }
+                        throw QwixitAPI.responseError(status: http.statusCode, data: body)
+                    }
 
                     for try await line in bytes.lines {
                         try Task.checkCancellation()
@@ -110,12 +109,10 @@ private struct StreamEvent: Decodable {
 
 enum PeekClientError: LocalizedError {
     case invalidResponse
-    case http(Int)
 
     var errorDescription: String? {
         switch self {
         case .invalidResponse: "The server returned an unreadable response."
-        case .http(let status): "OpenAI returned error \(status)."
         }
     }
 }

@@ -1,0 +1,11 @@
+name = "qwixit-api"
+main = "worker.js"
+compatibility_date = "2026-10-03"
+
+[[durable_objects.bindings]]
+name = "USAGE_LEDGER"
+class_name = "UsageLedger"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UsageLedger"]

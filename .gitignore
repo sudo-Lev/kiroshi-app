@@ -2,6 +2,8 @@ Build/
 .DS_Store
 xcuserdata/
 DerivedData/
+node_modules/
+.wrangler/
 .env
 .env.*
 !.env.example

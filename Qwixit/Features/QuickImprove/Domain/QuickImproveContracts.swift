@@ -6,6 +6,7 @@ enum AppPhase: Equatable {
     case success
     case noSelection
     case permissionDenied
+    case limitReached
     case error(String)
 }
 

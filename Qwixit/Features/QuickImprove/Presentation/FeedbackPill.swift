@@ -9,7 +9,9 @@ struct FeedbackPill: View {
 
     var body: some View {
         Group {
-            if case .error(let message) = phase {
+            if phase == .limitReached {
+                limitCard
+            } else if case .error(let message) = phase {
                 errorCard(message)
             } else if phase == .processing || phase == .success {
                 cyberStatusBox
@@ -41,6 +43,34 @@ struct FeedbackPill: View {
                 withAnimation(.linear(duration: 0.64).repeatForever(autoreverses: false)) { borderSweep = true }
             }
         }
+    }
+
+    private var limitCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("FREE MONTH COMPLETE")
+                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .tracking(1.4)
+                .foregroundStyle(KColor.magenta)
+            Text("Well, you’re out of tokens xD")
+                .font(.system(size: 16, weight: .bold))
+            HStack(spacing: 10) {
+                Text("30 / 30 AI actions used")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(KColor.secondary)
+                Spacer()
+                Button("GO UNLIMITED · $10") {
+                    _ = PaddleCheckoutOpener().openStarterCheckout()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+        .padding(14)
+        .frame(width: 330, alignment: .leading)
+        .background(KColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 11))
+        .overlay(RoundedRectangle(cornerRadius: 11).stroke(KColor.magenta.opacity(0.65)))
+        .overlay(Rectangle().fill(KColor.magenta).frame(width: 2), alignment: .leading)
+        .padding(6)
     }
 
     private var cyberStatusBox: some View {
@@ -166,17 +196,17 @@ struct FeedbackPill: View {
         switch phase {
         case .success: QwixitMark(size: 19)
         case .permissionDenied: Image(systemName: "exclamationmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white).frame(width: 19, height: 19).background(KColor.magenta).clipShape(Circle())
-        case .error: Image(systemName: "exclamationmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white).frame(width: 19, height: 19).background(KColor.danger).clipShape(Circle())
+        case .error, .limitReached: Image(systemName: "exclamationmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white).frame(width: 19, height: 19).background(KColor.danger).clipShape(Circle())
         case .noSelection: Image(systemName: "cursorarrow.rays").foregroundStyle(KColor.secondary)
         default: QwixitMark(size: 19, animated: phase == .processing)
         }
     }
 
     private var title: String {
-        switch phase { case .ready: "Ready"; case .processing: "Qwixing…"; case .success: "Qwixed!"; case .noSelection: "Select some text first"; case .permissionDenied: "Accessibility access needed"; case .error: "Something went wrong" }
+        switch phase { case .ready: "Ready"; case .processing: "Qwixing…"; case .success: "Qwixed!"; case .noSelection: "Select some text first"; case .permissionDenied: "Accessibility access needed"; case .limitReached: "Free limit reached"; case .error: "Something went wrong" }
     }
     private var detail: String? {
-        switch phase { case .permissionDenied: "OPEN SYSTEM SETTINGS"; case .error(let message): message; default: nil }
+        switch phase { case .permissionDenied: "OPEN SYSTEM SETTINGS"; case .limitReached: "SUBSCRIBE FOR UNLIMITED ACTIONS"; case .error(let message): message; default: nil }
     }
     private var borderColor: Color { if case .error = phase { return KColor.danger.opacity(0.7) }; return phase == .permissionDenied ? KColor.magenta.opacity(0.5) : KColor.line }
 }

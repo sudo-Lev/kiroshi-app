@@ -6,6 +6,7 @@ enum PeekLoadState: Equatable {
     case idle
     case loading
     case loaded
+    case limitReached
     case failed(String)
 }
 
@@ -296,6 +297,9 @@ final class PeekViewModel: ObservableObject {
                 loadState = .loaded
             } catch is CancellationError {
                 return
+            } catch QwixitAPIError.quotaExceeded {
+                guard mode == requestedMode else { return }
+                loadState = .limitReached
             } catch {
                 guard mode == requestedMode else { return }
                 loadState = .failed(error.localizedDescription)

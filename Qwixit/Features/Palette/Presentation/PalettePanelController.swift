@@ -83,10 +83,18 @@ final class PalettePanelController {
         refineTask?.cancel()
         refineTask = Task { [weak self] in
             guard let self else { return }
-            let questions = (try? await improver.clarifyingQuestions(capture.text, goal: action.prompt)) ?? []
-            guard !Task.isCancelled else { return }
-            // No questions (offline, error, or nothing to ask) → run straight away.
-            viewModel.showQuestions(questions, for: action)
+            do {
+                let questions = try await improver.clarifyingQuestions(capture.text, goal: action.prompt)
+                guard !Task.isCancelled else { return }
+                viewModel.showQuestions(questions, for: action)
+            } catch QwixitAPIError.quotaExceeded {
+                close()
+                hud.showLimitReached(capture: capture)
+            } catch {
+                guard !Task.isCancelled else { return }
+                // If refinement is unavailable, the original action remains useful.
+                viewModel.showQuestions([], for: action)
+            }
         }
     }
 
@@ -144,6 +152,8 @@ final class PalettePanelController {
                 viewModel.reset()
             } catch is CancellationError {
                 hud.hide()
+            } catch QwixitAPIError.quotaExceeded {
+                hud.showLimitReached(capture: capture)
             } catch {
                 hud.showError((error as? LocalizedError)?.errorDescription ?? error.localizedDescription, capture: capture)
             }

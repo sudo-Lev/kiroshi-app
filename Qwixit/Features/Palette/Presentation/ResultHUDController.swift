@@ -34,6 +34,16 @@ final class ResultHUDController {
         }
     }
 
+    func showLimitReached(capture: PaletteCapture?) {
+        dismissTask?.cancel()
+        feedback.show(
+            phase: .limitReached,
+            reduceMotion: reduceMotion,
+            anchor: capture?.bounds,
+            fallbackPoint: capture?.fallbackPoint ?? NSEvent.mouseLocation
+        )
+    }
+
     func showNeutral(_ message: String, point: CGPoint) {
         dismissTask?.cancel()
         feedback.show(

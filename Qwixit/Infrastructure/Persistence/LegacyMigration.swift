@@ -1,11 +1,9 @@
 import Foundation
-import Security
 
 /// One-time import of settings from the app's previous name (Kiroshi, `com.kiroshi.mac`).
 /// This is the only place allowed to reference the old identifiers.
 enum LegacyMigration {
     static let legacyBundleIdentifier = "com.kiroshi.mac"
-    static let legacyKeychainService = "com.kiroshi.mac"
     static let renameNotice = "Qwixit is the new name of Kiroshi. macOS needs you to allow Accessibility once more."
 
     /// Runs once per install. Returns `true` when data from the old build was found and carried over.
@@ -19,15 +17,13 @@ enum LegacyMigration {
         defer { defaults.set(true, forKey: AppPreferenceKey.legacyMigrationDone) }
 
         let importedDefaults = legacyDefaults.map { migrateDefaults(from: $0, to: defaults) } ?? false
-        let importedKey = migrateKeychain()
         migrateHotkey(defaults: defaults)
 
-        let migrated = importedDefaults || importedKey
         // Accessibility trust is tied to the bundle ID, so the rename resets it.
-        if migrated && !isAccessibilityTrusted {
+        if importedDefaults && !isAccessibilityTrusted {
             defaults.set(true, forKey: AppPreferenceKey.needsRenamePermission)
         }
-        return migrated
+        return importedDefaults
     }
 
     private static func migrateDefaults(from legacy: UserDefaults, to defaults: UserDefaults) -> Bool {
@@ -47,27 +43,5 @@ enum LegacyMigration {
         if HotkeyBinding.legacyDefaults.contains(preferences.mainHotkey) {
             preferences.setMainHotkey(nil)
         }
-    }
-
-    private static func migrateKeychain() -> Bool {
-        let legacyQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: legacyKeychainService,
-            kSecAttrAccount as String: KeychainStore.account
-        ]
-        var lookup = legacyQuery
-        lookup[kSecReturnData as String] = true
-        lookup[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var result: CFTypeRef?
-        guard SecItemCopyMatching(lookup as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data,
-              let key = String(data: data, encoding: .utf8) else { return false }
-
-        if KeychainStore.storedAPIKey() == nil {
-            do { try KeychainStore.saveAPIKey(key) } catch { return true }
-        }
-        SecItemDelete(legacyQuery as CFDictionary)
-        return true
     }
 }

@@ -27,10 +27,10 @@ struct MenuBarView: View {
             Text("v1.0")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
             Spacer()
-            Text(settingsViewModel.hasAPIKey ? "OPENAI" : "LOCAL")
+            Text("CLOUD")
                 .font(.system(size: 8, weight: .bold, design: .monospaced))
                 .tracking(0.8)
-                .foregroundStyle(settingsViewModel.hasAPIKey ? KColor.cyan : KColor.secondary)
+                .foregroundStyle(KColor.cyan)
         }
         .foregroundStyle(KColor.secondary)
         .padding(.horizontal, 12)

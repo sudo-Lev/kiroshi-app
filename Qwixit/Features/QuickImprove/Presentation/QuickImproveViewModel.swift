@@ -71,6 +71,8 @@ final class QuickImproveViewModel: ObservableObject {
         } catch is CancellationError {
             feedback.hide()
             phase = .ready
+        } catch QwixitAPIError.quotaExceeded {
+            show(.limitReached, duration: nil)
         } catch {
             let message = (error as? LocalizedError)?.errorDescription
                 ?? "Qwixit couldn’t improve the text. Your text is unchanged."
