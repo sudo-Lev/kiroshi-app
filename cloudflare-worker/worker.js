@@ -1,7 +1,8 @@
 /**
  * Qwixit API and billing gateway.
  *
- * Required encrypted secrets: OPENAI_API_KEY and PADDLE_WEBHOOK_SECRET.
+ * Required encrypted secrets: OPENAI_API_KEY (or the legacy
+ * qwixit-cloudflare-key during migration) and PADDLE_WEBHOOK_SECRET.
  * Required binding: USAGE_LEDGER -> UsageLedger Durable Object.
  */
 
@@ -55,9 +56,9 @@ export default {
       return errorResponse(400, error instanceof Error ? error.message : "Invalid request.");
     }
 
-    const apiKey = env.OPENAI_API_KEY;
+    const apiKey = env.OPENAI_API_KEY ?? env["qwixit-cloudflare-key"];
     if (!apiKey) {
-      console.error("Missing OPENAI_API_KEY secret");
+      console.error("Missing OPENAI_API_KEY secret (or legacy qwixit-cloudflare-key)");
       return errorResponse(500, "Worker is not configured.");
     }
 
