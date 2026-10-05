@@ -5,6 +5,7 @@ struct MenuBarView: View {
     @ObservedObject var settingsViewModel: SettingsViewModel
     @ObservedObject var quickImproveViewModel: QuickImproveViewModel
     let onOpenSettings: () -> Void
+    let onShowOnboarding: () -> Void
     let onQuit: () -> Void
 
     var body: some View {
@@ -73,6 +74,8 @@ struct MenuBarView: View {
     private var actionArea: some View {
         HStack(spacing: 0) {
             CompactMenuAction(icon: "gearshape.fill", title: "Settings") { onOpenSettings() }
+            Rectangle().fill(KColor.line).frame(width: 1, height: 24)
+            CompactMenuAction(icon: "sparkles", title: "Onboarding") { onShowOnboarding() }
             Rectangle().fill(KColor.line).frame(width: 1, height: 24)
             CompactMenuAction(icon: "power", title: "Quit", destructive: true) { onQuit() }
         }

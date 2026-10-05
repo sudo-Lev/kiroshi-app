@@ -6,7 +6,6 @@ enum AppPhase: Equatable {
     case success
     case noSelection
     case permissionDenied
-    case lastFreeAction
     case subscriptionActivating
     case limitReached
     case offline

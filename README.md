@@ -23,7 +23,7 @@ The project targets macOS 14 and has App Sandbox disabled because global Accessi
 - Copy/paste fallbacks for web-backed editors, with full clipboard restoration
 - Non-activating feedback near the selected text
 - Processing, success, no-selection, permission, and error states
-- Three-step first-run onboarding
+- Three playable onboarding levels plus an Accessibility unlock step
 - Focused settings for feedback and Accessibility access
 - Reduced-motion-compatible SwiftUI animations
 

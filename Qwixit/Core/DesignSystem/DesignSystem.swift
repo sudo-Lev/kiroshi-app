@@ -203,7 +203,7 @@ enum QwixitErrorCopy {
 }
 
 enum QwixitFace: Int, CaseIterable {
-    case hello, boot, ready, pay, broke, empty, upsell, lost, retry, idle
+    case hello, boot, ready, pay, broke, empty, upsell, lost, retry, idle, scanning
 
     var open: String {
         switch self {
@@ -217,6 +217,7 @@ enum QwixitFace: Int, CaseIterable {
         case .lost: "?_?"
         case .retry: "@_@"
         case .idle: "#_#"
+        case .scanning: "¬_¬"
         }
     }
 
@@ -239,6 +240,7 @@ enum QwixitFace: Int, CaseIterable {
         case .lost: "no signal."
         case .retry: "reconnecting…"
         case .idle: "offline. waiting for wi-fi."
+        case .scanning: "scanning…"
         }
     }
 
@@ -249,6 +251,11 @@ enum QwixitFace: Int, CaseIterable {
 }
 
 struct QwixitFaceView: View {
+    private struct AnimationID: Hashable {
+        let face: QwixitFace
+        let reduceMotion: Bool
+    }
+
     let face: QwixitFace
     var size: CGFloat = 15
     var bracketed = true
@@ -257,6 +264,12 @@ struct QwixitFaceView: View {
     var stagger = 0
 
     @State private var closed = false
+    @State private var scanningFrame = 0
+
+    private let scanningFrames = [
+        "[ ¬_¬ ]", "[ ¬_¬ ]", "[ ¬_¬ ]", "[ •_• ]",
+        "[ ¬_¬ ]", "[ ¬_¬ ]", "[ ¬_¬ ]", "[ ¬‿¬ ]"
+    ]
 
     var body: some View {
         ZStack {
@@ -268,10 +281,19 @@ struct QwixitFaceView: View {
         }
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(face.text(closed: false, bracketed: bracketed))
-        .task(id: reduceMotion) {
+        .accessibilityLabel(face == .scanning ? "Scanning" : face.text(closed: false, bracketed: bracketed))
+        .task(id: AnimationID(face: face, reduceMotion: reduceMotion)) {
             closed = false
+            scanningFrame = 0
             guard !reduceMotion else { return }
+            if face == .scanning {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(320))
+                    guard !Task.isCancelled else { return }
+                    scanningFrame = (scanningFrame + 1) % scanningFrames.count
+                }
+                return
+            }
             if stagger > 0 {
                 try? await Task.sleep(for: .milliseconds(stagger * 1_130))
             }
@@ -286,8 +308,16 @@ struct QwixitFaceView: View {
     }
 
     private var glyph: some View {
-        Text(face.text(closed: closed, bracketed: bracketed))
+        Text(displayText)
             .font(faceFont)
+    }
+
+    private var displayText: String {
+        guard face == .scanning else {
+            return face.text(closed: closed, bracketed: bracketed)
+        }
+        let frame = scanningFrames[scanningFrame]
+        return bracketed ? frame : String(frame.dropFirst().dropLast())
     }
 
     private var faceFont: Font {

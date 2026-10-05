@@ -67,11 +67,7 @@ final class QuickImproveViewModel: ObservableObject {
                 return
             }
             try Task.checkCancellation()
-            if QwixitUsage.remaining == 0 {
-                show(.lastFreeAction, duration: nil)
-            } else {
-                show(.success, duration: 1.25)
-            }
+            show(.success, duration: 1.25)
         } catch is CancellationError {
             feedback.hide()
             phase = .ready

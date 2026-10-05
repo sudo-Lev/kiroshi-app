@@ -13,9 +13,7 @@ struct FeedbackPill: View {
     var body: some View {
         Group {
             if phase == .limitReached {
-                upgradeCard(limitReached: true)
-            } else if phase == .lastFreeAction {
-                upgradeCard(limitReached: false)
+                upgradeCard
             } else if phase == .processing || phase == .success || isError {
                 cyberStatusBox
             } else {
@@ -227,11 +225,11 @@ struct FeedbackPill: View {
         .frame(width: 32, height: 32)
     }
 
-    private func upgradeCard(limitReached: Bool) -> some View {
+    private var upgradeCard: some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .top, spacing: 11) {
                 QwixitFaceView(
-                    face: limitReached ? .pay : .hello,
+                    face: .pay,
                     size: 16,
                     bracketed: true,
                     reduceMotion: reduceMotion,
@@ -239,11 +237,9 @@ struct FeedbackPill: View {
                 )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(limitReached ? "Ready for more?" : "Looks like you like the process!")
+                    Text("Ready for more?")
                         .font(.system(size: 16, weight: .bold))
-                    Text(limitReached
-                         ? "You’ve used 30 free Qwixes this month."
-                         : "That was your last free Qwix.")
+                    Text("You’ve used 30 free Qwixes this month.")
                         .font(.system(size: 11))
                         .foregroundStyle(KColor.secondary)
                 }
@@ -297,7 +293,7 @@ struct FeedbackPill: View {
         case .subscriptionActivating: "Activating Unlimited…"
         case .offline: "You’re offline"
         case .error(let message): QwixitErrorCopy.title(for: message)
-        case .lastFreeAction, .limitReached: ""
+        case .limitReached: ""
         }
     }
 
@@ -357,7 +353,7 @@ struct FeedbackPill: View {
 
     private var statusFace: QwixitFace {
         if isError { return .retry }
-        return phase == .processing ? .upsell : .ready
+        return phase == .processing ? .scanning : .ready
     }
 
     private var statusHeadline: String {

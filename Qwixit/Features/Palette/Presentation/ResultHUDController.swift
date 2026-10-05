@@ -16,12 +16,8 @@ final class ResultHUDController {
     }
 
     func showDone(action: PaletteAction, detail: String, capture: PaletteCapture) {
-        if QwixitUsage.remaining == 0 {
-            present(.lastFreeAction, capture: capture)
-        } else {
-            present(.success, capture: capture)
-            scheduleDismiss(after: 2.8)
-        }
+        present(.success, capture: capture)
+        scheduleDismiss(after: 2.8)
     }
 
     func showError(_ message: String, capture: PaletteCapture?) {

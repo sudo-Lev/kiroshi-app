@@ -11,6 +11,7 @@ struct QwixitApp: App {
                 settingsViewModel: appDelegate.container.settingsViewModel,
                 quickImproveViewModel: appDelegate.container.quickImproveViewModel,
                 onOpenSettings: { appDelegate.showSettings() },
+                onShowOnboarding: { appDelegate.showOnboardingReplay() },
                 onQuit: { NSApp.terminate(nil) }
             )
         } label: {
@@ -21,14 +22,15 @@ struct QwixitApp: App {
     }
 }
 
-/// Purpose-built 18pt template artwork, tinted by macOS for either menu-bar appearance.
+/// The full-color brand mark stays recognizable in the menu bar instead of
+/// being flattened into a monochrome macOS template glyph.
 private enum MenuBarQwixitGlyph {
     static let image: NSImage = {
-        guard let source = NSImage(named: "QwixitMenuBar")?.copy() as? NSImage else {
+        guard let source = NSImage(named: "QwixitMarkLight")?.copy() as? NSImage else {
             return NSImage()
         }
         source.size = NSSize(width: 18, height: 18)
-        source.isTemplate = true
+        source.isTemplate = false
         return source
     }()
 }
@@ -105,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = container.settingsViewModel
         if !settings.hasCompletedOnboarding || settings.needsRenamePermission {
             // Upgrading users only need the permission step again.
-            if settings.hasCompletedOnboarding { settings.onboardingStep = 2 }
+            if settings.hasCompletedOnboarding { settings.onboardingStep = 0 }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.showOnboarding()
             }
@@ -126,6 +128,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func showSettings() {
         settingsWindowController.show()
+    }
+
+    func showOnboardingReplay() {
+        container.settingsViewModel.restartOnboarding()
+        showOnboarding()
     }
 
     private func showOnboarding() {
@@ -174,9 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleSingleActionHotkey() {
         if onboardingWindowController?.isVisible == true {
-            if container.settingsViewModel.onboardingStep == 1 {
-                container.settingsViewModel.runOnboardingDemo()
-            }
+            container.settingsViewModel.handleOnboardingHotkey()
             return
         }
         container.quickImproveViewModel.improveSelection()
@@ -184,8 +189,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleDoubleActionHotkey() async {
         if onboardingWindowController?.isVisible == true {
-            if container.settingsViewModel.onboardingStep == 1 {
-                container.settingsViewModel.runOnboardingDemo()
+            let settings = container.settingsViewModel
+            if settings.onboardingStep == 2 {
+                // The global classifier consumes both physical taps when it
+                // recognizes a double press, so replay both for the tutorial.
+                settings.handleOnboardingHotkey()
+                settings.handleOnboardingHotkey()
+            } else {
+                settings.handleOnboardingHotkey()
             }
             return
         }
@@ -277,14 +288,15 @@ final class OnboardingWindowController {
     func show() {
         installKeyMonitorIfNeeded()
         if window == nil {
-            let root = OnboardingView(viewModel: viewModel) { [weak self] in
-                self?.close()
-            }
-            .frame(width: 640, height: 450)
+            let root = OnboardingView(
+                viewModel: viewModel,
+                onFinish: { [weak self] in self?.close() }
+            )
+            .frame(width: 820, height: 620)
 
             let window = NSWindow(
-                contentRect: .init(x: 0, y: 0, width: 640, height: 450),
-                styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+                contentRect: .init(x: 0, y: 0, width: 820, height: 620),
+                styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
@@ -308,13 +320,63 @@ final class OnboardingWindowController {
 
     private func installKeyMonitorIfNeeded() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self,
-                  isVisible,
-                  viewModel.onboardingStep == 1,
-                  matchesMainHotkey(event) else { return event }
-            viewModel.runOnboardingDemo()
-            return nil
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+            guard let self, isVisible else { return event }
+
+            if event.type == .flagsChanged {
+                viewModel.updateOnboardingModifiers(
+                    option: event.modifierFlags.contains(.option),
+                    command: event.modifierFlags.contains(.command)
+                )
+                return event
+            }
+
+            if matchesMainHotkey(event) {
+                viewModel.handleOnboardingHotkey()
+                return nil
+            }
+
+            if viewModel.onboardingMenuVisible {
+                switch event.keyCode {
+                case 53:
+                    viewModel.closeOnboardingMenu()
+                case 126:
+                    viewModel.moveOnboardingMenuSelection(by: -1)
+                case 125:
+                    viewModel.moveOnboardingMenuSelection(by: 1)
+                case 36, 76:
+                    viewModel.chooseHighlightedOnboardingAction()
+                case 18...21:
+                    if let action = OnboardingAction(rawValue: Int(event.keyCode - 18)) {
+                        viewModel.chooseOnboardingAction(action)
+                    }
+                default:
+                    return event
+                }
+                return nil
+            }
+
+            if event.keyCode == 36 || event.keyCode == 76 {
+                if viewModel.onboardingStep == 0 {
+                    if viewModel.accessibilityGranted {
+                        viewModel.advanceOnboarding()
+                    } else {
+                        viewModel.requestAccessibility()
+                    }
+                } else if viewModel.onboardingDemoPhase == .complete {
+                    if viewModel.onboardingStep == 2 {
+                        viewModel.completeOnboarding()
+                        close()
+                    } else {
+                        viewModel.advanceOnboarding()
+                    }
+                } else {
+                    return event
+                }
+                return nil
+            }
+
+            return event
         }
     }
 

@@ -43,7 +43,6 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 #if DEBUG
 enum DeveloperUsageScenario: String, CaseIterable, Identifiable {
     case live
-    case lastFree
     case limitReached
     case unlimited
 
@@ -52,7 +51,6 @@ enum DeveloperUsageScenario: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .live: "Live"
-        case .lastFree: "29 / 30"
         case .limitReached: "30 / 30"
         case .unlimited: "Unlimited"
         }
@@ -61,7 +59,6 @@ enum DeveloperUsageScenario: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .live: "Use the real Worker response."
-        case .lastFree: "Simulate one free action remaining. Resets to Live on launch."
         case .limitReached: "Blocks AI requests to preview the paywall. Resets to Live on launch."
         case .unlimited: "Preview Unlimited UI only. Resets to Live on launch."
         }
@@ -99,7 +96,6 @@ struct AppPreferences {
 #if DEBUG
         switch developerUsageScenario {
         case .live: break
-        case .lastFree: return 1
         case .limitReached: return 0
         case .unlimited: return nil
         }
@@ -110,7 +106,7 @@ struct AppPreferences {
     var isUnlimited: Bool {
 #if DEBUG
         switch developerUsageScenario {
-        case .live, .lastFree, .limitReached: break
+        case .live, .limitReached: break
         case .unlimited: return true
         }
 #endif

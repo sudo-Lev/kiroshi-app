@@ -14,7 +14,6 @@ final class FeedbackWindowController: FeedbackPresenting {
     ) {
         let size: NSSize
         if phase == .limitReached { size = .init(width: 374, height: 158) }
-        else if phase == .lastFreeAction { size = .init(width: 374, height: 154) }
         else if phase == .processing || phase == .success { size = .init(width: 236, height: 58) }
         else if case .error = phase { size = .init(width: 236, height: 58) }
         else if phase == .permissionDenied || phase == .subscriptionActivating || phase == .offline { size = .init(width: 326, height: 86) }
@@ -96,7 +95,6 @@ private struct FeedbackHost: View {
         case .success: "success"
         case .noSelection: "no-selection"
         case .permissionDenied: "permission"
-        case .lastFreeAction: "last-free-action"
         case .subscriptionActivating: "subscription-activating"
         case .limitReached: "limit-reached"
         case .offline: "offline"

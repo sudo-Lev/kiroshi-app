@@ -2,284 +2,476 @@ import SwiftUI
 
 struct OnboardingView: View {
     @ObservedObject var viewModel: SettingsViewModel
-    let onFinished: () -> Void
+    let onFinish: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
             header
-
-            ZStack {
-                if viewModel.onboardingStep == 0 {
-                    welcome.transition(pageTransition)
-                } else if viewModel.onboardingStep == 1 {
-                    explanation.transition(pageTransition)
-                } else {
-                    permission.transition(pageTransition)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
             footer
         }
         .background(KColor.canvas)
         .foregroundStyle(KColor.ink)
         .qwixitTheme()
-    }
-
-    private var pageTransition: AnyTransition {
-        .opacity.combined(with: .move(edge: .trailing))
+        .onAppear {
+            viewModel.refreshAccessibility()
+            if viewModel.onboardingStep == 0, viewModel.accessibilityGranted {
+                viewModel.advanceOnboarding()
+            }
+        }
+        .onChange(of: viewModel.onboardingStep) { _, step in
+            if step == 0 { viewModel.pollAccessibilityPermission() }
+        }
+        .onChange(of: viewModel.accessibilityGranted) { _, granted in
+            if granted, viewModel.onboardingStep == 0 {
+                viewModel.advanceOnboarding()
+            }
+        }
     }
 
     private var header: some View {
-        HStack(spacing: 9) {
-            QwixitLockup()
-                .frame(width: 88, height: 28)
+        HStack(spacing: 14) {
+            QwixitLockup().frame(width: 90, height: 30)
             Spacer()
-            Text("Quick setup")
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .tracking(0.35)
-                .foregroundStyle(KColor.secondary)
+            HStack(spacing: 6) {
+                ForEach(0..<3) { index in
+                    LevelPill(index: index, current: viewModel.onboardingStep)
+                }
+            }
         }
-        .padding(.horizontal, 20)
-        .frame(height: 50)
+        .padding(.horizontal, 24)
+        .frame(height: 62)
         .background(KColor.canvasRaised)
         .overlay(alignment: .bottom) { Rectangle().fill(KColor.line).frame(height: 1) }
     }
 
+    private var content: some View {
+        VStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 30, weight: .black, design: .rounded))
+                .tracking(-0.8)
+                .multilineTextAlignment(.center)
+                .contentTransition(.interpolate)
+
+            if viewModel.onboardingStep == 0 { permissionArea } else { demoArea }
+            faceLine
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: viewModel.onboardingDemoPhase)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: viewModel.onboardingMenuVisible)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: viewModel.onboardingStep)
+    }
+
+    private var demoArea: some View {
+        VStack(spacing: 10) {
+            demoCard
+            actionZone.frame(height: 244)
+        }
+        .frame(maxWidth: 660)
+    }
+
+    private var demoCard: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(KColor.surface)
+                .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(cardBorder, lineWidth: 1.5) }
+                .shadow(color: KColor.violet.opacity(0.07), radius: 14, y: 6)
+
+            HStack {
+                Text(cardText)
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(KColor.ink)
+                    .contentTransition(.interpolate)
+                    .animation(reduceMotion ? nil : .linear(duration: 0.02), value: viewModel.onboardingTypedText)
+                    .padding(.horizontal, 4)
+                    .background(preselected ? KColor.violet.opacity(0.18) : .clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                if viewModel.onboardingDemoPhase == .typing {
+                    Rectangle().fill(KColor.violet).frame(width: 3, height: 27).transition(.opacity)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 26)
+
+            if viewModel.onboardingDemoPhase == .complete {
+                Text("CLEAR")
+                    .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                    .tracking(0.6)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 11)
+                    .frame(height: 27)
+                    .background(KColor.ink)
+                    .clipShape(Capsule())
+                    .rotationEffect(.degrees(-3))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .offset(x: -18, y: -13)
+                    .transition(.scale(scale: 0.65).combined(with: .opacity))
+            }
+        }
+        .frame(height: 92)
+        .opacity(viewModel.onboardingDemoPhase == .processing ? 0.58 : 1)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private var actionZone: some View {
+        ZStack {
+            if viewModel.onboardingMenuVisible {
+                OnboardingPalette(viewModel: viewModel).transition(.scale(scale: 0.94).combined(with: .opacity))
+            } else if isWorking {
+                FeedbackPill(phase: .processing, reduceMotion: reduceMotion, onClose: {})
+                    .transition(.scale(scale: 0.94).combined(with: .opacity))
+            } else if viewModel.onboardingDemoPhase == .complete {
+                FeedbackPill(phase: .success, reduceMotion: reduceMotion, onClose: {})
+                    .transition(.scale(scale: 0.94).combined(with: .opacity))
+            } else {
+                OnboardingKeys(
+                    level: viewModel.onboardingStep,
+                    tapCount: viewModel.onboardingLevel2TapCount,
+                    key: viewModel.mainHotkey.keySymbol,
+                    optionDown: viewModel.onboardingOptionDown,
+                    commandDown: viewModel.onboardingCommandDown,
+                    reduceMotion: reduceMotion
+                )
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var permissionArea: some View {
+        VStack(spacing: 14) {
+            Button(action: handlePermissionAction) {
+                HStack(spacing: 14) {
+                    Image(systemName: "accessibility")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(KColor.violet)
+                        .frame(width: 42, height: 42)
+                        .background(KColor.violet.opacity(0.09))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(viewModel.accessibilityGranted ? "Continue to practice" : "Allow Accessibility access")
+                            .font(.system(size: 16, weight: .bold))
+                        Text(viewModel.accessibilityGranted
+                             ? "Access granted"
+                             : "System Settings → Privacy & Security → Accessibility")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(KColor.secondary)
+                    }
+                    Spacer()
+                    Text(viewModel.accessibilityGranted ? "CONTINUE" : "ALLOW")
+                        .font(.system(size: 9, weight: .heavy, design: .monospaced))
+                        .tracking(0.5)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(KColor.ink)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .padding(16)
+                .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.return, modifiers: [])
+            .frame(maxWidth: 560)
+            .qwixitPanel(cornerRadius: 15)
+            .accessibilityHint(viewModel.accessibilityGranted
+                               ? "Starts shortcut practice"
+                               : "Opens Accessibility in System Settings")
+
+            HStack(spacing: 8) {
+                Circle().fill(viewModel.accessibilityGranted ? KColor.success : KColor.warning).frame(width: 7, height: 7)
+                Text(viewModel.accessibilityGranted
+                     ? "ACCESS GRANTED · PRESS ENTER TO CONTINUE"
+                     : "PRESS ENTER TO OPEN SYSTEM SETTINGS")
+                    .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(viewModel.accessibilityGranted ? KColor.success : KColor.ink)
+            }
+            .frame(height: 42)
+        }
+        .frame(height: 188)
+        .onAppear { viewModel.pollAccessibilityPermission() }
+    }
+
+    private var faceLine: some View {
+        HStack(spacing: 11) {
+            QwixitFaceView(face: face, size: 12, reduceMotion: reduceMotion || isWorking)
+                .frame(width: 58, height: 36)
+                .background(KColor.violet.opacity(0.09))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            Text(faceCopy)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundStyle(KColor.ink)
+                .contentTransition(.interpolate)
+                .frame(maxWidth: 500, alignment: .leading)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 10)
+                .background(KColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 11))
+        }
+        .frame(minHeight: 46)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func handlePermissionAction() {
+        if viewModel.accessibilityGranted {
+            viewModel.advanceOnboarding()
+        } else {
+            viewModel.requestAccessibility()
+        }
+    }
+
     private var footer: some View {
         HStack {
-            HStack(spacing: 5) {
-                ForEach(0..<3) { index in
-                    Capsule()
-                        .fill(index <= viewModel.onboardingStep ? KColor.violet : KColor.line)
-                        .frame(width: index == viewModel.onboardingStep ? 20 : 6, height: 4)
-                }
-            }
+            Text(viewModel.onboardingStep == 0
+                 ? "ACCESSIBILITY IS REQUIRED TO REPLACE SELECTED TEXT"
+                 : "\(viewModel.onboardingStep) / 2 · PRACTICE TEXT STAYS ON YOUR MAC")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(KColor.secondary)
             Spacer()
-            if viewModel.onboardingStep == 1,
-               viewModel.onboardingDemoPhase != .complete {
-                Button("Skip demo") { viewModel.skipOnboardingDemo() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(KColor.secondary)
-            }
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    if viewModel.onboardingStep < 2 {
-                        viewModel.advanceOnboarding()
-                    } else {
-                        viewModel.completeOnboarding()
-                        onFinished()
+            if canContinue {
+                Button(action: continueOnboarding) {
+                    HStack(spacing: 7) {
+                        Text("PRESS ENTER TO CONTINUE")
+                        Image(systemName: "arrow.right")
                     }
+                    .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 13)
+                    .frame(height: 32)
+                    .background(KColor.violet)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
-            } label: {
-                HStack(spacing: 16) {
-                    Text(viewModel.onboardingStep == 2 ? "Start using Qwixit" : "Continue")
-                    Image(systemName: "arrow.right")
-                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.return, modifiers: [])
+                .accessibilityHint("Continues to the next onboarding step")
+            } else {
+                Text(footerPrompt)
+                    .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(KColor.violet)
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(
-                (viewModel.onboardingStep == 1 && viewModel.onboardingDemoPhase != .complete)
-                    || (viewModel.onboardingStep == 2 && !viewModel.accessibilityGranted)
-            )
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 28)
         .frame(height: 58)
         .background(KColor.canvasRaised)
         .overlay(alignment: .top) { Rectangle().fill(KColor.line).frame(height: 1) }
     }
 
-    private var welcome: some View {
-        HStack(spacing: 38) {
-            QwixitMark(size: 112)
-                .shadow(color: KColor.violet.opacity(0.16), radius: 18, y: 8)
-            VStack(alignment: .leading, spacing: 9) {
-                QwixitFaceView(face: .hello, size: 40)
-                MonoLabel("Meet Qwixit")
-                Text("Better words.\nSame you.")
-                    .font(.system(size: 37, weight: .black, design: .rounded))
-                    .tracking(-1.1)
-                Text("A tiny writing superpower for your Mac.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(KColor.secondary)
-            }
-        }
-        .padding(.horizontal, 54)
+    private var canContinue: Bool {
+        viewModel.onboardingStep > 0 && viewModel.onboardingDemoPhase == .complete
     }
 
-    private var explanation: some View {
+    private var footerPrompt: String {
+        if viewModel.onboardingStep == 0 {
+            return viewModel.accessibilityGranted
+                ? "PRESS ENTER TO CONTINUE"
+                : "PRESS ENTER TO OPEN SETTINGS"
+        }
+        return viewModel.mainHotkey.displayString
+    }
+
+    private func continueOnboarding() {
+        guard canContinue else { return }
+        if viewModel.onboardingStep == 2 {
+            viewModel.completeOnboarding()
+            onFinish()
+        } else {
+            viewModel.advanceOnboarding()
+        }
+    }
+
+    private var title: String {
+        switch viewModel.onboardingStep {
+        case 0: "Let’s set up Qwixit."
+        case 1: "Fix it with one shortcut."
+        default: "Open the action palette."
+        }
+    }
+
+    private var cardText: String {
+        switch viewModel.onboardingDemoPhase {
+        case .typing, .complete: viewModel.onboardingTypedText
+        case .waiting, .processing: viewModel.onboardingOriginalText
+        }
+    }
+    private var preselected: Bool { viewModel.onboardingDemoPhase == .waiting }
+    private var cardBorder: Color {
+        if viewModel.onboardingDemoPhase == .complete { return KColor.violet }
+        return KColor.line
+    }
+    private var isWorking: Bool { viewModel.onboardingDemoPhase == .processing || viewModel.onboardingDemoPhase == .typing }
+
+    private var face: QwixitFace {
+        if isWorking { return .retry }
+        if viewModel.onboardingDemoPhase == .complete { return .hello }
+        if viewModel.onboardingStep == 0 { return viewModel.accessibilityGranted ? .ready : .boot }
+        if viewModel.onboardingMenuVisible { return .pay }
+        return viewModel.onboardingLevel2TapCount == 1 ? .lost : .hello
+    }
+
+    private var faceCopy: String {
+        if isWorking { return "on it…" }
+        if viewModel.onboardingDemoPhase == .complete {
+            return switch viewModel.onboardingStep {
+            case 1: "nice. that’s the main shortcut."
+            default: "done. press Enter or click Continue to finish setup."
+            }
+        }
+        switch viewModel.onboardingStep {
+        case 1:
+            return "sample text is selected. press \(viewModel.mainHotkey.displayString) once."
+        case 2:
+            if viewModel.onboardingMenuVisible { return "arrow keys choose. Enter applies." }
+            return viewModel.onboardingLevel2TapCount == 1 ? "one tap. tap it again." : "press \(viewModel.mainHotkey.displayString) twice."
+        default:
+            return viewModel.accessibilityGranted
+                ? "granted. press Enter to start practice."
+                : "press Enter. I’ll open the right System Settings pane."
+        }
+    }
+}
+
+private struct LevelPill: View {
+    let index: Int
+    let current: Int
+    private var done: Bool { index < current }
+    private var active: Bool { index == current && !done }
+    private var label: String {
+        switch index {
+        case 0: "ACCESS"
+        case 1: "PRESS ONCE"
+        default: "TAP TWICE"
+        }
+    }
+
+    var body: some View {
+        Text(done ? "✓ \(label)" : label)
+            .font(.system(size: 9, weight: .heavy, design: .monospaced)).tracking(0.45)
+            .foregroundStyle(active ? .white : (done ? KColor.violet : KColor.secondary))
+            .padding(.horizontal, 10).frame(height: 27)
+            .background(active ? KColor.ink : (done ? KColor.violet.opacity(0.11) : .clear))
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .overlay {
+                if !active && !done {
+                    RoundedRectangle(cornerRadius: 7).stroke(KColor.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                }
+            }
+    }
+}
+
+private struct OnboardingKeys: View {
+    let level: Int
+    let tapCount: Int
+    let key: String
+    let optionDown: Bool
+    let commandDown: Bool
+    let reduceMotion: Bool
+    @State private var demoStage = 0
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(level == 1 ? "PRESS ONCE" : "DOUBLE TAP")
+                .font(.system(size: 10, weight: .heavy, design: .monospaced)).tracking(1.6).foregroundStyle(KColor.violet)
+            HStack(spacing: 12) {
+                BigKey(symbol: "⌥", caption: "HOLD", accent: false, pressed: optionDown || demoStage >= 1)
+                plus
+                BigKey(symbol: "⌘", caption: "HOLD", accent: false, pressed: commandDown || demoStage >= 2)
+                plus
+                BigKey(symbol: key, caption: level == 2 ? (tapCount == 1 ? "TAP AGAIN" : "TAP ×2") : "TAP", accent: true, pressed: demoStage == 3)
+            }
+        }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.16), value: tapCount)
+        .task(id: "\(level)-\(optionDown)-\(commandDown)-\(reduceMotion)") {
+            demoStage = 0
+            guard !reduceMotion, !optionDown, !commandDown else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(850)); demoStage = 1
+                try? await Task.sleep(for: .milliseconds(240)); demoStage = 2
+                try? await Task.sleep(for: .milliseconds(240)); demoStage = 3
+                try? await Task.sleep(for: .milliseconds(150))
+                if level == 2 {
+                    demoStage = 2
+                    try? await Task.sleep(for: .milliseconds(160)); demoStage = 3
+                    try? await Task.sleep(for: .milliseconds(150))
+                }
+                demoStage = 0
+                try? await Task.sleep(for: .milliseconds(850))
+            }
+        }
+    }
+    private var plus: some View {
+        Text("+").font(.system(size: 19, weight: .bold, design: .monospaced)).foregroundStyle(KColor.line)
+    }
+}
+
+private struct BigKey: View {
+    let symbol: String
+    let caption: String
+    let accent: Bool
+    let pressed: Bool
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack(alignment: .bottom) {
+                RoundedRectangle(cornerRadius: 18).fill(accent ? KColor.violet.opacity(0.7) : KColor.ink).frame(width: 76, height: 78)
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(accent ? KColor.violet : KColor.surface)
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(accent ? KColor.violet : KColor.ink, lineWidth: 2))
+                    .frame(width: 76, height: 70).offset(y: pressed ? 7 : 0)
+                Text(symbol)
+                    .font(.system(size: accent ? 31 : 30, weight: .black, design: accent ? .rounded : .default))
+                    .foregroundStyle(accent ? .white : KColor.ink).offset(y: pressed ? 7 : 0)
+            }
+            Text(caption).font(.system(size: 9, weight: .heavy, design: .monospaced)).foregroundStyle(accent ? KColor.violet : KColor.secondary)
+        }
+    }
+}
+
+private struct OnboardingPalette: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    var body: some View {
         VStack(spacing: 0) {
-            MonoLabel("Your turn")
-            Text("Fix this mess.")
-                .font(.system(size: 30, weight: .black, design: .rounded))
-                .tracking(-0.8)
-                .padding(.top, 7)
-
-            ZStack {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(KColor.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(viewModel.onboardingDemoPhase == .complete ? KColor.success.opacity(0.38) : KColor.line)
-                    )
-
-                HStack(spacing: 12) {
-                    Text(demoPhrase)
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundStyle(KColor.ink)
-                        .id(demoPhrase)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-
-                    Spacer(minLength: 8)
-
-                    if viewModel.onboardingDemoPhase == .processing {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(KColor.violet)
-                    } else if viewModel.onboardingDemoPhase == .complete {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(KColor.success)
-                    }
-                }
-                .padding(.horizontal, 20)
+            HStack(spacing: 11) {
+                QwixitMark(size: 26)
+                Text("Action or instruction…").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(KColor.secondary)
+                Spacer()
+                Text("9 words · EN").font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(KColor.secondary)
+            }.padding(.horizontal, 14).frame(height: 45)
+            Divider().overlay(KColor.line)
+            VStack(spacing: 2) {
+                Text("Actions").font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(KColor.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.bottom, 2)
+                paletteRow(action: .ukrainian, title: "Translate to Ukrainian", accent: KColor.cyan)
+                paletteRow(action: .polish, title: "Translate to Polish", accent: KColor.cyan)
+                paletteRow(action: .slack, title: "Slack style", accent: KColor.success)
+                paletteRow(action: .formal, title: "Make formal", accent: KColor.success)
+            }.padding(8)
+            Divider().overlay(KColor.line)
+            HStack {
+                RoundedRectangle(cornerRadius: 2).fill(KColor.cyan).frame(width: 8, height: 8)
+                Text("Replace · rewrites the selection · ⌘Z undoes")
+                Spacer(); Text("↑↓ · ↵ · Esc")
             }
-            .frame(width: 500, height: 72)
-            .padding(.top, 22)
-
-            Button(action: viewModel.runOnboardingDemo) {
-                HStack(spacing: 15) {
-                    QwixitFaceView(
-                        face: demoFace,
-                        size: 21,
-                        reduceMotion: reduceMotion
-                    )
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(demoCallToAction)
-                            .font(.system(size: 16, weight: .black, design: .rounded))
-                            .foregroundStyle(KColor.ink)
-                        Text(demoCallToActionDetail)
-                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                            .foregroundStyle(KColor.secondary)
-                    }
-
-                    Spacer(minLength: 10)
-
-                    HStack(spacing: 5) {
-                        ForEach(
-                            Array((viewModel.mainHotkey.modifierSymbols + [viewModel.mainHotkey.keySymbol]).enumerated()),
-                            id: \.offset
-                        ) { index, symbol in
-                            Keycap(
-                                symbol: symbol,
-                                active: index == viewModel.mainHotkey.modifierSymbols.count
-                            )
-                        }
-                    }
-                }
-                .padding(.horizontal, 18)
-                .frame(width: 500, height: 82)
-                .background(KColor.violet.opacity(0.09))
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 15)
-                        .stroke(KColor.violet.opacity(0.34), lineWidth: 1.5)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.onboardingDemoPhase != .waiting || viewModel.mainHotkeyConflict)
-            .scaleEffect(viewModel.onboardingDemoPhase == .processing ? 0.985 : 1)
-            .padding(.top, 13)
-            .help("Run the local shortcut demo")
-
-            Text("local demo. nothing gets uploaded.")
-                .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
-                .foregroundStyle(KColor.secondary)
-                .padding(.top, 10)
+            .font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(KColor.secondary)
+            .padding(.horizontal, 14).frame(height: 34)
         }
-        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: viewModel.onboardingDemoPhase)
+        .frame(width: 520, height: 244).qwixitPanel(cornerRadius: 17)
+        .shadow(color: KColor.ink.opacity(0.12), radius: 16, y: 7)
     }
 
-    private var demoPhrase: String {
-        switch viewModel.onboardingDemoPhase {
-        case .waiting, .processing: "helo i thnik this sentnce sound wierd"
-        case .complete: "Hello, I think this sentence sounds weird."
+    private func paletteRow(action: OnboardingAction, title: String, accent: Color) -> some View {
+        let selected = viewModel.onboardingMenuSelection == action.rawValue
+        return HStack(spacing: 9) {
+            RoundedRectangle(cornerRadius: 1).fill(accent).frame(width: 3, height: 18)
+            Text(title).fontWeight(.bold)
+            Spacer()
+            Text("[\(action.rawValue + 1)]")
+                .foregroundStyle(selected ? accent : KColor.secondary)
         }
+        .font(.system(size: 10, design: .monospaced)).padding(.horizontal, 9).frame(height: 34)
+        .background(selected ? accent.opacity(0.1) : .clear).clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
     }
-
-    private var demoFace: QwixitFace {
-        switch viewModel.onboardingDemoPhase {
-        case .waiting: .hello
-        case .processing: .retry
-        case .complete: .ready
-        }
-    }
-
-    private var demoCallToAction: String {
-        if viewModel.mainHotkeyConflict { return "Shortcut is busy." }
-        return switch viewModel.onboardingDemoPhase {
-        case .waiting: "Yo. Hit the hotkeys."
-        case .processing: "Qwixing this mess…"
-        case .complete: "Yep. That’s Qwixit."
-        }
-    }
-
-    private var demoCallToActionDetail: String {
-        if viewModel.mainHotkeyConflict { return "skip for now. change it in settings." }
-        return switch viewModel.onboardingDemoPhase {
-        case .waiting: "let’s see what happens."
-        case .processing: "hold on. making it human."
-        case .complete: "same thought. better words."
-        }
-    }
-
-    private var permission: some View {
-        HStack(spacing: 34) {
-            Image(systemName: viewModel.accessibilityGranted ? "checkmark" : "lock.shield.fill")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(viewModel.accessibilityGranted ? KColor.success : KColor.violet)
-                .frame(width: 84, height: 84)
-                .background((viewModel.accessibilityGranted ? KColor.success : KColor.violet).opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 22))
-                .overlay(RoundedRectangle(cornerRadius: 22).stroke((viewModel.accessibilityGranted ? KColor.success : KColor.violet).opacity(0.28)))
-
-            VStack(alignment: .leading, spacing: 10) {
-                QwixitFaceView(
-                    face: viewModel.accessibilityGranted ? .ready : .boot,
-                    size: 30,
-                    stagger: 1
-                )
-                Text(viewModel.accessibilityGranted ? QwixitFace.ready.line : QwixitFace.boot.line)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(KColor.secondary)
-                MonoLabel("Accessibility")
-                Text(viewModel.accessibilityGranted ? "You’re connected." : "One permission.")
-                    .font(.system(size: 29, weight: .black, design: .rounded))
-                Text(permissionDetail)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(KColor.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 330, alignment: .leading)
-                Button {
-                    viewModel.requestAccessibility()
-                } label: {
-                    Label(viewModel.accessibilityGranted ? "Access granted" : "Open System Settings", systemImage: viewModel.accessibilityGranted ? "checkmark" : "arrow.up.forward.app")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(viewModel.accessibilityGranted)
-            }
-        }
-        .padding(.horizontal, 52)
-        .onAppear { viewModel.pollAccessibilityPermission() }
-    }
-
-    private var permissionDetail: String {
-        if viewModel.accessibilityGranted { return "Qwixit can now improve selected text anywhere on your Mac." }
-        if viewModel.needsRenamePermission { return LegacyMigration.renameNotice }
-        return "Qwixit needs access to read and replace only the text you select. Nothing is monitored in the background."
-    }
-
 }

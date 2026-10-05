@@ -14,7 +14,26 @@ enum BillingActivationState: Equatable {
 enum OnboardingDemoPhase: Equatable {
     case waiting
     case processing
+    case typing
     case complete
+}
+
+enum OnboardingAction: Int, CaseIterable, Identifiable {
+    case ukrainian
+    case polish
+    case slack
+    case formal
+
+    var id: Int { rawValue }
+
+    var result: String {
+        switch self {
+        case .ukrainian: "Можеш надіслати мені файл якнайшвидше, будь ласка?"
+        case .polish: "Możesz wysłać mi plik jak najszybciej, proszę?"
+        case .slack: "Could you send me the file when you get a sec? Need it asap."
+        case .formal: "Could you please send me the file at your earliest convenience?"
+        }
+    }
 }
 
 @MainActor
@@ -27,8 +46,16 @@ final class SettingsViewModel: ObservableObject {
 #if DEBUG
     @Published private(set) var developerUsageScenario: DeveloperUsageScenario
 #endif
+    /// 0: Accessibility access, 1: single shortcut, 2: double-tap palette.
     @Published var onboardingStep = 0
     @Published private(set) var onboardingDemoPhase: OnboardingDemoPhase = .waiting
+    @Published private(set) var onboardingTypedText = ""
+    @Published private(set) var onboardingOriginalText = "helo i thnik this sentnce sound wierd"
+    @Published private(set) var onboardingLevel2TapCount = 0
+    @Published private(set) var onboardingMenuVisible = false
+    @Published private(set) var onboardingMenuSelection = 0
+    @Published private(set) var onboardingOptionDown = false
+    @Published private(set) var onboardingCommandDown = false
     @Published var showSuccess: Bool {
         didSet { defaults.set(showSuccess, forKey: AppPreferenceKey.showSuccess) }
     }
@@ -87,6 +114,7 @@ final class SettingsViewModel: ObservableObject {
     private var permissionTask: Task<Void, Never>?
     private var billingTask: Task<Void, Never>?
     private var onboardingDemoTask: Task<Void, Never>?
+    private var onboardingTapResetTask: Task<Void, Never>?
 
     init(
         accessibility: AccessibilityServicing,
@@ -137,6 +165,7 @@ final class SettingsViewModel: ObservableObject {
         permissionTask?.cancel()
         billingTask?.cancel()
         onboardingDemoTask?.cancel()
+        onboardingTapResetTask?.cancel()
     }
 
     func completeOnboarding() {
@@ -150,26 +179,104 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func advanceOnboarding() {
-        guard onboardingStep < 2 else { return }
-        guard onboardingStep != 1 || onboardingDemoPhase == .complete else { return }
+        guard (onboardingStep == 0 ? accessibilityGranted : onboardingDemoPhase == .complete),
+              onboardingStep < 2 else { return }
         onboardingStep += 1
+        resetOnboardingLevel()
     }
 
-    func runOnboardingDemo() {
-        guard onboardingStep == 1, onboardingDemoPhase == .waiting else { return }
+    func handleOnboardingHotkey() {
+        guard onboardingDemoPhase == .waiting, !onboardingMenuVisible else { return }
+        switch onboardingStep {
+        case 1:
+            runOnboardingDemo(result: "Hello, I think this sentence sounds weird.")
+        case 2:
+            registerOnboardingDoubleTap()
+        default:
+            break
+        }
+    }
+
+    func updateOnboardingModifiers(option: Bool, command: Bool) {
+        onboardingOptionDown = option
+        onboardingCommandDown = command
+    }
+
+    func moveOnboardingMenuSelection(by delta: Int) {
+        guard onboardingMenuVisible else { return }
+        onboardingMenuSelection = min(max(onboardingMenuSelection + delta, 0), OnboardingAction.allCases.count - 1)
+    }
+
+    func closeOnboardingMenu() {
+        guard onboardingMenuVisible else { return }
+        onboardingMenuVisible = false
+        onboardingLevel2TapCount = 0
+    }
+
+    func chooseOnboardingAction(_ action: OnboardingAction) {
+        guard onboardingStep == 2, onboardingMenuVisible, onboardingDemoPhase == .waiting else { return }
+        onboardingMenuVisible = false
+        onboardingMenuSelection = action.rawValue
+        runOnboardingDemo(result: action.result)
+    }
+
+    func chooseHighlightedOnboardingAction() {
+        guard let action = OnboardingAction(rawValue: onboardingMenuSelection) else { return }
+        chooseOnboardingAction(action)
+    }
+
+    func runOnboardingDemo(result: String) {
+        guard onboardingDemoPhase == .waiting else { return }
         onboardingDemoTask?.cancel()
         onboardingDemoPhase = .processing
+        onboardingTypedText = ""
         onboardingDemoTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(720))
+            try? await Task.sleep(for: .milliseconds(900))
             guard !Task.isCancelled, let self else { return }
+            onboardingDemoPhase = .typing
+            var cursor = result.startIndex
+            while cursor < result.endIndex {
+                guard !Task.isCancelled else { return }
+                cursor = result.index(cursor, offsetBy: min(2, result.distance(from: cursor, to: result.endIndex)))
+                onboardingTypedText = String(result[..<cursor])
+                try? await Task.sleep(for: .milliseconds(22))
+            }
             onboardingDemoPhase = .complete
         }
     }
 
-    func skipOnboardingDemo() {
-        guard onboardingStep == 1 else { return }
+    private func registerOnboardingDoubleTap() {
+        onboardingTapResetTask?.cancel()
+        onboardingLevel2TapCount += 1
+        if onboardingLevel2TapCount >= 2 {
+            onboardingLevel2TapCount = 0
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(120))
+                guard !Task.isCancelled, let self, onboardingStep == 2,
+                      onboardingDemoPhase == .waiting else { return }
+                onboardingMenuVisible = true
+                onboardingMenuSelection = 0
+            }
+            return
+        }
+        onboardingTapResetTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            self?.onboardingLevel2TapCount = 0
+        }
+    }
+
+    private func resetOnboardingLevel() {
         onboardingDemoTask?.cancel()
-        onboardingDemoPhase = .complete
+        onboardingTapResetTask?.cancel()
+        onboardingDemoPhase = .waiting
+        onboardingTypedText = ""
+        onboardingLevel2TapCount = 0
+        onboardingMenuVisible = false
+        onboardingMenuSelection = 0
+        onboardingOriginalText = onboardingStep == 2
+            ? "yo can u send me the file asap pls"
+            : "helo i thnik this sentnce sound wierd"
     }
 
     func refreshAccessibility() {
@@ -191,11 +298,14 @@ final class SettingsViewModel: ObservableObject {
 
     func resetOnboardingForTesting() {
         defaults.removeObject(forKey: AppPreferenceKey.hasCompletedOnboarding)
-        onboardingStep = 0
-        onboardingDemoTask?.cancel()
-        onboardingDemoPhase = .waiting
+        restartOnboarding()
     }
 #endif
+
+    func restartOnboarding() {
+        onboardingStep = 0
+        resetOnboardingLevel()
+    }
 
     func requestAccessibility() {
         accessibility.requestPermission()

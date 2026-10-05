@@ -40,6 +40,7 @@
 		A10000000000000000000021 /* ResultCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* ResultCard.swift */; };
 		A10000000000000000000022 /* PalettePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* PalettePanel.swift */; };
 		A10000000000000000000023 /* PaletteViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000027 /* PaletteViewModelTests.swift */; };
+		A10000000000000000000044 /* OnboardingViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000044 /* OnboardingViewModelTests.swift */; };
 		A10000000000000000000024 /* QuickImproveViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000028 /* QuickImproveViewModel.swift */; };
 		A10000000000000000000025 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000029 /* AppPreferences.swift */; };
 		A10000000000000000000026 /* QuickImproveContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002A /* QuickImproveContracts.swift */; };
@@ -87,6 +88,7 @@
 		B10000000000000000000025 /* ResultCardController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ResultCardController.swift; path = Features/Palette/Presentation/ResultCardController.swift; sourceTree = "<group>"; };
 		B10000000000000000000026 /* PalettePanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PalettePanelController.swift; path = Features/Palette/Presentation/PalettePanelController.swift; sourceTree = "<group>"; };
 		B10000000000000000000027 /* PaletteViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PaletteViewModelTests.swift; path = Features/Palette/PaletteViewModelTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000044 /* OnboardingViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OnboardingViewModelTests.swift; path = Features/Settings/OnboardingViewModelTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000028 /* QuickImproveViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QuickImproveViewModel.swift; path = Features/QuickImprove/Presentation/QuickImproveViewModel.swift; sourceTree = "<group>"; };
 		B10000000000000000000029 /* AppPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppPreferences.swift; path = Infrastructure/Persistence/AppPreferences.swift; sourceTree = "<group>"; };
 		B1000000000000000000002A /* QuickImproveContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QuickImproveContracts.swift; path = Features/QuickImprove/Domain/QuickImproveContracts.swift; sourceTree = "<group>"; };
@@ -108,7 +110,7 @@
 		D20000000000000000000007 /* Palette */ = {isa = PBXGroup; name = Palette; sourceTree = "<group>"; children = (B1000000000000000000001F /* PaletteModels.swift */, B10000000000000000000020 /* PaletteHotkeyController.swift */, B10000000000000000000021 /* AXTextBridge.swift */, B10000000000000000000022 /* PaletteViewModel.swift */, B10000000000000000000023 /* PaletteView.swift */, B10000000000000000000024 /* ResultHUDController.swift */, B10000000000000000000025 /* ResultCardController.swift */, B10000000000000000000026 /* PalettePanelController.swift */); };
 		D20000000000000000000008 /* Peek */ = {isa = PBXGroup; name = Peek; sourceTree = "<group>"; children = (B10000000000000000000016 /* PeekHotkey.swift */, B10000000000000000000017 /* SelectionReader.swift */, B10000000000000000000018 /* PeekPanelController.swift */, B10000000000000000000019 /* PeekView.swift */, B1000000000000000000001A /* PeekViewModel.swift */, B1000000000000000000001B /* PeekClient.swift */, B1000000000000000000001C /* LanguageDetector.swift */); };
 		D10000000000000000000003 /* Products */ = {isa = PBXGroup; children = (B1000000000000000000000D /* Qwixit.app */, B1000000000000000000001E /* QwixitTests.xctest */); name = Products; sourceTree = "<group>"; };
-		D10000000000000000000004 /* QwixitTests */ = {isa = PBXGroup; children = (B1000000000000000000001D /* PeekViewModelTests.swift */, B10000000000000000000027 /* PaletteViewModelTests.swift */); path = QwixitTests; sourceTree = "<group>"; };
+		D10000000000000000000004 /* QwixitTests */ = {isa = PBXGroup; children = (B1000000000000000000001D /* PeekViewModelTests.swift */, B10000000000000000000027 /* PaletteViewModelTests.swift */, B10000000000000000000044 /* OnboardingViewModelTests.swift */); path = QwixitTests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -126,7 +128,7 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		C10000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007, A10000000000000000000040, A10000000000000000000041, A10000000000000000000042, A10000000000000000000043, A1000000000000000000000D, A10000000000000000000013, A10000000000000000000014, A10000000000000000000015, A10000000000000000000016, A10000000000000000000017, A10000000000000000000018, A10000000000000000000019, A1000000000000000000001B, A1000000000000000000001C, A1000000000000000000001D, A1000000000000000000001E, A1000000000000000000001F, A10000000000000000000020, A10000000000000000000021, A10000000000000000000022, A10000000000000000000008, A10000000000000000000009, A1000000000000000000000A, A1000000000000000000000B); runOnlyForDeploymentPostprocessing = 0; };
-		C10000000000000000000004 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A1000000000000000000001A /* PeekViewModelTests.swift in Sources */, A10000000000000000000023 /* PaletteViewModelTests.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+		C10000000000000000000004 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A1000000000000000000001A /* PeekViewModelTests.swift in Sources */, A10000000000000000000023 /* PaletteViewModelTests.swift in Sources */, A10000000000000000000044 /* OnboardingViewModelTests.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
