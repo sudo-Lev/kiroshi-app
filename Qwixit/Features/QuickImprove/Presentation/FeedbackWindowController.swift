@@ -16,7 +16,7 @@ final class FeedbackWindowController: FeedbackPresenting {
         if phase == .limitReached { size = .init(width: 374, height: 158) }
         else if phase == .lastFreeAction { size = .init(width: 374, height: 154) }
         else if phase == .processing || phase == .success { size = .init(width: 236, height: 58) }
-        else if case .error = phase { size = .init(width: 356, height: 96) }
+        else if case .error = phase { size = .init(width: 236, height: 58) }
         else if phase == .permissionDenied || phase == .subscriptionActivating || phase == .offline { size = .init(width: 326, height: 86) }
         else if phase == .noSelection { size = .init(width: 306, height: 82) }
         else { size = .init(width: 272, height: 66) }

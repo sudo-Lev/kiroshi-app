@@ -65,9 +65,9 @@ final class AccessibilityService: AccessibilityServicing {
     }
 
     @discardableResult
-    func replaceSelection(_ originalText: String, with replacement: String) async -> Bool {
+    func replaceSelection(_: String, with replacement: String) async -> Bool {
         if let element = focusedElement(), isInsideWebArea(element) {
-            return await replaceUsingPasteboard(originalText, with: replacement)
+            return await replaceUsingPasteboard(replacement)
         }
 
         if let element = focusedElement() {
@@ -76,52 +76,22 @@ final class AccessibilityService: AccessibilityServicing {
                 kAXSelectedTextAttribute as CFString,
                 replacement as CFTypeRef
             )
-            if result == .success {
-                try? await Task.sleep(for: .milliseconds(80))
-                let selectedAfter = selectedTextFromAccessibility()
-                if ReplacementVerification.succeeded(
-                    original: originalText,
-                    replacement: replacement,
-                    selectedAfter: selectedAfter
-                ) {
-                    return true
-                }
-            }
+            if result == .success { return true }
         }
 
-        return await replaceUsingPasteboard(originalText, with: replacement)
+        return await replaceUsingPasteboard(replacement)
     }
 
-    private func replaceUsingPasteboard(_ originalText: String, with replacement: String) async -> Bool {
-        guard let ownerPID = focusedElement().flatMap(processIdentifier) else { return false }
-
-        for attempt in 0..<2 {
-            guard !Task.isCancelled else { return false }
-            guard focusedElement().flatMap(processIdentifier) == ownerPID else { return false }
-            let pasteboard = NSPasteboard.general
-            let snapshot = PasteboardSnapshot(pasteboard)
-            pasteboard.clearContents()
-            pasteboard.setString(replacement, forType: .string)
-            try? await Task.sleep(for: .milliseconds(attempt == 0 ? 55 : 120))
-            guard await postCommandKey(virtualKey: 9) else {
-                snapshot.restore(to: pasteboard)
-                return false
-            }
-            try? await Task.sleep(for: .milliseconds(attempt == 0 ? 320 : 460))
-            snapshot.restore(to: pasteboard)
-
-            guard focusedElement().flatMap(processIdentifier) == ownerPID else { return false }
-            let selectedAfter = await selectedText()
-            if ReplacementVerification.succeeded(
-                original: originalText,
-                replacement: replacement,
-                selectedAfter: selectedAfter
-            ) {
-                return true
-            }
-        }
-
-        return false
+    private func replaceUsingPasteboard(_ text: String) async -> Bool {
+        let pasteboard = NSPasteboard.general
+        let snapshot = PasteboardSnapshot(pasteboard)
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        try? await Task.sleep(for: .milliseconds(45))
+        let posted = await postCommandKey(virtualKey: 9)
+        try? await Task.sleep(for: .milliseconds(350))
+        snapshot.restore(to: pasteboard)
+        return posted
     }
 
     private func focusedElement() -> AXUIElement? {
@@ -142,23 +112,6 @@ final class AccessibilityService: AccessibilityServicing {
             elements.append(current)
         }
         return elements
-    }
-
-    private func selectedTextFromAccessibility() -> String? {
-        for element in accessibilityCandidates() {
-            var value: CFTypeRef?
-            if AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &value) == .success,
-               let text = value as? String,
-               !text.isEmpty {
-                return text
-            }
-        }
-        return nil
-    }
-
-    private func processIdentifier(for element: AXUIElement) -> pid_t? {
-        var processIdentifier = pid_t()
-        return AXUIElementGetPid(element, &processIdentifier) == .success ? processIdentifier : nil
     }
 
     private func isInsideWebArea(_ element: AXUIElement) -> Bool {

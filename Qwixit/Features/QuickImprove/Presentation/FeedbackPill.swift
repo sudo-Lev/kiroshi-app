@@ -16,7 +16,7 @@ struct FeedbackPill: View {
                 upgradeCard(limitReached: true)
             } else if phase == .lastFreeAction {
                 upgradeCard(limitReached: false)
-            } else if phase == .processing || phase == .success {
+            } else if phase == .processing || phase == .success || isError {
                 cyberStatusBox
             } else {
                 compactNotice
@@ -50,10 +50,10 @@ struct FeedbackPill: View {
                     }
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                 } else {
-                    Text("READY")
+                    Text(statusHeadline)
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .tracking(1.45)
-                        .foregroundStyle(KColor.terminalGreen)
+                        .tracking(isError ? 0.75 : 1.45)
+                        .foregroundStyle(statusTone)
                         .transition(.opacity.combined(with: .move(edge: .leading)))
                 }
 
@@ -61,10 +61,10 @@ struct FeedbackPill: View {
                     progressTrace
                 } else {
                     HStack(spacing: 5) {
-                        Rectangle().fill(KColor.terminalGreen).frame(width: 14, height: 1)
-                        Text("TEXT REPLACED")
+                        Rectangle().fill(statusTone).frame(width: 14, height: 1)
+                        Text(statusDetail)
                             .font(.system(size: 8, weight: .medium, design: .monospaced))
-                            .tracking(1.1)
+                            .tracking(isError ? 0.75 : 1.1)
                             .foregroundStyle(cyberSecondary)
                     }
                     .frame(height: 2)
@@ -73,10 +73,10 @@ struct FeedbackPill: View {
 
             Spacer(minLength: 2)
 
-            Text(phase == .success ? "OK" : "AI")
+            Text(statusBadge)
                 .font(.system(size: 8, weight: .bold, design: .monospaced))
                 .tracking(0.8)
-                .foregroundStyle(phase == .success ? KColor.terminalGreen : KColor.magenta)
+                .foregroundStyle(statusTone)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
@@ -114,10 +114,10 @@ struct FeedbackPill: View {
         }
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(phase == .success ? KColor.terminalGreen : KColor.violet)
+                .fill(statusTone)
                 .frame(width: 2, height: 24)
                 .shadow(
-                    color: (phase == .success ? KColor.terminalGreen : KColor.magenta).opacity(0.8),
+                    color: statusTone.opacity(0.8),
                     radius: 5
                 )
         }
@@ -128,14 +128,14 @@ struct FeedbackPill: View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(
-                    phase == .success ? KColor.terminalGreen.opacity(0.55) : KColor.violet.opacity(0.34),
+                    statusTone.opacity(isError ? 0.5 : 0.55),
                     lineWidth: 1
                 )
                 .frame(width: 57, height: 27)
                 .scaleEffect(successPulse ? 1.18 : 1)
                 .opacity(successPulse ? 0 : 1)
             QwixitFaceView(
-                face: phase == .processing ? .upsell : .ready,
+                face: statusFace,
                 size: 13,
                 bracketed: true,
                 reduceMotion: reduceMotion,
@@ -343,6 +343,39 @@ struct FeedbackPill: View {
 
     private var cyberSweepHighlight: Color {
         colorScheme == .dark ? .white : KColor.ink.opacity(0.72)
+    }
+
+    private var isError: Bool {
+        if case .error = phase { return true }
+        return false
+    }
+
+    private var statusTone: Color {
+        if isError { return KColor.danger }
+        return phase == .success ? KColor.terminalGreen : KColor.violet
+    }
+
+    private var statusFace: QwixitFace {
+        if isError { return .retry }
+        return phase == .processing ? .upsell : .ready
+    }
+
+    private var statusHeadline: String {
+        guard case .error(let message) = phase else { return "READY" }
+        let normalized = message.lowercased()
+        if normalized.contains("replace") || normalized.contains("text change") { return "NOT REPLACED" }
+        if normalized.contains("empty") || normalized.contains("no text") { return "EMPTY REPLY" }
+        if normalized.contains("service") || normalized.contains("server") { return "SERVICE ERROR" }
+        return "FAILED"
+    }
+
+    private var statusDetail: String {
+        isError ? "TEXT UNCHANGED" : "TEXT REPLACED"
+    }
+
+    private var statusBadge: String {
+        if isError { return "ERR" }
+        return phase == .success ? "OK" : "AI"
     }
 }
 
