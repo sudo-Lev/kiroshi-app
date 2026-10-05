@@ -27,7 +27,7 @@ struct SettingsView: View {
         }
         .background(KColor.canvas)
         .foregroundStyle(KColor.ink)
-        .preferredColorScheme(viewModel.appearance.colorScheme)
+        .qwixitTheme()
         .onAppear {
             viewModel.refreshAccessibility()
             viewModel.refreshUsage()

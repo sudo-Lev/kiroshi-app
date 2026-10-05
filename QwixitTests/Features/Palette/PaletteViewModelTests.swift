@@ -249,6 +249,21 @@ final class PaletteViewModelTests: XCTestCase {
         XCTAssertEqual(origin.x, 356)
         XCTAssertEqual(origin.y, 42)
     }
+
+    func testFeedbackErrorTitlesNameTheActualFailure() {
+        XCTAssertEqual(
+            QwixitErrorCopy.title(for: "The active app did not allow replacement. Your text is unchanged."),
+            "Couldn’t replace the text"
+        )
+        XCTAssertEqual(
+            QwixitErrorCopy.title(for: "The AI service returned no text. Your text is unchanged."),
+            "No text came back"
+        )
+        XCTAssertEqual(
+            QwixitErrorCopy.title(for: "Qwixit service error 503: unavailable"),
+            "The service couldn’t finish that"
+        )
+    }
 }
 
 private struct RefineActionRegistry: ActionRegistering {

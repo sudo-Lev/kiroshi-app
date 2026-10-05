@@ -13,12 +13,13 @@ final class FeedbackWindowController: FeedbackPresenting {
         fallbackPoint: CGPoint? = nil
     ) {
         let size: NSSize
-        if phase == .limitReached { size = .init(width: 542, height: 300) }
+        if phase == .limitReached { size = .init(width: 374, height: 158) }
+        else if phase == .lastFreeAction { size = .init(width: 374, height: 154) }
         else if phase == .processing || phase == .success { size = .init(width: 236, height: 58) }
-        else if case .error = phase { size = .init(width: 354, height: 116) }
-        else if phase == .permissionDenied { size = .init(width: 280, height: 68) }
-        else if phase == .lastFreeAction || phase == .subscriptionActivating || phase == .offline { size = .init(width: 292, height: 66) }
-        else { size = .init(width: 260, height: 64) }
+        else if case .error = phase { size = .init(width: 356, height: 96) }
+        else if phase == .permissionDenied || phase == .subscriptionActivating || phase == .offline { size = .init(width: 326, height: 86) }
+        else if phase == .noSelection { size = .init(width: 306, height: 82) }
+        else { size = .init(width: 272, height: 66) }
         if panel == nil {
             let panel = NSPanel(contentRect: .init(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.level = .floating

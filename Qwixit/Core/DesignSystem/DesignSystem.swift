@@ -130,14 +130,76 @@ private struct QwixitThemeModifier: ViewModifier {
     @AppStorage(AppPreferenceKey.appearance) private var rawAppearance = AppAppearance.light.rawValue
 
     func body(content: Content) -> some View {
-        content.preferredColorScheme(
-            AppAppearance(rawValue: rawAppearance)?.colorScheme ?? .light
-        )
+        let appearance = AppAppearance(rawValue: rawAppearance) ?? .light
+        content
+            .preferredColorScheme(appearance.colorScheme)
+            .background(QwixitWindowAppearanceBridge(appearance: appearance))
+    }
+}
+
+private struct QwixitWindowAppearanceBridge: NSViewRepresentable {
+    let appearance: AppAppearance
+
+    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        let name: NSAppearance.Name = appearance == .dark ? .darkAqua : .aqua
+        guard view.window?.appearance?.name != name else { return }
+        DispatchQueue.main.async { view.window?.appearance = NSAppearance(named: name) }
     }
 }
 
 extension View {
     func qwixitTheme() -> some View { modifier(QwixitThemeModifier()) }
+
+    func qwixitPanel(cornerRadius: CGFloat = 14, accent: Color? = nil) -> some View {
+        modifier(QwixitPanelModifier(cornerRadius: cornerRadius, accent: accent))
+    }
+}
+
+private struct QwixitPanelModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    let accent: Color?
+
+    func body(content: Content) -> some View {
+        content
+            .background(KColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(KColor.line, lineWidth: 1)
+            }
+            .overlay(alignment: .leading) {
+                if let accent {
+                    Capsule()
+                        .fill(accent)
+                        .frame(width: 2, height: 24)
+                        .padding(.leading, 1)
+                }
+            }
+    }
+}
+
+enum QwixitErrorCopy {
+    static func title(for message: String) -> String {
+        let normalized = message.lowercased()
+        if normalized.contains("replace") || normalized.contains("text change") {
+            return "Couldn’t replace the text"
+        }
+        if normalized.contains("no text") || normalized.contains("empty") {
+            return "No text came back"
+        }
+        if normalized.contains("unreadable") || normalized.contains("decode") {
+            return "The reply couldn’t be read"
+        }
+        if normalized.contains("permission") || normalized.contains("accessibility") {
+            return "Qwixit needs access"
+        }
+        if normalized.contains("service") || normalized.contains("server") || normalized.contains("status") {
+            return "The service couldn’t finish that"
+        }
+        return "Couldn’t finish that"
+    }
 }
 
 enum QwixitFace: Int, CaseIterable {

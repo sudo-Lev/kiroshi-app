@@ -5,37 +5,37 @@ struct FeedbackPill: View {
     let reduceMotion: Bool
     let onClose: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var trace = false
     @State private var successPulse = false
     @State private var borderSweep = false
 
     var body: some View {
         Group {
-            if phase == .limitReached { limitCard }
-            else if case .error(let message) = phase { errorCard(message) }
-            else if phase == .processing || phase == .success { cyberStatusBox }
-            else { basicStatus }
-        }
-        .foregroundStyle(KColor.ink)
-        .environment(\.colorScheme, .light)
-        .onAppear {
-            if phase == .processing, !reduceMotion { withAnimation(.linear(duration: 0.46).repeatForever(autoreverses: false)) { trace = true } }
-            if phase == .success, !reduceMotion { withAnimation(.easeOut(duration: 0.72)) { successPulse = true } }
-            if (phase == .processing || phase == .success), !reduceMotion { withAnimation(.linear(duration: 0.64).repeatForever(autoreverses: false)) { borderSweep = true } }
-        }
-    }
-
-    private var basicStatus: some View {
-        HStack(spacing: 10) {
-            icon
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 12, weight: .semibold)).lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                if let detail { Text(detail).font(.system(size: 9, design: .monospaced)).foregroundStyle(KColor.secondary) }
+            if phase == .limitReached {
+                upgradeCard(limitReached: true)
+            } else if phase == .lastFreeAction {
+                upgradeCard(limitReached: false)
+            } else if phase == .processing || phase == .success {
+                cyberStatusBox
+            } else {
+                compactNotice
             }
         }
-        .padding(.horizontal, 14).frame(height: 46)
-        .background(KColor.surface.opacity(0.98)).clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(borderColor)).padding(6)
+        .foregroundStyle(KColor.ink)
+        .padding(6)
+        .qwixitTheme()
+        .onAppear {
+            if phase == .processing, !reduceMotion {
+                withAnimation(.linear(duration: 0.46).repeatForever(autoreverses: false)) { trace = true }
+            }
+            if phase == .success, !reduceMotion {
+                withAnimation(.easeOut(duration: 0.72)) { successPulse = true }
+            }
+            if (phase == .processing || phase == .success), !reduceMotion {
+                withAnimation(.linear(duration: 0.64).repeatForever(autoreverses: false)) { borderSweep = true }
+            }
+        }
     }
 
     private var cyberStatusBox: some View {
@@ -46,11 +46,11 @@ struct FeedbackPill: View {
                 if phase == .processing {
                     HStack(spacing: 3) {
                         Text(">").foregroundStyle(KColor.cyan)
-                        CyberRewriteLabel(text: "QWIXING", reduceMotion: reduceMotion)
+                        CyberRewriteLabel(text: "PROCESSING", reduceMotion: reduceMotion)
                     }
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                 } else {
-                    Text("✓ QWIXED!")
+                    Text("READY")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .tracking(1.45)
                         .foregroundStyle(KColor.terminalGreen)
@@ -65,7 +65,7 @@ struct FeedbackPill: View {
                         Text("TEXT REPLACED")
                             .font(.system(size: 8, weight: .medium, design: .monospaced))
                             .tracking(1.1)
-                            .foregroundStyle(.white.opacity(0.52))
+                            .foregroundStyle(cyberSecondary)
                     }
                     .frame(height: 2)
                 }
@@ -77,15 +77,21 @@ struct FeedbackPill: View {
                 .font(.system(size: 8, weight: .bold, design: .monospaced))
                 .tracking(0.8)
                 .foregroundStyle(phase == .success ? KColor.terminalGreen : KColor.magenta)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 12)
         .frame(width: 224, height: 46)
         .background {
             ZStack {
                 RoundedRectangle(cornerRadius: 11)
-                    .fill(Color(red: 0.055, green: 0.047, blue: 0.085).opacity(0.96))
+                    .fill(cyberSurface)
                 LinearGradient(
-                    colors: [KColor.violet.opacity(0.16), .clear, KColor.cyan.opacity(0.08)],
+                    colors: [
+                        KColor.violet.opacity(colorScheme == .dark ? 0.16 : 0.08),
+                        .clear,
+                        KColor.cyan.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                    ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -94,11 +100,11 @@ struct FeedbackPill: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: 11)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
+                .stroke(cyberBorder, lineWidth: 1)
         }
         .overlay(alignment: .topLeading) {
             LinearGradient(
-                colors: [.clear, KColor.magenta, .white, KColor.cyan, .clear],
+                colors: [.clear, KColor.magenta, cyberSweepHighlight, KColor.cyan, .clear],
                 startPoint: .leading,
                 endPoint: .trailing
             )
@@ -107,23 +113,36 @@ struct FeedbackPill: View {
             .mask(RoundedRectangle(cornerRadius: 11).stroke(lineWidth: 1))
         }
         .overlay(alignment: .leading) {
-            Rectangle().fill(phase == .success ? KColor.terminalGreen : KColor.violet).frame(width: 2, height: 24)
-                .shadow(color: (phase == .success ? KColor.terminalGreen : KColor.magenta).opacity(0.8), radius: 5)
+            Rectangle()
+                .fill(phase == .success ? KColor.terminalGreen : KColor.violet)
+                .frame(width: 2, height: 24)
+                .shadow(
+                    color: (phase == .success ? KColor.terminalGreen : KColor.magenta).opacity(0.8),
+                    radius: 5
+                )
         }
-        .shadow(color: KColor.violet.opacity(0.2), radius: 16, y: 6)
-        .padding(6)
+        .shadow(color: KColor.violet.opacity(colorScheme == .dark ? 0.2 : 0.12), radius: 16, y: 6)
     }
 
     private var statusGlyph: some View {
         ZStack {
-            Circle()
-                .stroke(phase == .success ? KColor.terminalGreen.opacity(0.55) : KColor.violet.opacity(0.34), lineWidth: 1)
-                .frame(width: 27, height: 27)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(
+                    phase == .success ? KColor.terminalGreen.opacity(0.55) : KColor.violet.opacity(0.34),
+                    lineWidth: 1
+                )
+                .frame(width: 57, height: 27)
                 .scaleEffect(successPulse ? 1.18 : 1)
                 .opacity(successPulse ? 0 : 1)
-            QwixitMark(size: 22, animated: phase == .processing && !reduceMotion, style: .dark)
+            QwixitFaceView(
+                face: phase == .processing ? .upsell : .ready,
+                size: 13,
+                bracketed: true,
+                reduceMotion: reduceMotion,
+                color: cyberPrimary
+            )
         }
-        .frame(width: 29, height: 29)
+        .frame(width: 59, height: 29)
     }
 
     private var progressTrace: some View {
@@ -142,139 +161,196 @@ struct FeedbackPill: View {
         .frame(width: 100, height: 2)
     }
 
-    private func errorCard(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("ERROR").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(KColor.danger)
-            Text("Things are a little unstable.").font(.system(size: 17, weight: .bold))
-            Text(message).font(.system(size: 10, design: .monospaced)).foregroundStyle(KColor.secondary).lineLimit(2)
-        }
-        .padding(16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(KColor.surface).overlay(Rectangle().stroke(KColor.line))
-        .overlay(Rectangle().fill(KColor.danger).frame(width: 2), alignment: .leading).padding(6)
-    }
+    private var compactNotice: some View {
+        HStack(spacing: 11) {
+            noticeIcon
 
-    @ViewBuilder private var icon: some View {
-        switch phase {
-        case .success: QwixitMark(size: 19)
-        case .permissionDenied: Image(systemName: "exclamationmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white).frame(width: 19, height: 19).background(KColor.magenta).clipShape(Circle())
-        case .error, .limitReached: Image(systemName: "exclamationmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white).frame(width: 19, height: 19).background(KColor.danger).clipShape(Circle())
-        case .noSelection: Image(systemName: "cursorarrow.rays").foregroundStyle(KColor.secondary)
-        default: QwixitMark(size: 19, animated: phase == .processing)
-        }
-    }
+            VStack(alignment: .leading, spacing: detail == nil ? 0 : 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
 
-    private var title: String {
-        switch phase { case .ready: "Ready"; case .processing: "Qwixing…"; case .success: "Qwixed!"; case .noSelection: "Select some text first"; case .permissionDenied: "Accessibility access needed"; case .lastFreeAction: "30 actions used — go Unlimited"; case .subscriptionActivating: "Activating Unlimited…"; case .limitReached: "Free limit reached"; case .offline: "No internet connection"; default: "Something went wrong" }
-    }
-    private var detail: String? {
-        switch phase { case .permissionDenied: "OPEN SYSTEM SETTINGS"; case .lastFreeAction: "SUBSCRIBE FOR UNLIMITED ACTIONS"; case .subscriptionActivating: "PADDLE IS SYNCING YOUR SUBSCRIPTION"; case .offline: "Your text is unchanged. Try again when you’re back online."; case .limitReached: "SUBSCRIBE FOR UNLIMITED ACTIONS"; case .error(let message): message; default: nil }
-    }
-    private var borderColor: Color { if case .error = phase { return KColor.danger.opacity(0.7) }; return phase == .permissionDenied ? KColor.magenta.opacity(0.5) : KColor.line }
-
-    private var limitCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Text("YOU’RE OUT OF TOKENS!")
-                    .font(.system(size: 13, weight: .black, design: .monospaced))
-                    .tracking(2.2)
-                    .foregroundStyle(KColor.magenta)
-                QwixitFaceView(face: .pay, size: 19, bracketed: true, reduceMotion: reduceMotion)
-                Spacer()
-                LimitDismissButton(action: onClose)
-            }
-
-            Text("Two coffees or unlimited Qwixit?")
-                .font(.system(size: 26, weight: .bold))
-
-            VStack(spacing: 10) {
-                ledgerRow("flat white × 2", amount: "$10.00", muted: true, struck: true)
-                ledgerRow("qwixit unlimited", amount: "$10.00")
-                Rectangle().fill(KColor.secondary.opacity(0.35)).frame(height: 1).padding(.vertical, 2)
-                HStack(spacing: 8) {
-                    Text("your call").foregroundStyle(KColor.magenta)
-                    ledgerDots(color: KColor.magenta.opacity(0.5))
-                    QwixitFaceView(face: .upsell, size: 16, bracketed: true, reduceMotion: reduceMotion)
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(KColor.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .background(KColor.canvas)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
 
-            HStack {
-                Spacer()
-                Button {
-                    _ = PaddleCheckoutOpener().openStarterCheckout()
-                    onClose()
-                } label: {
-                    HStack(spacing: 12) {
-                        Text("Well, I can buy 2 coffees")
-                        Text("$10/mo").font(.system(size: 13, weight: .bold, design: .monospaced))
-                        QwixitFaceView(face: .pay, size: 16, bracketed: true, reduceMotion: reduceMotion, color: .white)
-                        Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .bold))
-                    }
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color(red: 0.28, green: 0.08, blue: 0.78))
-                    .padding(.horizontal, 15)
-                    .frame(height: 44)
-                    .background(Color(red: 0.95, green: 0.92, blue: 1))
-                    .clipShape(RoundedRectangle(cornerRadius: 11))
-                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(KColor.violet.opacity(0.2), lineWidth: 1))
+            Spacer(minLength: 4)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .qwixitPanel(cornerRadius: 13, accent: tone)
+    }
+
+    private var noticeIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(tone.opacity(0.10))
+                .frame(width: 32, height: 32)
+
+            switch phase {
+            case .processing:
+                QwixitMark(size: 21, animated: !reduceMotion)
+            case .success:
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(tone)
+            case .noSelection:
+                Image(systemName: "text.cursor")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tone)
+            case .permissionDenied:
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(tone)
+            case .subscriptionActivating:
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(tone)
+            case .offline:
+                Image(systemName: "wifi.slash")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(tone)
+            case .error:
+                Image(systemName: "exclamationmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(tone)
+            default:
+                QwixitMark(size: 20)
+            }
+        }
+        .frame(width: 32, height: 32)
+    }
+
+    private func upgradeCard(limitReached: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .top, spacing: 11) {
+                QwixitFaceView(
+                    face: limitReached ? .pay : .hello,
+                    size: 16,
+                    bracketed: true,
+                    reduceMotion: reduceMotion,
+                    color: KColor.violet
+                )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(limitReached ? "Ready for more?" : "Looks like you like the process!")
+                        .font(.system(size: 16, weight: .bold))
+                    Text(limitReached
+                         ? "You’ve used 30 free Qwixes this month."
+                         : "That was your last free Qwix.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(KColor.secondary)
                 }
-                .buttonStyle(.plain)
+
+                Spacer(minLength: 4)
+                dismissButton
             }
-        }
-        .padding(24)
-        .frame(width: 530, alignment: .leading)
-        .background(KColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KColor.magenta.opacity(0.75), lineWidth: 1))
-        .padding(6)
-    }
 
-    private func ledgerRow(_ title: String, amount: String, muted: Bool = false, struck: Bool = false) -> some View {
-        HStack(spacing: 10) {
-            Text(title).foregroundStyle(muted ? KColor.secondary : KColor.ink).strikethrough(struck)
-            ledgerDots(color: KColor.secondary.opacity(0.48))
-            Text(amount).foregroundStyle(muted ? KColor.secondary : KColor.ink).strikethrough(struck)
-        }
-        .font(.system(size: 14, weight: .bold, design: .monospaced))
-    }
-
-    private func ledgerDots(color: Color) -> some View {
-        GeometryReader { proxy in
-            Path { path in
-                path.move(to: .init(x: 0, y: proxy.size.height / 2))
-                path.addLine(to: .init(x: proxy.size.width, y: proxy.size.height / 2))
+            Button {
+                _ = PaddleCheckoutOpener().openStarterCheckout()
+                onClose()
+            } label: {
+                HStack(spacing: 7) {
+                    Text("Get Unlimited")
+                    Text("$10/mo")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .opacity(0.82)
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .frame(maxWidth: .infinity)
             }
-            .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [1, 4]))
+            .buttonStyle(PrimaryButtonStyle())
         }
-        .frame(height: 8)
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .qwixitPanel(cornerRadius: 14, accent: KColor.violet)
     }
-}
 
-private struct LimitDismissButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
+    private var dismissButton: some View {
+        Button(action: onClose) {
             Image(systemName: "xmark")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(KColor.secondary)
-                .frame(width: 24, height: 24)
-                .background(KColor.canvasRaised)
-                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .frame(width: 25, height: 25)
+                .background(KColor.surfaceHover)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
         .help("Close")
-        .accessibilityLabel("Close subscription offer")
+        .accessibilityLabel("Close")
+    }
+
+    private var title: String {
+        switch phase {
+        case .ready: "Ready"
+        case .processing: "Qwixing your text…"
+        case .success: "Text replaced"
+        case .noSelection: "Select some text first"
+        case .permissionDenied: "Accessibility access needed"
+        case .subscriptionActivating: "Activating Unlimited…"
+        case .offline: "You’re offline"
+        case .error(let message): QwixitErrorCopy.title(for: message)
+        case .lastFreeAction, .limitReached: ""
+        }
+    }
+
+    private var detail: String? {
+        switch phase {
+        case .noSelection: "Highlight text in any app, then try again."
+        case .permissionDenied: "Allow Qwixit in System Settings to continue."
+        case .subscriptionActivating: "Your subscription is still syncing."
+        case .offline: "Your text is unchanged. Try again when you’re back online."
+        case .error(let message): message
+        default: nil
+        }
+    }
+
+    private var tone: Color {
+        switch phase {
+        case .success: KColor.success
+        case .permissionDenied: KColor.warning
+        case .offline: KColor.cyan
+        case .error: KColor.danger
+        case .processing: KColor.violet
+        default: KColor.secondary
+        }
+    }
+
+    private var cyberSurface: Color {
+        colorScheme == .dark
+            ? Color(red: 0.055, green: 0.047, blue: 0.085).opacity(0.96)
+            : KColor.surface.opacity(0.98)
+    }
+
+    private var cyberPrimary: Color {
+        colorScheme == .dark ? .white.opacity(0.96) : KColor.ink
+    }
+
+    private var cyberSecondary: Color {
+        colorScheme == .dark ? .white.opacity(0.52) : KColor.secondary
+    }
+
+    private var cyberBorder: Color {
+        colorScheme == .dark ? .white.opacity(0.12) : KColor.line
+    }
+
+    private var cyberSweepHighlight: Color {
+        colorScheme == .dark ? .white : KColor.ink.opacity(0.72)
     }
 }
 
 private struct CyberRewriteLabel: View {
     let text: String
     let reduceMotion: Bool
+
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if reduceMotion {
@@ -304,7 +380,7 @@ private struct CyberRewriteLabel: View {
         Text(text)
             .font(.system(size: 11, weight: .bold, design: .monospaced))
             .tracking(0.8)
-            .foregroundStyle(.white.opacity(0.96))
+            .foregroundStyle(baseColor)
     }
 
     private func animatedGlyph(_ glyph: String, index: Int, head: CGFloat) -> some View {
@@ -320,7 +396,7 @@ private struct CyberRewriteLabel: View {
             glyphText(glyph, color: KColor.magenta)
                 .offset(x: energy * 1.8, y: lift)
                 .opacity(energy * 0.78)
-            glyphText(glyph, color: .white.opacity(0.96))
+            glyphText(glyph, color: baseColor)
                 .offset(y: lift)
                 .opacity(isBehind ? 1 : 1 - energy * 0.35)
         }
@@ -336,5 +412,9 @@ private struct CyberRewriteLabel: View {
         Text(glyph)
             .font(.system(size: 11, weight: .bold, design: .monospaced))
             .foregroundStyle(color)
+    }
+
+    private var baseColor: Color {
+        colorScheme == .dark ? .white.opacity(0.96) : KColor.ink
     }
 }

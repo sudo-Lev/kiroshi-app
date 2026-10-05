@@ -16,10 +16,8 @@ struct PaletteView: View {
             Divider().overlay(KColor.line)
             footer
         }
-        .background(KColor.surface)
         .foregroundStyle(text)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(KColor.line, lineWidth: 1.25))
+        .qwixitPanel()
         .qwixitTheme()
     }
 

@@ -64,7 +64,7 @@ private struct ResultCard: View {
             HStack {
                 Text("◆ \(state.action.name)").foregroundStyle(KColor.magenta)
                 Spacer()
-                Text("Text unchanged").foregroundStyle(.gray)
+                Text("Text unchanged").foregroundStyle(KColor.secondary)
                 Button("Esc", action: onClose).buttonStyle(.plain)
             }
             .font(.system(size: 10, weight: .bold, design: .monospaced)).padding(16)
@@ -96,9 +96,7 @@ private struct ResultCard: View {
             .padding(14)
         }
         .foregroundStyle(KColor.ink)
-        .background(KColor.canvasRaised)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(KColor.line))
+        .qwixitPanel()
         .qwixitTheme()
     }
 }

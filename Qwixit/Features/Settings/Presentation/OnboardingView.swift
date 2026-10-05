@@ -24,7 +24,7 @@ struct OnboardingView: View {
         }
         .background(KColor.canvas)
         .foregroundStyle(KColor.ink)
-        .preferredColorScheme(viewModel.appearance.colorScheme)
+        .qwixitTheme()
     }
 
     private var pageTransition: AnyTransition {

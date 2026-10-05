@@ -19,7 +19,7 @@ struct MenuBarView: View {
         .frame(width: 318)
         .background(KColor.canvas)
         .foregroundStyle(KColor.ink)
-        .preferredColorScheme(settingsViewModel.appearance.colorScheme)
+        .qwixitTheme()
         .onAppear {
             settingsViewModel.refreshAccessibility()
             settingsViewModel.refreshUsage()

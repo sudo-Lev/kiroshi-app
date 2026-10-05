@@ -28,10 +28,8 @@ struct PeekView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(PeekPalette.canvas)
         .foregroundStyle(PeekPalette.text)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(PeekPalette.line, lineWidth: 1.25))
+        .qwixitPanel()
         .qwixitTheme()
     }
 
@@ -265,23 +263,19 @@ struct PeekView: View {
     }
 
     private var limitView: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 11) {
             HStack(spacing: 10) {
-                Text("You’re out of tokens!")
-                    .font(.system(size: 10, weight: .black, design: .monospaced))
-                    .tracking(0.35)
-                    .foregroundStyle(KColor.magenta)
-                QwixitFaceView(face: .broke, size: 14)
+                QwixitFaceView(face: .pay, size: 14, color: KColor.violet)
+                Text("Ready for more?")
+                    .font(.system(size: 16, weight: .bold))
             }
-            Text("Two coffees or unlimited Qwixit?")
-                .font(.system(size: 19, weight: .bold))
-            Text("30 / 30 used. unlimited is $10/mo.")
+            Text("You’ve used 30 free Qwixes this month.")
                 .contentFont()
                 .foregroundStyle(PeekPalette.muted)
-            Button("Well, I can buy 2 coffees  ·  $10/mo  ↗") {
+            Button("Get Unlimited  ·  $10/mo  ↗") {
                 _ = PaddleCheckoutOpener().openStarterCheckout()
             }
-            .buttonStyle(PeekChipStyle(accent: KColor.magenta))
+            .buttonStyle(PeekChipStyle(accent: KColor.violet))
         }
     }
 
@@ -345,12 +339,29 @@ struct PeekView: View {
                     Text(message)
                 }
                 .font(.system(size: 13, weight: .black, design: .monospaced))
-                Text("your text is unchanged.").contentFont().foregroundStyle(PeekPalette.muted)
+                Text("Your text is unchanged. Try again when you’re back online.")
+                    .contentFont()
+                    .foregroundStyle(PeekPalette.muted)
             } else {
-                Text(message == "Select some text first." ? "Select text" : "Error")
-                    .font(.system(size: 13, weight: .black, design: .monospaced))
-                    .foregroundStyle(accent)
-                Text(message).contentFont().foregroundStyle(PeekPalette.muted)
+                HStack(spacing: 9) {
+                    Image(systemName: message == "Select some text first." ? "text.cursor" : "exclamationmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(message == "Select some text first." ? KColor.secondary : KColor.danger)
+                        .frame(width: 30, height: 30)
+                        .background((message == "Select some text first." ? KColor.secondary : KColor.danger).opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(message == "Select some text first."
+                             ? "Nothing selected yet"
+                             : QwixitErrorCopy.title(for: message))
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(message == "Select some text first."
+                             ? "Highlight text in any app, then press the shortcut again."
+                             : message)
+                            .font(.system(size: 11))
+                            .foregroundStyle(PeekPalette.muted)
+                    }
+                }
             }
             if message != "Select some text first." {
                 Button("Retry  ↵") { viewModel.retry() }
