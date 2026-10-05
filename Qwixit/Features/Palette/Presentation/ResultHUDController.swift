@@ -16,8 +16,12 @@ final class ResultHUDController {
     }
 
     func showDone(action: PaletteAction, detail: String, capture: PaletteCapture) {
-        present(.success, capture: capture)
-        scheduleDismiss(after: 2.8)
+        if QwixitUsage.remaining == 0 {
+            present(.lastFreeAction, capture: capture)
+        } else {
+            present(.success, capture: capture)
+            scheduleDismiss(after: 2.8)
+        }
     }
 
     func showError(_ message: String, capture: PaletteCapture?) {
@@ -42,6 +46,28 @@ final class ResultHUDController {
             anchor: capture?.bounds,
             fallbackPoint: capture?.fallbackPoint ?? NSEvent.mouseLocation
         )
+    }
+
+    func showSubscriptionActivating(capture: PaletteCapture?) {
+        dismissTask?.cancel()
+        feedback.show(
+            phase: .subscriptionActivating,
+            reduceMotion: reduceMotion,
+            anchor: capture?.bounds,
+            fallbackPoint: capture?.fallbackPoint ?? NSEvent.mouseLocation
+        )
+        scheduleDismiss(after: 4)
+    }
+
+    func showOffline(capture: PaletteCapture?) {
+        dismissTask?.cancel()
+        feedback.show(
+            phase: .offline,
+            reduceMotion: reduceMotion,
+            anchor: capture?.bounds,
+            fallbackPoint: capture?.fallbackPoint ?? NSEvent.mouseLocation
+        )
+        scheduleDismiss(after: 4)
     }
 
     func showNeutral(_ message: String, point: CGPoint) {

@@ -62,17 +62,27 @@ final class QuickImproveViewModel: ObservableObject {
         do {
             let improved = try await improver.improve(selection, instruction: instruction)
             try Task.checkCancellation()
-            guard await accessibility.replaceSelection(with: improved) else {
+            guard await accessibility.replaceSelection(selection, with: improved) else {
                 show(.error("The active app did not allow replacement. Your text is unchanged."), duration: 4)
                 return
             }
             try Task.checkCancellation()
-            show(.success, duration: 1.25)
+            if QwixitUsage.remaining == 0 {
+                show(.lastFreeAction, duration: nil)
+            } else {
+                show(.success, duration: 1.25)
+            }
         } catch is CancellationError {
             feedback.hide()
             phase = .ready
         } catch QwixitAPIError.quotaExceeded {
-            show(.limitReached, duration: nil)
+            if AppPreferences(defaults: preferences).isBillingActivationPending {
+                show(.subscriptionActivating, duration: 4)
+            } else {
+                show(.limitReached, duration: nil)
+            }
+        } catch let error where QwixitAPI.isConnectivityError(error) {
+            show(.offline, duration: nil)
         } catch {
             let message = (error as? LocalizedError)?.errorDescription
                 ?? "Qwixit couldn’t improve the text. Your text is unchanged."
@@ -109,4 +119,5 @@ final class QuickImproveViewModel: ObservableObject {
             activeFallbackPoint = nil
         }
     }
+
 }

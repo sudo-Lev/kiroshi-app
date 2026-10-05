@@ -3,6 +3,7 @@ import SwiftUI
 struct OnboardingView: View {
     @ObservedObject var viewModel: SettingsViewModel
     let onFinished: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,7 +24,7 @@ struct OnboardingView: View {
         }
         .background(KColor.canvas)
         .foregroundStyle(KColor.ink)
-        .preferredColorScheme(.light)
+        .preferredColorScheme(viewModel.appearance.colorScheme)
     }
 
     private var pageTransition: AnyTransition {
@@ -35,9 +36,9 @@ struct OnboardingView: View {
             QwixitLockup()
                 .frame(width: 88, height: 28)
             Spacer()
-            Text("QUICK SETUP")
+            Text("Quick setup")
                 .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .tracking(1.1)
+                .tracking(0.35)
                 .foregroundStyle(KColor.secondary)
         }
         .padding(.horizontal, 20)
@@ -56,6 +57,13 @@ struct OnboardingView: View {
                 }
             }
             Spacer()
+            if viewModel.onboardingStep == 1,
+               viewModel.onboardingDemoPhase != .complete {
+                Button("Skip demo") { viewModel.skipOnboardingDemo() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(KColor.secondary)
+            }
             Button {
                 withAnimation(.easeOut(duration: 0.2)) {
                     if viewModel.onboardingStep < 2 {
@@ -72,7 +80,10 @@ struct OnboardingView: View {
                 }
             }
             .buttonStyle(PrimaryButtonStyle())
-            .disabled(viewModel.onboardingStep == 2 && !viewModel.accessibilityGranted)
+            .disabled(
+                (viewModel.onboardingStep == 1 && viewModel.onboardingDemoPhase != .complete)
+                    || (viewModel.onboardingStep == 2 && !viewModel.accessibilityGranted)
+            )
         }
         .padding(.horizontal, 20)
         .frame(height: 58)
@@ -85,7 +96,8 @@ struct OnboardingView: View {
             QwixitMark(size: 112)
                 .shadow(color: KColor.violet.opacity(0.16), radius: 18, y: 8)
             VStack(alignment: .leading, spacing: 9) {
-                MonoLabel("MEET QWIXIT")
+                QwixitFaceView(face: .hello, size: 40)
+                MonoLabel("Meet Qwixit")
                 Text("Better words.\nSame you.")
                     .font(.system(size: 37, weight: .black, design: .rounded))
                     .tracking(-1.1)
@@ -99,34 +111,128 @@ struct OnboardingView: View {
 
     private var explanation: some View {
         VStack(spacing: 0) {
-            MonoLabel("ONE SHORTCUT")
-            Text("Improve text anywhere.")
+            MonoLabel("Your turn")
+            Text("Fix this mess.")
                 .font(.system(size: 30, weight: .black, design: .rounded))
                 .tracking(-0.8)
                 .padding(.top, 7)
-            Text("Select words in any app. Qwixit refines them in place without interrupting your flow.")
-                .font(.system(size: 10.5))
-                .foregroundStyle(KColor.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 430)
-                .padding(.top, 9)
 
-            HStack(spacing: 10) {
-                demoTile(label: "SELECT") {
-                    Text("sending a bit earlies")
-                        .font(.system(size: 10))
-                        .padding(4)
-                        .background(KColor.violet.opacity(0.2))
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(KColor.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(viewModel.onboardingDemoPhase == .complete ? KColor.success.opacity(0.38) : KColor.line)
+                    )
+
+                HStack(spacing: 12) {
+                    Text(demoPhrase)
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundStyle(KColor.ink)
+                        .id(demoPhrase)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+
+                    Spacer(minLength: 8)
+
+                    if viewModel.onboardingDemoPhase == .processing {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(KColor.violet)
+                    } else if viewModel.onboardingDemoPhase == .complete {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(KColor.success)
+                    }
                 }
-                Image(systemName: "arrow.right").foregroundStyle(KColor.secondary)
-                demoTile(label: "PRESS") { ShortcutKeys() }
-                Image(systemName: "arrow.right").foregroundStyle(KColor.secondary)
-                demoTile(label: "CONTINUE") {
-                    Text("Sending it a bit earlier.")
-                        .font(.system(size: 10, weight: .semibold))
-                }
+                .padding(.horizontal, 20)
             }
-            .padding(.top, 26)
+            .frame(width: 500, height: 72)
+            .padding(.top, 22)
+
+            Button(action: viewModel.runOnboardingDemo) {
+                HStack(spacing: 15) {
+                    QwixitFaceView(
+                        face: demoFace,
+                        size: 21,
+                        reduceMotion: reduceMotion
+                    )
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(demoCallToAction)
+                            .font(.system(size: 16, weight: .black, design: .rounded))
+                            .foregroundStyle(KColor.ink)
+                        Text(demoCallToActionDetail)
+                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .foregroundStyle(KColor.secondary)
+                    }
+
+                    Spacer(minLength: 10)
+
+                    HStack(spacing: 5) {
+                        ForEach(
+                            Array((viewModel.mainHotkey.modifierSymbols + [viewModel.mainHotkey.keySymbol]).enumerated()),
+                            id: \.offset
+                        ) { index, symbol in
+                            Keycap(
+                                symbol: symbol,
+                                active: index == viewModel.mainHotkey.modifierSymbols.count
+                            )
+                        }
+                    }
+                }
+                .padding(.horizontal, 18)
+                .frame(width: 500, height: 82)
+                .background(KColor.violet.opacity(0.09))
+                .clipShape(RoundedRectangle(cornerRadius: 15))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 15)
+                        .stroke(KColor.violet.opacity(0.34), lineWidth: 1.5)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.onboardingDemoPhase != .waiting || viewModel.mainHotkeyConflict)
+            .scaleEffect(viewModel.onboardingDemoPhase == .processing ? 0.985 : 1)
+            .padding(.top, 13)
+            .help("Run the local shortcut demo")
+
+            Text("local demo. nothing gets uploaded.")
+                .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                .foregroundStyle(KColor.secondary)
+                .padding(.top, 10)
+        }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: viewModel.onboardingDemoPhase)
+    }
+
+    private var demoPhrase: String {
+        switch viewModel.onboardingDemoPhase {
+        case .waiting, .processing: "helo i thnik this sentnce sound wierd"
+        case .complete: "Hello, I think this sentence sounds weird."
+        }
+    }
+
+    private var demoFace: QwixitFace {
+        switch viewModel.onboardingDemoPhase {
+        case .waiting: .hello
+        case .processing: .retry
+        case .complete: .ready
+        }
+    }
+
+    private var demoCallToAction: String {
+        if viewModel.mainHotkeyConflict { return "Shortcut is busy." }
+        return switch viewModel.onboardingDemoPhase {
+        case .waiting: "Yo. Hit the hotkeys."
+        case .processing: "Qwixing this mess…"
+        case .complete: "Yep. That’s Qwixit."
+        }
+    }
+
+    private var demoCallToActionDetail: String {
+        if viewModel.mainHotkeyConflict { return "skip for now. change it in settings." }
+        return switch viewModel.onboardingDemoPhase {
+        case .waiting: "let’s see what happens."
+        case .processing: "hold on. making it human."
+        case .complete: "same thought. better words."
         }
     }
 
@@ -141,7 +247,15 @@ struct OnboardingView: View {
                 .overlay(RoundedRectangle(cornerRadius: 22).stroke((viewModel.accessibilityGranted ? KColor.success : KColor.violet).opacity(0.28)))
 
             VStack(alignment: .leading, spacing: 10) {
-                MonoLabel("ACCESSIBILITY")
+                QwixitFaceView(
+                    face: viewModel.accessibilityGranted ? .ready : .boot,
+                    size: 30,
+                    stagger: 1
+                )
+                Text(viewModel.accessibilityGranted ? QwixitFace.ready.line : QwixitFace.boot.line)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(KColor.secondary)
+                MonoLabel("Accessibility")
                 Text(viewModel.accessibilityGranted ? "You’re connected." : "One permission.")
                     .font(.system(size: 29, weight: .black, design: .rounded))
                 Text(permissionDetail)
@@ -168,17 +282,4 @@ struct OnboardingView: View {
         return "Qwixit needs access to read and replace only the text you select. Nothing is monitored in the background."
     }
 
-    private func demoTile<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 9) {
-            content().frame(height: 28)
-            Text(label)
-                .font(.system(size: 7.5, weight: .bold, design: .monospaced))
-                .tracking(1.1)
-                .foregroundStyle(KColor.secondary)
-        }
-        .frame(width: 142, height: 74)
-        .background(KColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(KColor.line))
-    }
 }

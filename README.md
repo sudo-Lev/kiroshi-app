@@ -44,6 +44,35 @@ npx wrangler deploy
 
 Configure Paddle to send `subscription.created`, `subscription.updated`, and `subscription.canceled` events to `https://qwixit-api.levmisiliuk.workers.dev/billing/webhook`. The checkout is currently wired to the Paddle sandbox; switch the client token, price ID, Paddle environment, and webhook secret together before a production release.
 
+### Reset the complete test flow
+
+The development reset cancels the current Paddle sandbox subscription immediately, removes the installation's Durable Object data (usage, subscription, and processed webhook IDs), stops the local app, clears current and legacy preferences, removes the installation ID from Keychain, and resets Accessibility permission. The next Debug launch creates a genuinely new installation.
+
+Configure a separate reset secret once and deploy the Worker. The setup command generates the reset secret, uploads it with Wrangler, keeps the local copy in macOS Keychain, and then asks for a sandbox Paddle API key with **Subscription Read and Write** permissions. Read access lets reset find every sandbox subscription attached to the installation, including one orphaned by an older reset:
+
+```sh
+cd cloudflare-worker
+npm run setup:reset-test-flow
+npm run deploy
+```
+
+If the reset secret was configured with an earlier version, add only the missing Paddle key and redeploy:
+
+```sh
+cd cloudflare-worker
+npm run setup:paddle-reset
+npm run deploy
+```
+
+Then restart the complete flow whenever needed:
+
+```sh
+cd cloudflare-worker
+npm run reset:test-flow
+```
+
+Run the Debug build again. It starts at welcome/onboarding with a new installation identity, 30 free actions, no active subscription, and a fresh Accessibility permission step. The reset fails without changing the ledger if Paddle cancellation cannot be completed; the endpoint returns 404 when the Worker secret is not configured and rejects requests without the matching bearer token.
+
 ## Project structure
 
 - `AppViewModel.swift` owns explicit presentation state and coordinates the improve-and-replace workflow.

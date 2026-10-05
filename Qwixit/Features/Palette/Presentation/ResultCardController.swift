@@ -62,18 +62,18 @@ private struct ResultCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("◆ \(state.action.name.uppercased())").foregroundStyle(KColor.magenta)
+                Text("◆ \(state.action.name)").foregroundStyle(KColor.magenta)
                 Spacer()
-                Text("TEXT UNCHANGED").foregroundStyle(.gray)
-                Button("ESC", action: onClose).buttonStyle(.plain)
+                Text("Text unchanged").foregroundStyle(.gray)
+                Button("Esc", action: onClose).buttonStyle(.plain)
             }
             .font(.system(size: 10, weight: .bold, design: .monospaced)).padding(16)
-            Divider().overlay(Color.white.opacity(0.1))
+            Divider().overlay(KColor.line)
             ScrollView {
                 if state.isLoading {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small).tint(KColor.magenta)
-                        Text("QWIXING…").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.2)
+                        Text("Qwixing…").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(0.35)
                     }
                     .padding(18)
                 }
@@ -88,17 +88,17 @@ private struct ResultCard: View {
                         state.onAsk(question)
                         followUp = ""
                     }
-                Button("COPY ⌘C") {
+                Button("Copy ⌘C") {
                     NSPasteboard.general.clearContents(); NSPasteboard.general.setString(state.result, forType: .string)
                 }.buttonStyle(.bordered)
-                Button("INSERT BELOW", action: state.onInsert).buttonStyle(.borderedProminent).tint(KColor.magenta)
+                Button("Insert below", action: state.onInsert).buttonStyle(.borderedProminent).tint(KColor.magenta)
             }
             .padding(14)
         }
-        .foregroundStyle(Color(red: 0.933, green: 0.918, blue: 0.965))
-        .background(LinearGradient(colors: [Color(red: 0.11, green: 0.09, blue: 0.16), Color(red: 0.071, green: 0.055, blue: 0.106)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .foregroundStyle(KColor.ink)
+        .background(KColor.canvasRaised)
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.1)))
-        .preferredColorScheme(.dark)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(KColor.line))
+        .qwixitTheme()
     }
 }

@@ -4,89 +4,38 @@ struct FeedbackPill: View {
     let phase: AppPhase
     let reduceMotion: Bool
     let onClose: () -> Void
+
     @State private var trace = false
     @State private var successPulse = false
     @State private var borderSweep = false
 
     var body: some View {
         Group {
-            if phase == .limitReached {
-                limitCard
-            } else if case .error(let message) = phase {
-                errorCard(message)
-            } else if phase == .processing || phase == .success {
-                cyberStatusBox
-            } else {
-                HStack(spacing: 10) {
-                    icon
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title).font(.system(size: 12, weight: .semibold)).lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                        if let detail { Text(detail).font(.system(size: 9, design: .monospaced)).foregroundStyle(KColor.secondary) }
-                    }
-                    if phase == .processing { progressTrace }
-                }
-                .padding(.horizontal, 14).frame(height: 46)
-                .background(KColor.surface.opacity(0.98)).clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(borderColor))
-                .padding(6)
-            }
+            if phase == .limitReached { limitCard }
+            else if case .error(let message) = phase { errorCard(message) }
+            else if phase == .processing || phase == .success { cyberStatusBox }
+            else { basicStatus }
         }
         .foregroundStyle(KColor.ink)
         .environment(\.colorScheme, .light)
         .onAppear {
-            if phase == .processing, !reduceMotion {
-                withAnimation(.linear(duration: 0.46).repeatForever(autoreverses: false)) { trace = true }
-            }
-            if phase == .success, !reduceMotion {
-                withAnimation(.easeOut(duration: 0.72)) { successPulse = true }
-            }
-            if (phase == .processing || phase == .success), !reduceMotion {
-                withAnimation(.linear(duration: 0.64).repeatForever(autoreverses: false)) { borderSweep = true }
-            }
+            if phase == .processing, !reduceMotion { withAnimation(.linear(duration: 0.46).repeatForever(autoreverses: false)) { trace = true } }
+            if phase == .success, !reduceMotion { withAnimation(.easeOut(duration: 0.72)) { successPulse = true } }
+            if (phase == .processing || phase == .success), !reduceMotion { withAnimation(.linear(duration: 0.64).repeatForever(autoreverses: false)) { borderSweep = true } }
         }
     }
 
-    private var limitCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("FREE MONTH COMPLETE")
-                .font(.system(size: 9, weight: .black, design: .monospaced))
-                .tracking(1.4)
-                .foregroundStyle(KColor.magenta)
-                .padding(.trailing, 28)
-            Text("Well, you’re out of tokens xD")
-                .font(.system(size: 16, weight: .bold))
-            HStack(spacing: 10) {
-                Text("30 / 30 AI actions used")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(KColor.secondary)
-                Spacer()
-                Button {
-                    _ = PaddleCheckoutOpener().openStarterCheckout()
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("UNLIMITED")
-                        Text("$10/mo")
-                            .foregroundStyle(.white.opacity(0.72))
-                        Image(systemName: "arrow.up.right")
-                            .font(.system(size: 9, weight: .bold))
-                    }
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                }
-                .buttonStyle(PrimaryButtonStyle())
+    private var basicStatus: some View {
+        HStack(spacing: 10) {
+            icon
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 12, weight: .semibold)).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                if let detail { Text(detail).font(.system(size: 9, design: .monospaced)).foregroundStyle(KColor.secondary) }
             }
         }
-        .padding(14)
-        .frame(width: 330, alignment: .leading)
-        .background(KColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 11))
-        .overlay(RoundedRectangle(cornerRadius: 11).stroke(KColor.magenta.opacity(0.65)))
-        .overlay(Rectangle().fill(KColor.magenta).frame(width: 2), alignment: .leading)
-        .overlay(alignment: .topTrailing) {
-            LimitDismissButton(action: onClose)
-                .padding(10)
-        }
-        .padding(6)
+        .padding(.horizontal, 14).frame(height: 46)
+        .background(KColor.surface.opacity(0.98)).clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(borderColor)).padding(6)
     }
 
     private var cyberStatusBox: some View {
@@ -181,31 +130,27 @@ struct FeedbackPill: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Capsule().fill(KColor.line).frame(height: 2)
-                LinearGradient(colors: [.clear, KColor.violet, KColor.magenta, KColor.cyan, .clear], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: 42, height: 2).offset(x: trace ? geometry.size.width : -42)
+                LinearGradient(
+                    colors: [.clear, KColor.violet, KColor.magenta, KColor.cyan, .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: 42, height: 2)
+                .offset(x: trace ? geometry.size.width : -42)
             }
-        }.frame(width: 100, height: 2)
+        }
+        .frame(width: 100, height: 2)
     }
 
     private func errorCard(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("ERROR")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .tracking(1.5)
-                .foregroundStyle(KColor.danger)
-            ZStack(alignment: .leading) {
-                Text("Things are a little unstable.").foregroundStyle(KColor.cyan).offset(x: -1)
-                Text("Things are a little unstable.").foregroundStyle(KColor.danger).offset(x: 1)
-                Text("Things are a little unstable.").foregroundStyle(KColor.ink)
-            }.font(.system(size: 17, weight: .bold))
+            Text("ERROR").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(KColor.danger)
+            Text("Things are a little unstable.").font(.system(size: 17, weight: .bold))
             Text(message).font(.system(size: 10, design: .monospaced)).foregroundStyle(KColor.secondary).lineLimit(2)
         }
         .padding(16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(KColor.surface)
-        .overlay(Rectangle().stroke(KColor.line))
-        .overlay(Rectangle().fill(KColor.danger).frame(width: 2), alignment: .leading)
-        .overlay(Rectangle().fill(KColor.danger.opacity(0.6)).frame(width: 1), alignment: .trailing)
-        .padding(6)
+        .background(KColor.surface).overlay(Rectangle().stroke(KColor.line))
+        .overlay(Rectangle().fill(KColor.danger).frame(width: 2), alignment: .leading).padding(6)
     }
 
     @ViewBuilder private var icon: some View {
@@ -219,34 +164,109 @@ struct FeedbackPill: View {
     }
 
     private var title: String {
-        switch phase { case .ready: "Ready"; case .processing: "Qwixing…"; case .success: "Qwixed!"; case .noSelection: "Select some text first"; case .permissionDenied: "Accessibility access needed"; case .limitReached: "Free limit reached"; case .error: "Something went wrong" }
+        switch phase { case .ready: "Ready"; case .processing: "Qwixing…"; case .success: "Qwixed!"; case .noSelection: "Select some text first"; case .permissionDenied: "Accessibility access needed"; case .lastFreeAction: "30 actions used — go Unlimited"; case .subscriptionActivating: "Activating Unlimited…"; case .limitReached: "Free limit reached"; case .offline: "No internet connection"; default: "Something went wrong" }
     }
     private var detail: String? {
-        switch phase { case .permissionDenied: "OPEN SYSTEM SETTINGS"; case .limitReached: "SUBSCRIBE FOR UNLIMITED ACTIONS"; case .error(let message): message; default: nil }
+        switch phase { case .permissionDenied: "OPEN SYSTEM SETTINGS"; case .lastFreeAction: "SUBSCRIBE FOR UNLIMITED ACTIONS"; case .subscriptionActivating: "PADDLE IS SYNCING YOUR SUBSCRIPTION"; case .offline: "Your text is unchanged. Try again when you’re back online."; case .limitReached: "SUBSCRIBE FOR UNLIMITED ACTIONS"; case .error(let message): message; default: nil }
     }
     private var borderColor: Color { if case .error = phase { return KColor.danger.opacity(0.7) }; return phase == .permissionDenied ? KColor.magenta.opacity(0.5) : KColor.line }
+
+    private var limitCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                Text("YOU’RE OUT OF TOKENS!")
+                    .font(.system(size: 13, weight: .black, design: .monospaced))
+                    .tracking(2.2)
+                    .foregroundStyle(KColor.magenta)
+                QwixitFaceView(face: .pay, size: 19, bracketed: true, reduceMotion: reduceMotion)
+                Spacer()
+                LimitDismissButton(action: onClose)
+            }
+
+            Text("Two coffees or unlimited Qwixit?")
+                .font(.system(size: 26, weight: .bold))
+
+            VStack(spacing: 10) {
+                ledgerRow("flat white × 2", amount: "$10.00", muted: true, struck: true)
+                ledgerRow("qwixit unlimited", amount: "$10.00")
+                Rectangle().fill(KColor.secondary.opacity(0.35)).frame(height: 1).padding(.vertical, 2)
+                HStack(spacing: 8) {
+                    Text("your call").foregroundStyle(KColor.magenta)
+                    ledgerDots(color: KColor.magenta.opacity(0.5))
+                    QwixitFaceView(face: .upsell, size: 16, bracketed: true, reduceMotion: reduceMotion)
+                }
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .background(KColor.canvas)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            HStack {
+                Spacer()
+                Button {
+                    _ = PaddleCheckoutOpener().openStarterCheckout()
+                    onClose()
+                } label: {
+                    HStack(spacing: 12) {
+                        Text("Well, I can buy 2 coffees")
+                        Text("$10/mo").font(.system(size: 13, weight: .bold, design: .monospaced))
+                        QwixitFaceView(face: .pay, size: 16, bracketed: true, reduceMotion: reduceMotion, color: .white)
+                        Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .bold))
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color(red: 0.28, green: 0.08, blue: 0.78))
+                    .padding(.horizontal, 15)
+                    .frame(height: 44)
+                    .background(Color(red: 0.95, green: 0.92, blue: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 11))
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(KColor.violet.opacity(0.2), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(24)
+        .frame(width: 530, alignment: .leading)
+        .background(KColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KColor.magenta.opacity(0.75), lineWidth: 1))
+        .padding(6)
+    }
+
+    private func ledgerRow(_ title: String, amount: String, muted: Bool = false, struck: Bool = false) -> some View {
+        HStack(spacing: 10) {
+            Text(title).foregroundStyle(muted ? KColor.secondary : KColor.ink).strikethrough(struck)
+            ledgerDots(color: KColor.secondary.opacity(0.48))
+            Text(amount).foregroundStyle(muted ? KColor.secondary : KColor.ink).strikethrough(struck)
+        }
+        .font(.system(size: 14, weight: .bold, design: .monospaced))
+    }
+
+    private func ledgerDots(color: Color) -> some View {
+        GeometryReader { proxy in
+            Path { path in
+                path.move(to: .init(x: 0, y: proxy.size.height / 2))
+                path.addLine(to: .init(x: proxy.size.width, y: proxy.size.height / 2))
+            }
+            .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [1, 4]))
+        }
+        .frame(height: 8)
+    }
 }
 
 private struct LimitDismissButton: View {
     let action: () -> Void
-    @State private var isHovering = false
 
     var body: some View {
         Button(action: action) {
             Image(systemName: "xmark")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(isHovering ? KColor.ink : KColor.secondary)
+                .foregroundStyle(KColor.secondary)
                 .frame(width: 24, height: 24)
-                .background(isHovering ? KColor.surfaceHover : Color.clear)
+                .background(KColor.canvasRaised)
                 .clipShape(RoundedRectangle(cornerRadius: 7))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7)
-                        .stroke(isHovering ? KColor.line : Color.clear)
-                }
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
         .help("Close")
         .accessibilityLabel("Close subscription offer")
     }

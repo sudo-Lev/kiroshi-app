@@ -10,7 +10,7 @@ enum QwixitAPIError: LocalizedError {
         switch self {
         case .invalidResponse: "The AI service returned an unreadable response. Your text is unchanged."
         case .emptyOutput: "The AI service returned no text. Your text is unchanged."
-        case .quotaExceeded: "Well, you’re out of tokens xD Pls subscribe"
+        case .quotaExceeded: "You’re out of tokens!"
         case .api(let status, let message): "Qwixit service error \(status): \(message)"
         }
     }
@@ -20,6 +20,11 @@ enum QwixitAPI {
     static let endpoint = URL(string: "https://qwixit-api.levmisiliuk.workers.dev/v1/responses")!
 
     static func prepare(_ request: inout URLRequest) throws {
+#if DEBUG
+        if AppPreferences().developerUsageScenario == .limitReached {
+            throw QwixitAPIError.quotaExceeded(checkoutURL: nil)
+        }
+#endif
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Qwixit/1.0", forHTTPHeaderField: "User-Agent")
         request.setValue(try InstallationIdentity.current(), forHTTPHeaderField: "X-Qwixit-Installation-ID")
@@ -28,12 +33,59 @@ enum QwixitAPI {
     static func responseError(status: Int, data: Data) -> QwixitAPIError {
         let envelope = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data)
         if status == 402, envelope?.error.code == "free_limit_reached" {
+            QwixitUsage.recordLimitReached()
             return .quotaExceeded(checkoutURL: envelope?.error.checkoutURL.flatMap(URL.init(string:)))
         }
         return .api(
             status: status,
             message: envelope?.error.message ?? HTTPURLResponse.localizedString(forStatusCode: status)
         )
+    }
+
+    static func isConnectivityError(_ error: Error) -> Bool {
+        guard let error = error as? URLError else { return false }
+        return switch error.code {
+        case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost,
+             .cannotConnectToHost, .dnsLookupFailed, .timedOut, .internationalRoamingOff:
+            true
+        default:
+            false
+        }
+    }
+}
+
+enum QwixitUsage {
+    static var remaining: Int? { AppPreferences().remainingActions }
+
+    static func record(_ response: HTTPURLResponse) {
+        let defaults = UserDefaults.standard
+        if let plan = response.value(forHTTPHeaderField: "X-Qwixit-Plan") {
+            defaults.set(plan, forKey: AppPreferenceKey.quotaPlan)
+            if plan == "unlimited" {
+                defaults.removeObject(forKey: AppPreferenceKey.quotaRemaining)
+                return
+            }
+        }
+        if let raw = response.value(forHTTPHeaderField: "X-Qwixit-Remaining"),
+           let remaining = Int(raw) {
+            defaults.set(remaining, forKey: AppPreferenceKey.quotaRemaining)
+        }
+    }
+
+    static func recordLimitReached() {
+        let defaults = UserDefaults.standard
+        defaults.set("free", forKey: AppPreferenceKey.quotaPlan)
+        defaults.set(0, forKey: AppPreferenceKey.quotaRemaining)
+    }
+
+    static func record(_ status: BillingStatus, defaults: UserDefaults = .standard) {
+        defaults.set(status.plan, forKey: AppPreferenceKey.quotaPlan)
+        if status.isUnlimited {
+            defaults.removeObject(forKey: AppPreferenceKey.quotaRemaining)
+            AppPreferences(defaults: defaults).clearBillingActivation()
+        } else if let remaining = status.remaining {
+            defaults.set(remaining, forKey: AppPreferenceKey.quotaRemaining)
+        }
     }
 }
 
@@ -75,6 +127,7 @@ actor OpenAIClient {
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw QwixitAPIError.invalidResponse }
+        QwixitUsage.record(http)
         guard (200..<300).contains(http.statusCode) else {
             throw QwixitAPI.responseError(status: http.statusCode, data: data)
         }
@@ -111,6 +164,7 @@ actor OpenAIClient {
         request.httpBody = try JSONEncoder().encode(body)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw QwixitAPIError.invalidResponse }
+        QwixitUsage.record(http)
         guard (200..<300).contains(http.statusCode) else {
             throw QwixitAPI.responseError(status: http.statusCode, data: data)
         }
@@ -153,6 +207,7 @@ extension OpenAIClient {
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw QwixitAPIError.invalidResponse }
+        QwixitUsage.record(http)
         guard (200..<300).contains(http.statusCode) else {
             throw QwixitAPI.responseError(status: http.statusCode, data: data)
         }

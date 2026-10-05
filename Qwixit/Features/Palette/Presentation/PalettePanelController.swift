@@ -89,7 +89,14 @@ final class PalettePanelController {
                 viewModel.showQuestions(questions, for: action)
             } catch QwixitAPIError.quotaExceeded {
                 close()
-                hud.showLimitReached(capture: capture)
+                if AppPreferences().isBillingActivationPending {
+                    hud.showSubscriptionActivating(capture: capture)
+                } else {
+                    hud.showLimitReached(capture: capture)
+                }
+            } catch let error where QwixitAPI.isConnectivityError(error) {
+                close()
+                hud.showOffline(capture: capture)
             } catch {
                 guard !Task.isCancelled else { return }
                 // If refinement is unavailable, the original action remains useful.
@@ -119,10 +126,10 @@ final class PalettePanelController {
                 switch action.mode {
                 case .replace:
                     guard await bridge.replace(capture, with: output) else { throw PaletteError.writeFailed }
-                    hud.showDone(action: action, detail: action.id == "translate" ? "TEXT TRANSLATED · TEXT REPLACED" : "TEXT REPLACED", capture: capture)
+                    hud.showDone(action: action, detail: action.id == "translate" ? "Text translated · text replaced" : "Text replaced", capture: capture)
                 case .insert:
                     guard await bridge.insert(capture, text: output) else { throw PaletteError.writeFailed }
-                    hud.showDone(action: action, detail: "TEXT INSERTED · ORIGINAL KEPT", capture: capture)
+                    hud.showDone(action: action, detail: "Text inserted · original kept", capture: capture)
                 case .panel:
                     hud.hide()
                     resultCard.show(
@@ -153,7 +160,13 @@ final class PalettePanelController {
             } catch is CancellationError {
                 hud.hide()
             } catch QwixitAPIError.quotaExceeded {
-                hud.showLimitReached(capture: capture)
+                if AppPreferences().isBillingActivationPending {
+                    hud.showSubscriptionActivating(capture: capture)
+                } else {
+                    hud.showLimitReached(capture: capture)
+                }
+            } catch let error where QwixitAPI.isConnectivityError(error) {
+                hud.showOffline(capture: capture)
             } catch {
                 hud.showError((error as? LocalizedError)?.errorDescription ?? error.localizedDescription, capture: capture)
             }

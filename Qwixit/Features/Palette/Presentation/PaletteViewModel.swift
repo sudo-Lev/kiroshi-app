@@ -52,16 +52,16 @@ final class PaletteViewModel: ObservableObject {
         actionChoice(at: selectedIndex)
     }
     var wordCount: Int { capture?.text.split(whereSeparator: \.isWhitespace).count ?? 0 }
-    var contextLabel: String { "\(wordCount) WORDS · \(detectedLanguage?.code.uppercased() ?? "—")" }
+    var contextLabel: String { "\(wordCount) words · \(detectedLanguage?.code.uppercased() ?? "—")" }
     var isRefining: Bool { refinement != nil }
 
     var footerText: String {
-        if isRefining { return "ANSWER · ←→ OR 1–4 · ↵ RUNS" }
-        guard let mode = selectedAction?.mode else { return "REPLACE · custom instruction · ⌘Z undoes" }
+        if isRefining { return "Answer · ←→ or 1–4 · ↵ runs" }
+        guard let mode = selectedAction?.mode else { return "Replace · custom instruction · ⌘Z undoes" }
         return switch mode {
-        case .replace: "REPLACE · rewrites the selection · ⌘Z undoes"
-        case .insert: "INSERT · adds after the selection · original kept"
-        case .panel: "PANEL · opens a card · text untouched"
+        case .replace: "Replace · rewrites the selection · ⌘Z undoes"
+        case .insert: "Insert · adds after the selection · original kept"
+        case .panel: "Panel · opens a card · text untouched"
         }
     }
 

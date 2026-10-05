@@ -95,30 +95,158 @@ enum ContextPanelPlacement {
 }
 
 enum KColor {
-    static let ink = Color(red: 0.086, green: 0.075, blue: 0.122)
-    static let secondary = Color(red: 0.43, green: 0.42, blue: 0.49)
-    static let canvas = Color(red: 0.975, green: 0.973, blue: 0.988)
-    static let canvasRaised = Color(red: 0.992, green: 0.99, blue: 1)
-    static let surface = Color.white
-    static let surfaceHover = Color(red: 0.965, green: 0.955, blue: 0.992)
-    static let line = Color(red: 0.875, green: 0.855, blue: 0.925)
-    static let violet = Color(red: 0.427, green: 0.157, blue: 1)
-    static let magenta = Color(red: 1, green: 0.176, blue: 0.608)
-    static let cyan = Color(red: 0, green: 0.75, blue: 0.86)
-    static let success = Color(red: 0.122, green: 0.686, blue: 0.333)
-    static let terminalGreen = Color(red: 0.18, green: 0.92, blue: 0.45)
-    static let warning = Color(red: 0.92, green: 0.55, blue: 0.08)
-    static let danger = Color(red: 1, green: 0.25, blue: 0.32)
+    static let ink = adaptive(light: rgb(0.086, 0.075, 0.122), dark: rgb(0.945, 0.93, 0.98))
+    static let secondary = adaptive(light: rgb(0.43, 0.42, 0.49), dark: rgb(0.69, 0.67, 0.75))
+    static let canvas = adaptive(light: rgb(0.975, 0.973, 0.988), dark: rgb(0.047, 0.039, 0.071))
+    static let canvasRaised = adaptive(light: rgb(0.992, 0.99, 1), dark: rgb(0.07, 0.059, 0.098))
+    static let surface = adaptive(light: .white, dark: rgb(0.09, 0.078, 0.122))
+    static let surfaceHover = adaptive(light: rgb(0.965, 0.955, 0.992), dark: rgb(0.145, 0.122, 0.19))
+    static let line = adaptive(light: rgb(0.875, 0.855, 0.925), dark: rgb(0.25, 0.215, 0.315))
+    static let violet = adaptive(light: rgb(0.427, 0.157, 1), dark: rgb(0.59, 0.38, 1))
+    static let magenta = adaptive(light: rgb(1, 0.176, 0.608), dark: rgb(1, 0.31, 0.68))
+    static let cyan = adaptive(light: rgb(0, 0.67, 0.78), dark: rgb(0.15, 0.79, 0.89))
+    static let success = adaptive(light: rgb(0.08, 0.57, 0.27), dark: rgb(0.27, 0.78, 0.44))
+    static let terminalGreen = adaptive(light: rgb(0.08, 0.62, 0.29), dark: rgb(0.28, 0.9, 0.49))
+    static let warning = adaptive(light: rgb(0.82, 0.45, 0.03), dark: rgb(0.98, 0.65, 0.16))
+    static let danger = adaptive(light: rgb(0.9, 0.16, 0.24), dark: rgb(1, 0.37, 0.43))
+    static let receipt = adaptive(light: rgb(0.953, 0.945, 0.969), dark: rgb(0.12, 0.101, 0.151))
+
+    private static func adaptive(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        })
+    }
+
+    private static func rgb(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat) -> NSColor {
+        NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
+    }
 }
 
-enum QwixitMarkStyle { case light, dark, mono }
+extension AppAppearance {
+    var colorScheme: ColorScheme { self == .dark ? .dark : .light }
+}
 
-enum QwixitLockupStyle { case light, dark }
+private struct QwixitThemeModifier: ViewModifier {
+    @AppStorage(AppPreferenceKey.appearance) private var rawAppearance = AppAppearance.light.rawValue
+
+    func body(content: Content) -> some View {
+        content.preferredColorScheme(
+            AppAppearance(rawValue: rawAppearance)?.colorScheme ?? .light
+        )
+    }
+}
+
+extension View {
+    func qwixitTheme() -> some View { modifier(QwixitThemeModifier()) }
+}
+
+enum QwixitFace: Int, CaseIterable {
+    case hello, boot, ready, pay, broke, empty, upsell, lost, retry, idle
+
+    var open: String {
+        switch self {
+        case .hello: "^_^"
+        case .boot: "o_o"
+        case .ready: "^_-"
+        case .pay: "^o^"
+        case .broke: "$_00_$"
+        case .empty: "x_x"
+        case .upsell: "¬_¬"
+        case .lost: "?_?"
+        case .retry: "@_@"
+        case .idle: "#_#"
+        }
+    }
+
+    var shut: String {
+        switch self {
+        case .broke: "-_00_-"
+        default: "-_-"
+        }
+    }
+
+    var line: String {
+        switch self {
+        case .hello: "hi. select text, press ⌥⌘X."
+        case .boot: "first launch. permissions?"
+        case .ready: "ready. go fix something."
+        case .pay: "wow — 30 actions already!\nlooks like we clicked."
+        case .broke: "out of tokens."
+        case .empty: "30 / 30 used."
+        case .upsell: "unlimited. $10/mo."
+        case .lost: "no signal."
+        case .retry: "reconnecting…"
+        case .idle: "offline. waiting for wi-fi."
+        }
+    }
+
+    func text(closed: Bool, bracketed: Bool) -> String {
+        let value = closed ? shut : open
+        return bracketed ? "[ \(value) ]" : value
+    }
+}
+
+struct QwixitFaceView: View {
+    let face: QwixitFace
+    var size: CGFloat = 15
+    var bracketed = true
+    var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    var color = KColor.ink
+    var stagger = 0
+
+    @State private var closed = false
+
+    var body: some View {
+        ZStack {
+            if size >= 13 {
+                glyph.foregroundStyle(KColor.cyan).offset(x: -split)
+                glyph.foregroundStyle(KColor.magenta).offset(x: split)
+            }
+            glyph.foregroundStyle(color)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(face.text(closed: false, bracketed: bracketed))
+        .task(id: reduceMotion) {
+            closed = false
+            guard !reduceMotion else { return }
+            if stagger > 0 {
+                try? await Task.sleep(for: .milliseconds(stagger * 1_130))
+            }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(4_030))
+                guard !Task.isCancelled else { return }
+                closed = true
+                try? await Task.sleep(for: .milliseconds(170))
+                closed = false
+            }
+        }
+    }
+
+    private var glyph: some View {
+        Text(face.text(closed: closed, bracketed: bracketed))
+            .font(faceFont)
+    }
+
+    private var faceFont: Font {
+        if NSFont(name: "JetBrains Mono ExtraBold", size: size) != nil {
+            return .custom("JetBrains Mono ExtraBold", fixedSize: size)
+        }
+        return .system(size: size, weight: .heavy, design: .monospaced)
+    }
+
+    private var split: CGFloat { 1.5 * size / 18 }
+}
+
+enum QwixitMarkStyle { case automatic, light, dark, mono }
+
+enum QwixitLockupStyle { case automatic, light, dark }
 
 struct QwixitMark: View {
     let size: CGFloat
     var animated = false
-    var style: QwixitMarkStyle = .light
+    var style: QwixitMarkStyle = .automatic
+    @Environment(\.colorScheme) private var colorScheme
     @State private var scan = false
 
     var body: some View {
@@ -147,6 +275,7 @@ struct QwixitMark: View {
     // The mark itself is static; only the scan line above animates while processing.
     private var assetName: String {
         switch style {
+        case .automatic: return colorScheme == .dark ? "QwixitMarkDark" : "QwixitMarkLight"
         case .light: return "QwixitMarkLight"
         case .dark: return "QwixitMarkDark"
         case .mono: return "QwixitMarkInk"
@@ -155,13 +284,22 @@ struct QwixitMark: View {
 }
 
 struct QwixitLockup: View {
-    var style: QwixitLockupStyle = .light
+    var style: QwixitLockupStyle = .automatic
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Image(style == .light ? "QwixitLockupLight" : "QwixitLockupDark")
+        Image(assetName)
             .resizable()
             .scaledToFit()
             .accessibilityLabel("Qwixit")
+    }
+
+    private var assetName: String {
+        switch style {
+        case .automatic: colorScheme == .dark ? "QwixitLockupDark" : "QwixitLockupLight"
+        case .light: "QwixitLockupLight"
+        case .dark: "QwixitLockupDark"
+        }
     }
 }
 
@@ -172,7 +310,7 @@ struct MonoLabel: View {
     var body: some View {
         Text(text)
             .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .tracking(1.45)
+            .tracking(0.35)
             .foregroundStyle(KColor.secondary)
     }
 }
@@ -198,11 +336,54 @@ struct Keycap: View {
 
 struct ShortcutKeys: View {
     var body: some View {
+        ShortcutBadge(modifiers: ["⌥", "⌘"], key: "X")
+    }
+}
+
+struct ShortcutBadge: View {
+    let modifiers: [String]
+    let key: String
+
+    var body: some View {
         HStack(spacing: 4) {
-            Keycap(symbol: "⌥")
-            Keycap(symbol: "⌘")
-            Keycap(symbol: "X", active: true)
+            Text(modifiers.joined())
+                .foregroundStyle(KColor.secondary)
+            Text(key.uppercased())
+                .foregroundStyle(KColor.violet)
         }
+        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+        .padding(.horizontal, 7)
+        .frame(height: 25)
+        .background(KColor.surfaceHover)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(KColor.line))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel((modifiers + [key]).joined(separator: " "))
+    }
+}
+
+struct AccessStatusBadge: View {
+    let granted: Bool
+    var compact = false
+
+    private var color: Color { granted ? KColor.success : KColor.warning }
+
+    var body: some View {
+        HStack(spacing: compact ? 4 : 6) {
+            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .font(.system(size: compact ? 9 : 10, weight: .bold))
+            Text(granted ? "Access" : "No access")
+                .font(.system(size: compact ? 7.5 : 9, weight: .bold, design: .monospaced))
+                .tracking(compact ? 0 : 0.2)
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, compact ? 6 : 9)
+        .frame(height: compact ? 24 : 28)
+        .background(color.opacity(0.09))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(color.opacity(0.35), lineWidth: 1))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(granted ? "Accessibility access allowed" : "Accessibility access required")
     }
 }
 

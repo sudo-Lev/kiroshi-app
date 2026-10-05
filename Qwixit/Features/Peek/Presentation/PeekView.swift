@@ -1,11 +1,11 @@
 import SwiftUI
 
 private enum PeekPalette {
-    static let top = Color(red: 0.11, green: 0.09, blue: 0.16)
-    static let bottom = Color(red: 0.071, green: 0.055, blue: 0.106)
-    static let text = Color(red: 0.933, green: 0.918, blue: 0.965)
-    static let muted = Color(red: 0.557, green: 0.533, blue: 0.6)
-    static let line = Color.white.opacity(0.10)
+    static let canvas = KColor.surface
+    static let raised = KColor.canvasRaised
+    static let text = KColor.ink
+    static let muted = KColor.secondary
+    static let line = KColor.line
 }
 
 struct PeekView: View {
@@ -28,13 +28,11 @@ struct PeekView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(
-            LinearGradient(colors: [PeekPalette.top, PeekPalette.bottom], startPoint: .topLeading, endPoint: .bottomTrailing)
-        )
+        .background(PeekPalette.canvas)
         .foregroundStyle(PeekPalette.text)
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(PeekPalette.line))
-        .preferredColorScheme(.dark)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(PeekPalette.line, lineWidth: 1.25))
+        .qwixitTheme()
     }
 
     private var accent: Color {
@@ -46,16 +44,16 @@ struct PeekView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            QwixitMark(size: 27, style: .dark)
+            QwixitMark(size: 27, style: .automatic)
                 .frame(width: 22)
             if viewModel.isAwaitingChoice {
-                Text("PEEK")
+                Text("Peek")
                     .font(.system(size: 11, weight: .black, design: .monospaced))
-                    .tracking(1.2)
+                    .tracking(0.35)
                 Spacer()
-                Text("\(viewModel.wordCount) WORDS · \(viewModel.sourceLanguage?.code.uppercased() ?? "—")")
+                Text("\(viewModel.wordCount) words · \(viewModel.sourceLanguage?.code.uppercased() ?? "—")")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(1.2)
+                    .tracking(0.35)
                     .foregroundStyle(PeekPalette.muted)
             } else {
                 ForEach(Array(PeekMode.allCases.enumerated()), id: \.element) { index, mode in
@@ -70,7 +68,7 @@ struct PeekView: View {
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .padding(.horizontal, 7)
                         .frame(height: 28)
-                        .background(viewModel.mode == mode ? Color.white.opacity(0.08) : .clear)
+                        .background(viewModel.mode == mode ? color(for: mode).opacity(0.10) : .clear)
                         .clipShape(RoundedRectangle(cornerRadius: 7))
                     }
                     .buttonStyle(.plain)
@@ -85,6 +83,7 @@ struct PeekView: View {
         .padding(.horizontal, 12)
         .frame(height: 42)
         .contentShape(Rectangle())
+        .background(PeekPalette.raised)
     }
 
     private var choiceContent: some View {
@@ -99,9 +98,9 @@ struct PeekView: View {
     private var translationChoiceRow: some View {
         HStack(spacing: 9) {
             RoundedRectangle(cornerRadius: 1).fill(KColor.cyan).frame(width: 3, height: 16)
-            Text("TRANSLATE")
+            Text("Translate")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
-            Text("\(viewModel.sourceLanguage?.code.uppercased() ?? "AUTO") →")
+            Text("\(viewModel.sourceLanguage?.code.uppercased() ?? "Auto") →")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(PeekPalette.muted)
             Spacer()
@@ -122,7 +121,7 @@ struct PeekView: View {
     private var summaryChoiceRow: some View {
         HStack(spacing: 9) {
             RoundedRectangle(cornerRadius: 1).fill(KColor.magenta).frame(width: 3, height: 16)
-            Text("SUMMARY")
+            Text("Summary")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
             Spacer()
             ForEach(Array(PeekSummaryLength.allCases.enumerated()), id: \.element) { index, length in
@@ -151,16 +150,16 @@ struct PeekView: View {
                 Text(title)
                 Text("\(number)")
                     .frame(width: 18, height: 18)
-                    .overlay(Capsule().stroke(selected ? Color.black.opacity(0.35) : accent.opacity(0.55)))
+                    .overlay(Capsule().stroke(selected ? accent : accent.opacity(0.55)))
             }
             .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundStyle(selected ? Color.black : accent)
+            .foregroundStyle(selected ? PeekPalette.text : accent)
             .padding(.leading, 9)
             .padding(.trailing, 4)
             .frame(height: 28)
-            .background(selected ? accent : accent.opacity(0.10))
+            .background(selected ? accent.opacity(0.18) : PeekPalette.canvas)
             .clipShape(Capsule())
-            .overlay(Capsule().stroke(accent.opacity(0.75), lineWidth: 1))
+            .overlay(Capsule().stroke(selected ? accent : accent.opacity(0.55), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -169,7 +168,7 @@ struct PeekView: View {
     private var controls: some View {
         HStack(spacing: 8) {
             if viewModel.mode == .translate {
-                Text("\(viewModel.sourceLanguage?.code.uppercased() ?? "AUTO") →")
+                Text("\(viewModel.sourceLanguage?.code.uppercased() ?? "Auto") →")
                     .foregroundStyle(PeekPalette.muted)
                 languageSelector
             } else {
@@ -198,9 +197,9 @@ struct PeekView: View {
         }
         .buttonStyle(.plain)
         .font(.system(size: 9, weight: .black, design: .monospaced))
-        .foregroundStyle(viewModel.targetLanguage == code ? Color.black.opacity(0.8) : PeekPalette.muted)
+        .foregroundStyle(viewModel.targetLanguage == code ? PeekPalette.text : PeekPalette.muted)
         .frame(width: 34, height: 24)
-        .background(viewModel.targetLanguage == code ? accent : .clear)
+        .background(viewModel.targetLanguage == code ? accent.opacity(0.18) : .clear)
     }
 
     private var summaryControl: some View {
@@ -215,7 +214,7 @@ struct PeekView: View {
                 .foregroundStyle(viewModel.summaryLength == length ? PeekPalette.text : PeekPalette.muted)
                 .padding(.horizontal, 7)
                 .frame(height: 24)
-                .background(viewModel.summaryLength == length ? Color.white.opacity(0.1) : .clear)
+                .background(viewModel.summaryLength == length ? accent.opacity(0.12) : .clear)
             }
         }
         .overlay(RoundedRectangle(cornerRadius: 5).stroke(PeekPalette.line))
@@ -231,9 +230,30 @@ struct PeekView: View {
                 case .loading:
                     skeleton
                 case .loaded:
-                    resultContent
+                    VStack(alignment: .leading, spacing: 12) {
+                        if QwixitUsage.remaining == 0 {
+                            HStack(spacing: 7) {
+                                QwixitFaceView(face: .pay, size: 12)
+                                Text(QwixitFace.pay.line)
+                            }
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(KColor.violet)
+                        }
+                        resultContent
+                    }
                 case .limitReached:
                     limitView
+                case .subscriptionActivating:
+                    HStack(spacing: 9) {
+                        QwixitFaceView(face: .retry, size: 14)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Activating Unlimited…")
+                                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            Text("Payment sync in progress. Try again in a moment.")
+                                .contentFont()
+                                .foregroundStyle(PeekPalette.muted)
+                        }
+                    }
                 case .failed(let message):
                     errorView(message)
                 }
@@ -246,16 +266,19 @@ struct PeekView: View {
 
     private var limitView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("30 / 30 · FREE MONTH COMPLETE")
-                .font(.system(size: 10, weight: .black, design: .monospaced))
-                .tracking(1.1)
-                .foregroundStyle(KColor.magenta)
-            Text("Well, you’re out of tokens xD")
+            HStack(spacing: 10) {
+                Text("You’re out of tokens!")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .tracking(0.35)
+                    .foregroundStyle(KColor.magenta)
+                QwixitFaceView(face: .broke, size: 14)
+            }
+            Text("Two coffees or unlimited Qwixit?")
                 .font(.system(size: 19, weight: .bold))
-            Text("Subscribe for unlimited Qwixit actions.")
+            Text("30 / 30 used. unlimited is $10/mo.")
                 .contentFont()
                 .foregroundStyle(PeekPalette.muted)
-            Button("GO UNLIMITED · $10/MONTH") {
+            Button("Well, I can buy 2 coffees  ·  $10/mo  ↗") {
                 _ = PaddleCheckoutOpener().openStarterCheckout()
             }
             .buttonStyle(PeekChipStyle(accent: KColor.magenta))
@@ -264,14 +287,23 @@ struct PeekView: View {
 
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: 13) {
-            Text("QWIXING…")
+            if viewModel.isRetrying {
+                HStack(spacing: 8) {
+                    QwixitFaceView(face: .retry, size: 13)
+                    Text(QwixitFace.retry.line)
+                }
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .tracking(1.2)
                 .foregroundStyle(accent)
+            } else {
+                Text("Qwixing…")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(0.35)
+                    .foregroundStyle(accent)
+            }
             ForEach([0.92, 0.78, 0.85], id: \.self) { width in
                 GeometryReader { proxy in
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.white.opacity(viewModel.receivedFirstToken ? 0.55 : 0.28))
+                        .fill(viewModel.receivedFirstToken ? PeekPalette.muted.opacity(0.38) : PeekPalette.line.opacity(0.8))
                         .frame(width: proxy.size.width * width, height: 9)
                 }
                 .frame(height: 9)
@@ -307,37 +339,56 @@ struct PeekView: View {
 
     private func errorView(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(message == "Select some text first." ? "SELECT TEXT" : "ERROR")
+            if isOffline(message) {
+                HStack(spacing: 8) {
+                    QwixitFaceView(face: message == QwixitFace.idle.line ? .idle : .lost, size: 15)
+                    Text(message)
+                }
                 .font(.system(size: 13, weight: .black, design: .monospaced))
-                .foregroundStyle(accent)
-            Text(message).contentFont().foregroundStyle(PeekPalette.muted)
+                Text("your text is unchanged.").contentFont().foregroundStyle(PeekPalette.muted)
+            } else {
+                Text(message == "Select some text first." ? "Select text" : "Error")
+                    .font(.system(size: 13, weight: .black, design: .monospaced))
+                    .foregroundStyle(accent)
+                Text(message).contentFont().foregroundStyle(PeekPalette.muted)
+            }
             if message != "Select some text first." {
-                Button("RETRY  ↵") { viewModel.retry() }
+                Button("Retry  ↵") { viewModel.retry() }
                     .buttonStyle(PeekChipStyle(accent: accent))
             }
         }
+    }
+
+    private func isOffline(_ message: String) -> Bool {
+        let normalized = message.lowercased()
+        return normalized.contains("offline")
+            || normalized.contains("no signal")
+            || normalized.contains("internet connection")
+            || normalized.contains("network connection")
+            || normalized.contains("could not connect")
     }
 
     private var footer: some View {
         HStack(spacing: 12) {
             Text(viewModel.footerText)
             Spacer()
-            Text("1 2 · ⇥ · ESC")
-            Button(viewModel.isPinned ? "UNPIN" : "PIN") { onTogglePin() }
+            Text("1 2 · ⇥ · Esc")
+            Button(viewModel.isPinned ? "Unpin" : "Pin") { onTogglePin() }
                 .buttonStyle(PeekChipStyle(accent: viewModel.isPinned ? KColor.magenta : PeekPalette.muted))
-            Button(viewModel.copied ? "COPIED ✓" : "COPY ⌘C") { viewModel.copyResult() }
+            Button(viewModel.copied ? "Copied ✓" : "Copy ⌘C") { viewModel.copyResult() }
                 .buttonStyle(PeekCopyStyle())
         }
         .font(.system(size: 9, weight: .bold, design: .monospaced))
         .foregroundStyle(PeekPalette.muted)
         .padding(.horizontal, 16)
         .frame(height: 36)
+        .background(PeekPalette.raised)
     }
 
     private func title(for mode: PeekMode) -> String {
         switch mode {
-        case .translate: "TRANSLATE"
-        case .summary: "SUMMARY"
+        case .translate: "Translate"
+        case .summary: "Summary"
         }
     }
 
@@ -361,9 +412,11 @@ private struct PeekChipStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundStyle(configuration.isPressed ? .white : accent)
+            .foregroundStyle(configuration.isPressed ? PeekPalette.text : accent)
             .padding(.horizontal, 8)
             .frame(height: 25)
+            .background(configuration.isPressed ? accent.opacity(0.16) : accent.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
             .overlay(RoundedRectangle(cornerRadius: 5).stroke(accent.opacity(0.7)))
     }
 }
@@ -372,10 +425,10 @@ private struct PeekCopyStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 9, weight: .black, design: .monospaced))
-            .foregroundStyle(Color.black)
+            .foregroundStyle(Color.white)
             .padding(.horizontal, 9)
             .frame(height: 25)
-            .background(Color.white.opacity(configuration.isPressed ? 0.75 : 0.96))
+            .background(KColor.violet.opacity(configuration.isPressed ? 0.78 : 1))
             .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }

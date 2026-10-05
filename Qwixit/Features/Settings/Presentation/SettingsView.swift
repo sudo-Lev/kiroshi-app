@@ -2,26 +2,36 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    let onShowOnboarding: () -> Void
     let onQuit: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             header
 
-            VStack(alignment: .leading, spacing: 14) {
-                shortcutsSection
-                accessSection
-                billingSection
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    appearanceSection
+                    shortcutsSection
+                    accessSection
+                    billingSection
+#if DEBUG
+                    developerSection
+#endif
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(18)
-
-            Spacer(minLength: 0)
+            .scrollIndicators(.automatic)
             footer
         }
         .background(KColor.canvas)
         .foregroundStyle(KColor.ink)
-        .preferredColorScheme(.light)
-        .onAppear { viewModel.refreshAccessibility() }
+        .preferredColorScheme(viewModel.appearance.colorScheme)
+        .onAppear {
+            viewModel.refreshAccessibility()
+            viewModel.refreshUsage()
+        }
     }
 
     private var header: some View {
@@ -44,24 +54,30 @@ struct SettingsView: View {
     }
 
     private var accessBadge: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(viewModel.accessibilityGranted ? KColor.success : KColor.warning)
-                .frame(width: 7, height: 7)
-            Text(viewModel.accessibilityGranted ? "READY" : "ACCESS NEEDED")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .tracking(0.5)
+        AccessStatusBadge(granted: viewModel.accessibilityGranted)
+    }
+
+    private var appearanceSection: some View {
+        SettingsSection(title: "Appearance") {
+            SettingRow(
+                icon: viewModel.appearance == .dark ? "moon.stars.fill" : "sun.max.fill",
+                title: "Theme",
+                detail: "Choose the look used by Qwixit windows and feedback."
+            ) {
+                Picker("Theme", selection: $viewModel.appearance) {
+                    ForEach(AppAppearance.allCases) { appearance in
+                        Text(appearance.title).tag(appearance)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 132)
+            }
         }
-        .foregroundStyle(KColor.secondary)
-        .padding(.horizontal, 10)
-        .frame(height: 28)
-        .background(KColor.surface)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(KColor.line))
     }
 
     private var shortcutsSection: some View {
-        SettingsSection(title: "HOT KEYS") {
+        SettingsSection(title: "Hot keys") {
             SettingRow(
                 icon: "wand.and.stars",
                 title: "Fix selected text",
@@ -107,7 +123,7 @@ struct SettingsView: View {
     }
 
     private var accessSection: some View {
-        SettingsSection(title: "ACCESS") {
+        SettingsSection(title: "Access") {
             SettingRow(
                 icon: viewModel.accessibilityGranted ? "checkmark.shield.fill" : "lock.shield.fill",
                 iconColor: viewModel.accessibilityGranted ? KColor.success : KColor.warning,
@@ -117,7 +133,7 @@ struct SettingsView: View {
                     : "Required for shortcuts to work in other apps."
             ) {
                 if viewModel.accessibilityGranted {
-                    Text("ALLOWED")
+                    Text("Allowed")
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .foregroundStyle(KColor.success)
                 } else {
@@ -129,18 +145,18 @@ struct SettingsView: View {
     }
 
     private var billingSection: some View {
-        SettingsSection(title: "PLAN · SANDBOX") {
+        SettingsSection(title: "Plan · Sandbox") {
             VStack(spacing: 0) {
                 SettingRow(
                     icon: "creditcard.fill",
-                    title: "30 free AI actions / month",
-                    detail: "Go unlimited for $10/month. Sandbox test payments only."
+                    iconColor: billingIconColor,
+                    title: billingTitle,
+                    detail: billingDetail
                 ) {
-                    Button("Go unlimited") { viewModel.openStarterCheckout() }
-                        .buttonStyle(PrimaryButtonStyle())
+                    billingControl
                 }
 
-                if let message = viewModel.checkoutMessage {
+                if !viewModel.isUnlimited, let message = viewModel.checkoutMessage {
                     Text(message)
                         .font(.system(size: 9, design: .monospaced))
                         .foregroundStyle(KColor.secondary)
@@ -152,11 +168,97 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var billingControl: some View {
+        if viewModel.isUnlimited {
+            Label("Active", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(KColor.success)
+                .accessibilityLabel("Qwixit Unlimited subscription active")
+        } else if viewModel.billingActivationState == .confirming
+                    || viewModel.billingActivationState == .delayed {
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Syncing")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(KColor.cyan)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Subscription is syncing")
+        } else {
+            Button("Go unlimited") { viewModel.openStarterCheckout() }
+                .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    private var billingIconColor: Color {
+        viewModel.isUnlimited ? KColor.success : KColor.violet
+    }
+
+    private var billingTitle: String {
+        if viewModel.isUnlimited { return "Qwixit Unlimited" }
+        if viewModel.billingActivationState == .confirming
+            || viewModel.billingActivationState == .delayed {
+            return "Activating Unlimited"
+        }
+        return "30 free AI actions / month"
+    }
+
+    private var billingDetail: String {
+        if viewModel.isUnlimited { return "Active — every Qwixit action is unlocked." }
+        if viewModel.billingActivationState == .confirming { return "Waiting for Paddle confirmation." }
+        if viewModel.billingActivationState == .delayed { return "Paddle is taking longer than expected." }
+        return "Go unlimited for $10/month. Sandbox test payments only."
+    }
+
+#if DEBUG
+    private var developerSection: some View {
+        SettingsSection(title: "Developer · local only") {
+            VStack(alignment: .leading, spacing: 9) {
+                Picker(
+                    "Usage scenario",
+                    selection: Binding(
+                        get: { viewModel.developerUsageScenario },
+                        set: { viewModel.setDeveloperUsageScenario($0) }
+                    )
+                ) {
+                    ForEach(DeveloperUsageScenario.allCases) { scenario in
+                        Text(scenario.title).tag(scenario)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+
+                Text(viewModel.developerUsageScenario.detail)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(KColor.secondary)
+
+                if viewModel.developerUsageScenario == .limitReached {
+                    Label("This simulation intentionally disables AI actions.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(KColor.warning)
+                }
+
+                HStack(spacing: 10) {
+                    Button("Show onboarding now", action: onShowOnboarding)
+                    .buttonStyle(SubtleButtonStyle())
+
+                    Text("Opens the real first-run flow. Debug only.")
+                        .font(.system(size: 8.5, design: .monospaced))
+                        .foregroundStyle(KColor.secondary)
+                }
+            }
+            .padding(12)
+        }
+    }
+#endif
+
     private var footer: some View {
         HStack {
-            Text("QWIXIT 1.0")
+            Text("Qwixit 1.0")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .tracking(0.7)
+                .tracking(0.3)
                 .foregroundStyle(KColor.secondary)
             Spacer()
             Button("Quit Qwixit") { onQuit() }
@@ -238,9 +340,6 @@ private struct ShortcutKeycaps: View {
     }
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(modifiers, id: \.self) { Keycap(symbol: $0) }
-            Keycap(symbol: key, active: true)
-        }
+        ShortcutBadge(modifiers: modifiers, key: key)
     }
 }

@@ -45,6 +45,7 @@ actor PeekClient: PeekClientProtocol {
 
                     let (bytes, response) = try await session.bytes(for: urlRequest)
                     guard let http = response as? HTTPURLResponse else { throw PeekClientError.invalidResponse }
+                    QwixitUsage.record(http)
                     guard (200..<300).contains(http.statusCode) else {
                         var body = Data()
                         for try await byte in bytes.prefix(8_192) { body.append(byte) }

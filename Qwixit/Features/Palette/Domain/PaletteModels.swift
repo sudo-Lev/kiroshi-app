@@ -46,7 +46,7 @@ struct ActionRegistry: ActionRegistering {
             PaletteAction(id: "slack", name: "Slack style", hint: "clear, concise, human", mode: .replace, prompt: "Rewrite as a brief, natural Slack message. Keep facts and intent."),
             PaletteAction(id: "formal", name: "Make formal", hint: "polished professional tone", mode: .replace, prompt: "Rewrite professionally and directly. Keep the meaning.")
         ]
-        return [ActionGroup(id: "actions", title: "ACTIONS", actions: actions)]
+        return [ActionGroup(id: "actions", title: "Actions", actions: actions)]
     }
 }
 

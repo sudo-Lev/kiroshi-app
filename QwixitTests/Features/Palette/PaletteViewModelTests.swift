@@ -76,6 +76,59 @@ final class PaletteViewModelTests: XCTestCase {
         XCTAssertEqual(AppPreferences(defaults: defaults).mainHotkey, custom)
     }
 
+    func testReplacementVerificationRejectsFalseSuccessWhenOriginalTextIsStillSelected() {
+        XCTAssertFalse(
+            ReplacementVerification.succeeded(
+                original: "a bit awkrad",
+                replacement: "a bit awkward",
+                selectedAfter: "a bit awkrad"
+            )
+        )
+    }
+
+    func testReplacementVerificationAcceptsCollapsedOrReplacedSelection() {
+        XCTAssertTrue(
+            ReplacementVerification.succeeded(
+                original: "a bit awkrad",
+                replacement: "a bit awkward",
+                selectedAfter: nil
+            )
+        )
+        XCTAssertTrue(
+            ReplacementVerification.succeeded(
+                original: "a bit awkrad",
+                replacement: "a bit awkward",
+                selectedAfter: "a bit awkward"
+            )
+        )
+    }
+
+#if DEBUG
+    func testDeveloperUsageScenariosResetToLiveWithoutChangingRealQuota() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer { defaults.removePersistentDomain(forName: #function) }
+        defaults.set(17, forKey: AppPreferenceKey.quotaRemaining)
+        defaults.set("free", forKey: AppPreferenceKey.quotaPlan)
+        defaults.set(DeveloperUsageScenario.limitReached.rawValue, forKey: AppPreferenceKey.developerUsageScenario)
+
+        XCTAssertEqual(AppPreferences(defaults: defaults).remainingActions, 0)
+
+        AppPreferences.resetDeveloperOverrides(defaults: defaults)
+
+        XCTAssertEqual(AppPreferences(defaults: defaults).developerUsageScenario, .live)
+        XCTAssertEqual(AppPreferences(defaults: defaults).remainingActions, 17)
+        XCTAssertFalse(AppPreferences(defaults: defaults).isUnlimited)
+    }
+#endif
+
+    func testAppearancePreferencePersistsDarkTheme() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer { defaults.removePersistentDomain(forName: #function) }
+        defaults.set(AppAppearance.dark.rawValue, forKey: AppPreferenceKey.appearance)
+
+        XCTAssertEqual(AppPreferences(defaults: defaults).appearance, .dark)
+    }
+
     func testTranslationOffersTwoTargetsThatExcludeTheSourceLanguage() {
         XCTAssertEqual(PaletteViewModel.translationTargets(for: "en"), ["uk", "pl"])
         XCTAssertEqual(PaletteViewModel.translationTargets(for: "uk-UA"), ["en", "pl"])

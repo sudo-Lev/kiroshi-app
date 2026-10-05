@@ -45,6 +45,11 @@ final class AppContainer {
     let palettePanel: PalettePanelController
 
     init() {
+#if DEBUG
+        // Simulations are session-scoped so a paywall preview can never leave
+        // the next launch unable to make live requests.
+        AppPreferences.resetDeveloperOverrides()
+#endif
         let accessibility = AccessibilityService()
         LegacyMigration.run(isAccessibilityTrusted: accessibility.isTrusted)
         let improver = TextImprovementService()
@@ -71,7 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let singleInstanceCoordinator = SingleInstanceCoordinator()
     private var onboardingWindowController: OnboardingWindowController?
     private lazy var settingsWindowController = SettingsWindowController(
-        viewModel: container.settingsViewModel
+        viewModel: container.settingsViewModel,
+        onShowOnboarding: { [weak self] in self?.showOnboardingForTesting() }
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -100,10 +106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !settings.hasCompletedOnboarding || settings.needsRenamePermission {
             // Upgrading users only need the permission step again.
             if settings.hasCompletedOnboarding { settings.onboardingStep = 2 }
-            let controller = OnboardingWindowController(viewModel: container.settingsViewModel)
-            onboardingWindowController = controller
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                controller.show()
+                self.showOnboarding()
             }
         }
     }
@@ -115,8 +119,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         container.actionHotkey.stop()
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        container.settingsViewModel.refreshAccessibility()
+        container.settingsViewModel.refreshUsage()
+    }
+
     func showSettings() {
         settingsWindowController.show()
+    }
+
+    private func showOnboarding() {
+        let controller = onboardingWindowController
+            ?? OnboardingWindowController(viewModel: container.settingsViewModel)
+        onboardingWindowController = controller
+        controller.show()
+    }
+
+    private func showOnboardingForTesting() {
+#if DEBUG
+        container.settingsViewModel.resetOnboardingForTesting()
+        showOnboarding()
+#endif
     }
 
     private func togglePeek() async {
@@ -140,13 +163,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             binding: settings.mainHotkey,
             intervalMilliseconds: settings.paletteDoubleTapMS,
             onSingle: { [weak self] in
-                Task { @MainActor in self?.container.quickImproveViewModel.improveSelection() }
+                Task { @MainActor in self?.handleSingleActionHotkey() }
             },
             onDouble: { [weak self] in
-                Task { @MainActor in await self?.container.palettePanel.toggle() }
+                Task { @MainActor in await self?.handleDoubleActionHotkey() }
             }
         )
         settings.mainHotkeyConflict = !registered
+    }
+
+    private func handleSingleActionHotkey() {
+        if onboardingWindowController?.isVisible == true {
+            if container.settingsViewModel.onboardingStep == 1 {
+                container.settingsViewModel.runOnboardingDemo()
+            }
+            return
+        }
+        container.quickImproveViewModel.improveSelection()
+    }
+
+    private func handleDoubleActionHotkey() async {
+        if onboardingWindowController?.isVisible == true {
+            if container.settingsViewModel.onboardingStep == 1 {
+                container.settingsViewModel.runOnboardingDemo()
+            }
+            return
+        }
+        await container.palettePanel.toggle()
     }
 }
 
@@ -177,22 +220,30 @@ private final class SingleInstanceCoordinator {
 @MainActor
 final class SettingsWindowController {
     private let viewModel: SettingsViewModel
+    private let onShowOnboarding: () -> Void
     private var window: NSWindow?
 
-    init(viewModel: SettingsViewModel) {
+    init(viewModel: SettingsViewModel, onShowOnboarding: @escaping () -> Void) {
         self.viewModel = viewModel
+        self.onShowOnboarding = onShowOnboarding
     }
 
     func show() {
         if window == nil {
+#if DEBUG
+            let windowHeight: CGFloat = 704
+#else
+            let windowHeight: CGFloat = 624
+#endif
             let root = SettingsView(
                 viewModel: viewModel,
+                onShowOnboarding: onShowOnboarding,
                 onQuit: { NSApp.terminate(nil) }
             )
-            .frame(width: 500, height: 560)
+            .frame(width: 500, height: windowHeight)
 
             let window = NSWindow(
-                contentRect: .init(x: 0, y: 0, width: 500, height: 560),
+                contentRect: .init(x: 0, y: 0, width: 500, height: windowHeight),
                 styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
@@ -215,12 +266,16 @@ final class SettingsWindowController {
 final class OnboardingWindowController {
     private let viewModel: SettingsViewModel
     private var window: NSWindow?
+    private var keyMonitor: Any?
 
     init(viewModel: SettingsViewModel) {
         self.viewModel = viewModel
     }
 
+    var isVisible: Bool { window?.isVisible == true }
+
     func show() {
+        installKeyMonitorIfNeeded()
         if window == nil {
             let root = OnboardingView(viewModel: viewModel) { [weak self] in
                 self?.close()
@@ -249,6 +304,34 @@ final class OnboardingWindowController {
     func close() {
         window?.close()
         window = nil
+    }
+
+    private func installKeyMonitorIfNeeded() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self,
+                  isVisible,
+                  viewModel.onboardingStep == 1,
+                  matchesMainHotkey(event) else { return event }
+            viewModel.runOnboardingDemo()
+            return nil
+        }
+    }
+
+    private func matchesMainHotkey(_ event: NSEvent) -> Bool {
+        let binding = viewModel.mainHotkey
+        var expected: NSEvent.ModifierFlags = []
+        if binding.modifiers.contains(.control) { expected.insert(.control) }
+        if binding.modifiers.contains(.option) { expected.insert(.option) }
+        if binding.modifiers.contains(.shift) { expected.insert(.shift) }
+        if binding.modifiers.contains(.command) { expected.insert(.command) }
+        let significant: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
+        return UInt32(event.keyCode) == binding.keyCode
+            && event.modifierFlags.intersection(significant) == expected
+    }
+
+    deinit {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
     }
 }
 

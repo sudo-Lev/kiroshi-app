@@ -13,10 +13,11 @@ final class FeedbackWindowController: FeedbackPresenting {
         fallbackPoint: CGPoint? = nil
     ) {
         let size: NSSize
-        if phase == .limitReached { size = .init(width: 354, height: 126) }
+        if phase == .limitReached { size = .init(width: 542, height: 300) }
+        else if phase == .processing || phase == .success { size = .init(width: 236, height: 58) }
         else if case .error = phase { size = .init(width: 354, height: 116) }
         else if phase == .permissionDenied { size = .init(width: 280, height: 68) }
-        else if phase == .processing || phase == .success { size = .init(width: 236, height: 58) }
+        else if phase == .lastFreeAction || phase == .subscriptionActivating || phase == .offline { size = .init(width: 292, height: 66) }
         else { size = .init(width: 260, height: 64) }
         if panel == nil {
             let panel = NSPanel(contentRect: .init(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -94,7 +95,10 @@ private struct FeedbackHost: View {
         case .success: "success"
         case .noSelection: "no-selection"
         case .permissionDenied: "permission"
+        case .lastFreeAction: "last-free-action"
+        case .subscriptionActivating: "subscription-activating"
         case .limitReached: "limit-reached"
+        case .offline: "offline"
         case .error(let message): "error-\(message)"
         }
     }

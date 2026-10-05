@@ -152,6 +152,7 @@ final class PeekPanelController {
         case .idle: NSSize(width: 440, height: 150)
         case .loading, .loaded: NSSize(width: 440, height: 360)
         case .limitReached: NSSize(width: 440, height: 270)
+        case .subscriptionActivating: NSSize(width: 420, height: 190)
         case .failed: NSSize(width: 420, height: 220)
         }
     }

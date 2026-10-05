@@ -6,6 +6,7 @@ enum PeekLoadState: Equatable {
     case idle
     case loading
     case loaded
+    case subscriptionActivating
     case limitReached
     case failed(String)
 }
@@ -49,6 +50,7 @@ final class PeekViewModel: ObservableObject {
     @Published private(set) var sourceLanguage: DetectedLanguage?
     @Published private(set) var sourceText = ""
     @Published private(set) var receivedFirstToken = false
+    @Published private(set) var isRetrying = false
     @Published private(set) var copied = false
     @Published var mode: PeekMode = .translate
     @Published var summaryLength: PeekSummaryLength = .points
@@ -63,6 +65,7 @@ final class PeekViewModel: ObservableObject {
     private var requestTask: Task<Void, Never>?
     private var prefetchTasks: [Task<Void, Never>] = []
     private var copyResetTask: Task<Void, Never>?
+    private var offlineTask: Task<Void, Never>?
     private var isManualMode = false
 
     var isAwaitingChoice: Bool { loadState == .idle }
@@ -87,10 +90,10 @@ final class PeekViewModel: ObservableObject {
     var footerText: String {
         if isManualMode, let result {
             let outputCount = result.plainText.split(whereSeparator: \.isWhitespace).count
-            return "\(wordCount) → \(outputCount) WORDS"
+            return "\(wordCount) → \(outputCount) words"
         }
-        let detected = sourceLanguage?.displayName.uppercased() ?? "LANGUAGE UNKNOWN"
-        return "AUTO · \(detected) · \(wordCount) WORDS"
+        let detected = sourceLanguage?.displayName ?? "Language unknown"
+        return "Auto · \(detected) · \(wordCount) words"
     }
 
     var targetLanguageName: String {
@@ -108,6 +111,7 @@ final class PeekViewModel: ObservableObject {
         isManualMode = false
         result = nil
         receivedFirstToken = false
+        isRetrying = false
         loadState = .idle
     }
 
@@ -120,6 +124,7 @@ final class PeekViewModel: ObservableObject {
 
     func close() {
         cancelAll()
+        isRetrying = false
         if !isPinned { cache.removeAll() }
         copied = false
     }
@@ -208,7 +213,10 @@ final class PeekViewModel: ObservableObject {
         load()
     }
 
-    func retry() { load() }
+    func retry() {
+        isRetrying = true
+        load()
+    }
 
     func copyResult() {
         guard let result else { return }
@@ -270,6 +278,7 @@ final class PeekViewModel: ObservableObject {
 
     private func load() {
         requestTask?.cancel()
+        offlineTask?.cancel()
         prefetchTasks.forEach { $0.cancel() }
         prefetchTasks.removeAll()
         guard !sourceText.isEmpty else { return }
@@ -295,14 +304,22 @@ final class PeekViewModel: ObservableObject {
                 cache[key] = value
                 result = value
                 loadState = .loaded
+                isRetrying = false
             } catch is CancellationError {
                 return
             } catch QwixitAPIError.quotaExceeded {
                 guard mode == requestedMode else { return }
-                loadState = .limitReached
+                loadState = AppPreferences().isBillingActivationPending ? .subscriptionActivating : .limitReached
+                isRetrying = false
             } catch {
                 guard mode == requestedMode else { return }
-                loadState = .failed(error.localizedDescription)
+                if QwixitAPI.isConnectivityError(error) {
+                    loadState = .failed(QwixitFace.lost.line)
+                    scheduleOfflineWaiting(for: requestedMode)
+                } else {
+                    loadState = .failed(error.localizedDescription)
+                }
+                isRetrying = false
             }
         }
     }
@@ -334,8 +351,19 @@ final class PeekViewModel: ObservableObject {
 
     private func cancelAll() {
         requestTask?.cancel()
+        offlineTask?.cancel()
         prefetchTasks.forEach { $0.cancel() }
         prefetchTasks.removeAll()
+    }
+
+    private func scheduleOfflineWaiting(for requestedMode: PeekMode) {
+        offlineTask?.cancel()
+        offlineTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard !Task.isCancelled, let self, mode == requestedMode,
+                  loadState == .failed(QwixitFace.lost.line) else { return }
+            loadState = .failed(QwixitFace.idle.line)
+        }
     }
 
     private func resetChoiceIfNeeded() {
