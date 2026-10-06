@@ -16,17 +16,12 @@ enum TranslationLanguages {
     private static let supported = [
         TranslationLanguage(id: "uk", code: "UA", name: "Українська"),
         TranslationLanguage(id: "pl", code: "PL", name: "Polski"),
+        TranslationLanguage(id: "de", code: "DE", name: "Deutsch"),
         TranslationLanguage(id: "en", code: "EN", name: "English")
     ]
 
     static func targets(for sourceLanguage: String?) -> [TranslationLanguage] {
-        let ids: [String] = switch sourceLanguage?.split(separator: "-").first?.lowercased() {
-        case "en": ["uk", "pl"]
-        case "uk": ["en", "pl"]
-        case "pl": ["en", "uk"]
-        default: ["en", "uk"]
-        }
-        return ids.compactMap { id in supported.first { $0.id == id } }
+        supported
     }
 }
 

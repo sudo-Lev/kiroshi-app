@@ -20,8 +20,6 @@ struct PeekView: View {
             if viewModel.isAwaitingChoice {
                 choiceContent
             } else {
-                controls
-                Divider().overlay(PeekPalette.line)
                 bodyContent
                 Divider().overlay(PeekPalette.line)
                 footer
@@ -33,45 +31,36 @@ struct PeekView: View {
         .qwixitTheme()
     }
 
-    private var accent: Color {
-        switch viewModel.mode {
-        case .translate: KColor.cyan
-        case .summary: KColor.magenta
-        }
-    }
+    private var accent: Color { KColor.cyan }
 
     private var header: some View {
         HStack(spacing: 8) {
-            QwixitMark(size: 27, style: .automatic)
-                .frame(width: 22)
+            QwixitMark(size: 20, style: .automatic)
+                .frame(width: 20)
             if viewModel.isAwaitingChoice {
-                Text("Peek")
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
-                    .tracking(0.35)
+                Text("Translate to…")
+                    .font(.system(size: 12, weight: .semibold))
                 Spacer()
-                Text("\(viewModel.wordCount) words · \(viewModel.sourceLanguage?.code.uppercased() ?? "—")")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(0.35)
-                    .foregroundStyle(PeekPalette.muted)
             } else {
-                ForEach(Array(PeekMode.allCases.enumerated()), id: \.element) { index, mode in
-                    Button { viewModel.selectMode(mode) } label: {
-                        HStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(color(for: mode))
-                                .frame(width: 3, height: 12)
-                            Text(title(for: mode))
-                            Text("\(index + 1)").foregroundStyle(PeekPalette.muted)
-                        }
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .padding(.horizontal, 7)
-                        .frame(height: 28)
-                        .background(viewModel.mode == mode ? color(for: mode).opacity(0.10) : .clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-                    }
-                    .buttonStyle(.plain)
+                Text(viewModel.sourceLanguage?.code.uppercased() ?? "AUTO")
+                    .foregroundStyle(PeekPalette.muted)
+                Text("→")
+                    .foregroundStyle(PeekPalette.muted)
+                ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { index, language in
+                    Button(language.code) { viewModel.runTranslation(at: index) }
+                        .buttonStyle(.plain)
+                        .font(.system(
+                            size: 10,
+                            weight: viewModel.targetLanguage == language.id ? .black : .semibold,
+                            design: .monospaced
+                        ))
+                        .foregroundStyle(
+                            viewModel.targetLanguage == language.id ? PeekPalette.text : PeekPalette.muted
+                        )
+                        .padding(.horizontal, 3)
                 }
-                Spacer(minLength: 2)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                Spacer()
             }
             Button("×") { onClose() }
                 .buttonStyle(.plain)
@@ -79,144 +68,84 @@ struct PeekView: View {
                 .foregroundStyle(PeekPalette.muted)
         }
         .padding(.horizontal, 12)
-        .frame(height: 42)
+        .frame(height: 48)
         .contentShape(Rectangle())
         .background(PeekPalette.raised)
     }
 
     private var choiceContent: some View {
-        VStack(spacing: 3) {
-            translationChoiceRow
-            summaryChoiceRow
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
-
-    private var translationChoiceRow: some View {
-        HStack(spacing: 9) {
-            RoundedRectangle(cornerRadius: 1).fill(KColor.cyan).frame(width: 3, height: 16)
-            Text("Translate")
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-            Text("\(viewModel.sourceLanguage?.code.uppercased() ?? "Auto") →")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(PeekPalette.muted)
-            Spacer()
-            ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { index, language in
-                choiceChip(
-                    language.code,
-                    number: index + 1,
-                    selected: viewModel.selectedChoiceIndex == index,
-                    accent: KColor.cyan
-                ) { viewModel.runTranslation(at: index) }
-                .help("Translate to \(language.name)")
+        VStack(spacing: 0) {
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())],
+                spacing: 8
+            ) {
+                ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { index, language in
+                    languageCard(language, index: index)
+                }
             }
-        }
-        .padding(.horizontal, 9)
-        .frame(height: 42)
-    }
+            .padding(12)
 
-    private var summaryChoiceRow: some View {
-        HStack(spacing: 9) {
-            RoundedRectangle(cornerRadius: 1).fill(KColor.magenta).frame(width: 3, height: 16)
-            Text("Summary")
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-            Spacer()
-            ForEach(Array(PeekSummaryLength.allCases.enumerated()), id: \.element) { index, length in
-                let choiceIndex = viewModel.languages.count + index
-                choiceChip(
-                    length == .tldr ? "TL;DR" : length.rawValue.uppercased(),
-                    number: choiceIndex + 1,
-                    selected: viewModel.selectedChoiceIndex == choiceIndex,
-                    accent: KColor.magenta
-                ) { viewModel.runSummary(length) }
-            }
-        }
-        .padding(.horizontal, 9)
-        .frame(height: 42)
-    }
+            Divider().overlay(PeekPalette.line)
 
-    private func choiceChip(
-        _ title: String,
-        number: Int,
-        selected: Bool,
-        accent: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Text(title)
-                Text("\(number)")
-                    .frame(width: 18, height: 18)
-                    .overlay(Capsule().stroke(selected ? accent : accent.opacity(0.55)))
+            HStack {
+                Text("\(viewModel.wordCount) words")
+                Spacer()
+                Text("1–4 or ↵ to translate")
+                Text("Esc")
             }
             .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundStyle(selected ? PeekPalette.text : accent)
-            .padding(.leading, 9)
-            .padding(.trailing, 4)
-            .frame(height: 28)
-            .background(selected ? accent.opacity(0.18) : PeekPalette.canvas)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(selected ? accent : accent.opacity(0.55), lineWidth: 1))
+            .foregroundStyle(PeekPalette.muted)
+            .padding(.horizontal, 14)
+            .frame(height: 40)
         }
-        .buttonStyle(.plain)
     }
 
-    @ViewBuilder
-    private var controls: some View {
-        HStack(spacing: 8) {
-            if viewModel.mode == .translate {
-                Text("\(viewModel.sourceLanguage?.code.uppercased() ?? "Auto") →")
-                    .foregroundStyle(PeekPalette.muted)
-                languageSelector
-            } else {
-                Text(hint(for: viewModel.mode)).foregroundStyle(PeekPalette.muted)
-            }
-            if viewModel.mode == .summary { summaryControl }
-            Spacer()
-        }
-        .font(.system(size: 10, weight: .bold, design: .monospaced))
-        .padding(.horizontal, 16)
-        .frame(height: 36)
-    }
-
-    private var languageSelector: some View {
-        HStack(spacing: 0) {
-            languageButton("UA", code: "uk")
-            languageButton("EN", code: "en")
-        }
-        .overlay(RoundedRectangle(cornerRadius: 5).stroke(PeekPalette.line))
-        .clipShape(RoundedRectangle(cornerRadius: 5))
-    }
-
-    private func languageButton(_ title: String, code: String) -> some View {
-        Button(title) {
-            if viewModel.targetLanguage != code { viewModel.cycleLanguage() }
-        }
-        .buttonStyle(.plain)
-        .font(.system(size: 9, weight: .black, design: .monospaced))
-        .foregroundStyle(viewModel.targetLanguage == code ? PeekPalette.text : PeekPalette.muted)
-        .frame(width: 34, height: 24)
-        .background(viewModel.targetLanguage == code ? accent.opacity(0.18) : .clear)
-    }
-
-    private var summaryControl: some View {
-        HStack(spacing: 0) {
-            ForEach(PeekSummaryLength.allCases, id: \.self) { length in
-                Button(length == .tldr ? "TL;DR" : length.rawValue.uppercased()) {
-                    let current = PeekSummaryLength.allCases.firstIndex(of: viewModel.summaryLength) ?? 0
-                    let target = PeekSummaryLength.allCases.firstIndex(of: length) ?? 0
-                    viewModel.changeLength(step: target - current)
+    private func languageCard(_ language: TranslationLanguage, index: Int) -> some View {
+        let selected = viewModel.selectedChoiceIndex == index
+        return Button { viewModel.runTranslation(at: index) } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(language.name)
+                        .font(.system(size: 13, weight: .bold))
+                    Text(languageDetail(language))
+                        .font(.system(size: 10))
+                        .foregroundStyle(PeekPalette.muted)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(viewModel.summaryLength == length ? PeekPalette.text : PeekPalette.muted)
-                .padding(.horizontal, 7)
-                .frame(height: 24)
-                .background(viewModel.summaryLength == length ? accent.opacity(0.12) : .clear)
+                Spacer()
+                Text("\(index + 1)")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .frame(width: 24, height: 24)
+                    .background(KColor.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(PeekPalette.line))
             }
+            .padding(.horizontal, 12)
+            .frame(height: 62)
+            .background(selected ? KColor.violet.opacity(0.07) : PeekPalette.canvas)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(selected ? KColor.violet : PeekPalette.line, lineWidth: selected ? 1.5 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .overlay(RoundedRectangle(cornerRadius: 5).stroke(PeekPalette.line))
-        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .buttonStyle(.plain)
+        .help("Translate to \(language.name)")
+    }
+
+    private func languageDetail(_ language: TranslationLanguage) -> String {
+        let englishName = switch language.id {
+        case "uk": "Ukrainian"
+        case "pl": "Polish"
+        case "de": "German"
+        case "en": sourceBaseLanguage == "en" ? "Clean up English" : "English"
+        default: language.code
+        }
+        return viewModel.targetLanguage == language.id ? "\(englishName) · last used" : englishName
+    }
+
+    private var sourceBaseLanguage: String {
+        viewModel.sourceLanguage?.code.split(separator: "-").first.map(String.init)?.lowercased() ?? ""
     }
 
     private var bodyContent: some View {
@@ -257,7 +186,8 @@ struct PeekView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(18)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
         }
         .frame(maxHeight: viewModel.isPinned ? 500 : 250)
     }
@@ -310,10 +240,12 @@ struct PeekView: View {
         if let result = viewModel.result {
             switch result {
             case .translation:
-                // The source is already on screen, so only the translation is shown, as one passage.
-                Text(result.plainText)
-                    .contentFont()
-                    .textSelection(.enabled)
+                PeekMarkdownText(
+                    markdown: result.plainText,
+                    accent: KColor.cyan,
+                    baseSize: 11.5,
+                    baseWeight: .medium
+                )
             case .summary(let blocks):
                 VStack(alignment: .leading, spacing: 13) {
                     ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
@@ -321,9 +253,12 @@ struct PeekView: View {
                             if viewModel.summaryLength == .points {
                                 Rectangle().fill(accent).frame(width: 6, height: 6)
                             }
-                            Text(block)
-                                .font(.system(size: viewModel.summaryLength == .tldr ? 17 : 14))
-                                .lineSpacing(6)
+                            PeekMarkdownText(
+                                markdown: block,
+                                accent: KColor.magenta,
+                                baseSize: viewModel.summaryLength == .tldr ? 14 : 12.5,
+                                baseWeight: .regular
+                            )
                         }
                     }
                 }
@@ -381,9 +316,8 @@ struct PeekView: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            Text(viewModel.footerText)
+            Text("\(viewModel.wordCount) words · Esc")
             Spacer()
-            Text("1 2 · ⇥ · Esc")
             Button(viewModel.isPinned ? "Unpin" : "Pin") { onTogglePin() }
                 .buttonStyle(PeekChipStyle(accent: viewModel.isPinned ? KColor.magenta : PeekPalette.muted))
             Button(viewModel.copied ? "Copied ✓" : "Copy ⌘C") { viewModel.copyResult() }
@@ -391,31 +325,11 @@ struct PeekView: View {
         }
         .font(.system(size: 9, weight: .bold, design: .monospaced))
         .foregroundStyle(PeekPalette.muted)
-        .padding(.horizontal, 16)
-        .frame(height: 36)
+        .padding(.horizontal, 14)
+        .frame(height: 34)
         .background(PeekPalette.raised)
     }
 
-    private func title(for mode: PeekMode) -> String {
-        switch mode {
-        case .translate: "Translate"
-        case .summary: "Summary"
-        }
-    }
-
-    private func hint(for mode: PeekMode) -> String {
-        switch mode {
-        case .translate: "Translate the selection"
-        case .summary: "Condense it to the chosen length"
-        }
-    }
-
-    private func color(for mode: PeekMode) -> Color {
-        switch mode {
-        case .translate: KColor.cyan
-        case .summary: KColor.magenta
-        }
-    }
 }
 
 private struct PeekChipStyle: ButtonStyle {
@@ -447,5 +361,237 @@ private struct PeekCopyStyle: ButtonStyle {
 private extension View {
     func contentFont() -> some View {
         font(.system(size: 14)).lineSpacing(6)
+    }
+}
+
+private struct PeekMarkdownText: View {
+    let markdown: String
+    let accent: Color
+    let baseSize: CGFloat
+    let baseWeight: Font.Weight
+
+    private var blocks: [PeekMarkdownBlock] {
+        PeekMarkdownParser.parse(markdown)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(blocks) { block in
+                blockView(block)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
+        .tint(accent)
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: PeekMarkdownBlock) -> some View {
+        switch block.kind {
+        case .paragraph(let text):
+            inline(text, size: baseSize, weight: baseWeight)
+                .lineSpacing(2.5)
+
+        case .heading(let level, let text):
+            inline(
+                text,
+                size: max(baseSize + 1, level == 1 ? 14.5 : level == 2 ? 13.5 : 12.5),
+                weight: .bold
+            )
+            .lineSpacing(2)
+            .padding(.top, block.id == blocks.first?.id ? 0 : 2)
+
+        case .bullet(let text):
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
+                Text("–")
+                    .font(.system(size: baseSize, weight: .medium))
+                    .foregroundStyle(PeekPalette.muted)
+                inline(text, size: baseSize, weight: baseWeight)
+                    .lineSpacing(2.5)
+            }
+
+        case .numbered(let number, let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(number).")
+                    .font(.system(size: baseSize - 1, weight: .bold, design: .monospaced))
+                    .foregroundStyle(accent)
+                    .frame(minWidth: 20, alignment: .trailing)
+                inline(text, size: baseSize, weight: baseWeight)
+                    .lineSpacing(2.5)
+            }
+
+        case .quote(let text):
+            HStack(alignment: .top, spacing: 9) {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(accent.opacity(0.75))
+                    .frame(width: 2)
+                inline(text, size: baseSize, weight: .medium)
+                    .foregroundStyle(PeekPalette.muted)
+                    .lineSpacing(2.5)
+            }
+            .padding(.vertical, 3)
+
+        case .code(let text):
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(text)
+                    .font(.system(size: max(baseSize - 1, 10.5), weight: .medium, design: .monospaced))
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+            }
+            .background(KColor.receipt)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(PeekPalette.line, lineWidth: 1)
+            }
+
+        case .divider:
+            Rectangle()
+                .fill(PeekPalette.line)
+                .frame(height: 1)
+                .padding(.vertical, 2)
+        }
+    }
+
+    private func inline(
+        _ source: String,
+        size: CGFloat,
+        weight: Font.Weight = .regular
+    ) -> some View {
+        Text(PeekMarkdownParser.inline(source))
+            .font(.system(size: size, weight: weight))
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct PeekMarkdownBlock: Identifiable {
+    enum Kind {
+        case paragraph(String)
+        case heading(level: Int, text: String)
+        case bullet(String)
+        case numbered(number: Int, text: String)
+        case quote(String)
+        case code(String)
+        case divider
+    }
+
+    let id: Int
+    let kind: Kind
+}
+
+private enum PeekMarkdownParser {
+    static func parse(_ markdown: String) -> [PeekMarkdownBlock] {
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: "\n")
+        var result: [PeekMarkdownBlock] = []
+        var paragraph: [String] = []
+        var code: [String] = []
+        var isCodeBlock = false
+
+        func append(_ kind: PeekMarkdownBlock.Kind) {
+            result.append(PeekMarkdownBlock(id: result.count, kind: kind))
+        }
+
+        func flushParagraph() {
+            let text = paragraph.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            paragraph.removeAll(keepingCapacity: true)
+            if !text.isEmpty { append(.paragraph(text)) }
+        }
+
+        func flushCode() {
+            let text = code.joined(separator: "\n").trimmingCharacters(in: .newlines)
+            code.removeAll(keepingCapacity: true)
+            if !text.isEmpty { append(.code(text)) }
+        }
+
+        for rawLine in lines {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+
+            if line.hasPrefix("```") {
+                if isCodeBlock {
+                    flushCode()
+                } else {
+                    flushParagraph()
+                }
+                isCodeBlock.toggle()
+                continue
+            }
+
+            if isCodeBlock {
+                code.append(rawLine)
+                continue
+            }
+
+            if line.isEmpty {
+                flushParagraph()
+                continue
+            }
+
+            if ["---", "***", "___"].contains(line) {
+                flushParagraph()
+                append(.divider)
+                continue
+            }
+
+            if let heading = heading(from: line) {
+                flushParagraph()
+                append(.heading(level: heading.level, text: heading.text))
+                continue
+            }
+
+            if let bullet = bullet(from: line) {
+                flushParagraph()
+                append(.bullet(bullet))
+                continue
+            }
+
+            if let numbered = numbered(from: line) {
+                flushParagraph()
+                append(.numbered(number: numbered.number, text: numbered.text))
+                continue
+            }
+
+            if line.hasPrefix("> ") {
+                flushParagraph()
+                append(.quote(String(line.dropFirst(2))))
+                continue
+            }
+
+            paragraph.append(line)
+        }
+
+        if isCodeBlock { flushCode() } else { flushParagraph() }
+        return result.isEmpty ? [PeekMarkdownBlock(id: 0, kind: .paragraph(markdown))] : result
+    }
+
+    static func inline(_ markdown: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace,
+            failurePolicy: .returnPartiallyParsedIfPossible
+        )
+        return (try? AttributedString(markdown: markdown, options: options)) ?? AttributedString(markdown)
+    }
+
+    private static func heading(from line: String) -> (level: Int, text: String)? {
+        let hashes = line.prefix(while: { $0 == "#" }).count
+        guard (1...6).contains(hashes), line.dropFirst(hashes).hasPrefix(" ") else { return nil }
+        return (hashes, String(line.dropFirst(hashes + 1)))
+    }
+
+    private static func bullet(from line: String) -> String? {
+        guard line.count > 2 else { return nil }
+        let prefix = line.prefix(2)
+        guard prefix == "- " || prefix == "* " || prefix == "+ " else { return nil }
+        return String(line.dropFirst(2))
+    }
+
+    private static func numbered(from line: String) -> (number: Int, text: String)? {
+        guard let dot = line.firstIndex(of: ".") else { return nil }
+        let numberText = line[..<dot]
+        let remainder = line[line.index(after: dot)...]
+        guard let number = Int(numberText), remainder.hasPrefix(" ") else { return nil }
+        return (number, String(remainder.dropFirst()))
     }
 }

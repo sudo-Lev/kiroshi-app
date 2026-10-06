@@ -149,7 +149,7 @@ final class PeekPanelController {
     private func preferredSize(for state: PeekLoadState) -> NSSize {
         if viewModel.isPinned { return NSSize(width: 440, height: 560) }
         return switch state {
-        case .idle: NSSize(width: 440, height: 150)
+        case .idle: NSSize(width: 440, height: 250)
         case .loading, .loaded: NSSize(width: 440, height: 360)
         case .limitReached: NSSize(width: 420, height: 220)
         case .subscriptionActivating: NSSize(width: 420, height: 190)
@@ -188,20 +188,15 @@ final class PeekPanelController {
         }
         switch event.keyCode {
         case 53: close()
-        case 18: viewModel.selectMode(.translate)
-        case 19: viewModel.selectMode(.summary)
-        case 48: viewModel.nextMode(step: event.modifierFlags.contains(.shift) ? -1 : 1)
-        case 123: viewModel.nextMode(step: -1)
-        case 124: viewModel.nextMode()
         case 36:
-            if viewModel.isAwaitingChoice { viewModel.submit() }
-            else if case .failed = viewModel.loadState { viewModel.retry() }
+            if case .failed = viewModel.loadState { viewModel.retry() }
             else { return false }
-        case 33: if viewModel.mode == .summary { viewModel.changeLength(step: -1) } else { return false }
-        case 30: if viewModel.mode == .summary { viewModel.changeLength(step: 1) } else { return false }
+        case 18...21:
+            guard let number = event.charactersIgnoringModifiers.flatMap(Int.init),
+                  (1...viewModel.languages.count).contains(number) else { return false }
+            viewModel.runTranslation(at: number - 1)
         default:
             switch event.charactersIgnoringModifiers?.lowercased() {
-            case "l": viewModel.cycleLanguage()
             case "p": togglePin()
             default: return false
             }

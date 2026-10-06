@@ -84,7 +84,7 @@ final class PeekViewModelTests: XCTestCase {
         let viewModel = PeekViewModel(client: client, detector: StubLanguageDetector(code: "en"))
         viewModel.open(text: "A short selected sentence.")
 
-        XCTAssertEqual(viewModel.languages.map(\.code), ["UA", "PL"])
+        XCTAssertEqual(viewModel.languages.map(\.code), ["UA", "PL", "DE", "EN"])
         viewModel.chooseNumber(2)
         for _ in 0..<4 { await Task.yield() }
 
@@ -93,7 +93,7 @@ final class PeekViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testInlineSummaryChoiceRunsImmediately() async {
+    func testThirdInlineTranslationChoiceRunsImmediately() async {
         let client = PeekClientSpy()
         let viewModel = PeekViewModel(client: client, detector: StubLanguageDetector(code: "en"))
         viewModel.open(text: "A short selected sentence.")
@@ -101,8 +101,8 @@ final class PeekViewModelTests: XCTestCase {
         viewModel.chooseNumber(3)
         for _ in 0..<4 { await Task.yield() }
 
-        XCTAssertEqual(client.requests.map(\.mode), [.summary])
-        XCTAssertEqual(client.requests.map(\.length), [.tldr])
+        XCTAssertEqual(client.requests.map(\.mode), [.translate])
+        XCTAssertEqual(client.requests.map(\.targetLanguage), ["de"])
     }
 
     func testTranslationDecodePreservesSentenceAlignment() throws {

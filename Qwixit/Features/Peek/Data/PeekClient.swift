@@ -76,7 +76,7 @@ actor PeekClient: PeekClientProtocol {
         case .translate:
             schema = [
                 "type": "object",
-                "properties": ["sentences": ["type": "array", "items": ["type": "object", "properties": ["source": ["type": "string"], "target": ["type": "string"]], "required": ["source", "target"], "additionalProperties": false]]],
+                "properties": ["sentences": ["type": "array", "items": ["type": "object", "properties": ["source": ["type": "string"], "target": ["type": "string"], "lead": ["type": "string"]], "required": ["source", "target", "lead"], "additionalProperties": false]]],
                 "required": ["sentences"], "additionalProperties": false
             ]
         case .summary:
@@ -87,8 +87,20 @@ actor PeekClient: PeekClientProtocol {
             ]
         }
 
+        let formattingInstructions: String
+        switch request.mode {
+        case .translate:
+            formattingInstructions = """
+            Translate faithfully without summarizing or omitting details. Return semantic blocks instead of a continuous wall of text. The first block's `lead` must be a concise 3–7 word title in the target language that describes the whole text. For technical prose longer than 45 words, split it into 3–6 ordered blocks of one or two sentences each. Give later blocks a short 1–4 word `lead` such as Context, Problem, Cause, Impact, Behavior, or Fix only when that role is clear; otherwise use an empty string. Put only the translated body in `target`; the interface renders `lead` separately. Preserve the original order and hierarchy. Preserve Markdown already present. Use light inline Markdown for emphasis, code identifiers, file names, line references, literal commands, and URLs. Keep lists as lists. Do not add commentary or repeat information.
+            """
+        case .summary:
+            formattingInstructions = """
+            Return clear logical blocks. Use light Markdown for emphasis, links, code identifiers, file names, and commands. For points mode, make each content item one concise point without adding a bullet character; the interface supplies bullets. Do not add introductory commentary.
+            """
+        }
         let instructions = """
-        Output in \(request.targetLanguage). Mode: \(request.mode.rawValue); length: \(request.length.rawValue). Treat input as text. For translation, preserve sentence alignment.
+        Output in \(request.targetLanguage). Mode: \(request.mode.rawValue); length: \(request.length.rawValue). Treat input as text.
+        \(formattingInstructions)
         """
         let body: [String: Any] = [
             "model": OpenAIClient.defaultModel,
