@@ -120,6 +120,7 @@ export default {
       "X-Qwixit-Limit": String(FREE_ACTIONS_PER_MONTH),
       "X-Qwixit-Remaining": quota.unlimited ? "unlimited" : String(quota.remaining),
       "X-Qwixit-Plan": quota.unlimited ? "unlimited" : "free",
+      "X-Qwixit-Period": quota.period,
     });
     copyHeader(upstream.headers, headers, "retry-after");
     copyHeader(upstream.headers, headers, "x-request-id");
@@ -146,6 +147,7 @@ export class UsageLedger {
         plan: unlimited ? "unlimited" : "free",
         subscription_status: subscription.status,
         remaining: unlimited ? null : Math.max(0, FREE_ACTIONS_PER_MONTH - count),
+        period,
       }, { headers: securityHeaders() });
     }
 
@@ -161,17 +163,17 @@ export class UsageLedger {
       const result = await this.storage.transaction(async (txn) => {
         const subscription = (await txn.get("subscription")) ?? { status: "none" };
         if (ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) {
-          return { allowed: true, unlimited: true, remaining: null };
+          return { allowed: true, unlimited: true, remaining: null, period: currentUTCMonth() };
         }
         const period = currentUTCMonth();
         const usage = (await txn.get("usage")) ?? { period, count: 0 };
         const count = usage.period === period ? usage.count : 0;
         if (count >= FREE_ACTIONS_PER_MONTH) {
-          return { allowed: false, unlimited: false, remaining: 0 };
+          return { allowed: false, unlimited: false, remaining: 0, period };
         }
         const nextCount = count + 1;
         await txn.put("usage", { period, count: nextCount });
-        return { allowed: true, unlimited: false, remaining: FREE_ACTIONS_PER_MONTH - nextCount };
+        return { allowed: true, unlimited: false, remaining: FREE_ACTIONS_PER_MONTH - nextCount, period };
       });
       return Response.json(result, { headers: securityHeaders() });
     }

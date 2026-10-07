@@ -46,7 +46,7 @@ final class PalettePanelController {
     }
 
     private func show(capture: PaletteCapture) {
-        let size = NSSize(width: 432, height: 260)
+        let size = NSSize(width: 520, height: 260)
         if panel == nil {
             let panel = KeyboardPanel(contentRect: .init(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.level = .popUpMenu
@@ -89,11 +89,7 @@ final class PalettePanelController {
                 viewModel.showQuestions(questions, for: action)
             } catch QwixitAPIError.quotaExceeded {
                 close()
-                if AppPreferences().isBillingActivationPending {
-                    hud.showSubscriptionActivating(capture: capture)
-                } else {
-                    hud.showLimitReached(capture: capture)
-                }
+                hud.showLimitReached(capture: capture)
             } catch let error where QwixitAPI.isConnectivityError(error) {
                 close()
                 hud.showOffline(capture: capture)
@@ -160,11 +156,7 @@ final class PalettePanelController {
             } catch is CancellationError {
                 hud.hide()
             } catch QwixitAPIError.quotaExceeded {
-                if AppPreferences().isBillingActivationPending {
-                    hud.showSubscriptionActivating(capture: capture)
-                } else {
-                    hud.showLimitReached(capture: capture)
-                }
+                hud.showLimitReached(capture: capture)
             } catch let error where QwixitAPI.isConnectivityError(error) {
                 hud.showOffline(capture: capture)
             } catch {

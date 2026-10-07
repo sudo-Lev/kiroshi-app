@@ -48,24 +48,16 @@ struct PeekView: View {
                     .foregroundStyle(PeekPalette.muted)
                 ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { index, language in
                     Button(language.code) { viewModel.runTranslation(at: index) }
-                        .buttonStyle(.plain)
-                        .font(.system(
-                            size: 10,
-                            weight: viewModel.targetLanguage == language.id ? .black : .semibold,
-                            design: .monospaced
+                        .buttonStyle(CompactButtonStyle(
+                            accent: KColor.cyan,
+                            isSelected: viewModel.targetLanguage == language.id
                         ))
-                        .foregroundStyle(
-                            viewModel.targetLanguage == language.id ? PeekPalette.text : PeekPalette.muted
-                        )
-                        .padding(.horizontal, 3)
                 }
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
                 Spacer()
             }
-            Button("×") { onClose() }
-                .buttonStyle(.plain)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(PeekPalette.muted)
+            Button(action: onClose) { Image(systemName: "xmark") }
+                .buttonStyle(IconButtonStyle())
+                .accessibilityLabel("Close")
         }
         .padding(.horizontal, 12)
         .frame(height: 48)
@@ -115,21 +107,13 @@ struct PeekView: View {
                 Text("\(index + 1)")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .frame(width: 24, height: 24)
-                    .background(KColor.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(PeekPalette.line))
+                    .background(KColor.surface, in: QwixitControlShape(cut: 5))
+                    .overlay(QwixitControlShape(cut: 5).stroke(PeekPalette.line))
             }
             .padding(.horizontal, 12)
             .frame(height: 62)
-            .background(selected ? KColor.violet.opacity(0.07) : PeekPalette.canvas)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(selected ? KColor.violet : PeekPalette.line, lineWidth: selected ? 1.5 : 1)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SelectionButtonStyle(accent: KColor.violet, isSelected: selected, cut: 8))
         .help("Translate to \(language.name)")
     }
 
@@ -170,17 +154,6 @@ struct PeekView: View {
                     }
                 case .limitReached:
                     limitView
-                case .subscriptionActivating:
-                    HStack(spacing: 9) {
-                        QwixitFaceView(face: .retry, size: 14)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Activating Unlimited…")
-                                .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            Text("Payment sync in progress. Try again in a moment.")
-                                .contentFont()
-                                .foregroundStyle(PeekPalette.muted)
-                        }
-                    }
                 case .failed(let message):
                     errorView(message)
                 }
@@ -202,10 +175,19 @@ struct PeekView: View {
             Text("You’ve used 30 free Qwixes this month.")
                 .contentFont()
                 .foregroundStyle(PeekPalette.muted)
-            Button("Get Unlimited  ·  $10/mo  ↗") {
+            Button {
                 _ = PaddleCheckoutOpener().openStarterCheckout()
+            } label: {
+                HStack(spacing: 7) {
+                    Text("Get Unlimited")
+                    Text("$10/mo")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .opacity(0.82)
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .bold))
+                }
             }
-            .buttonStyle(PeekChipStyle(accent: KColor.violet))
+            .buttonStyle(PrimaryButtonStyle())
         }
     }
 
@@ -300,7 +282,7 @@ struct PeekView: View {
             }
             if message != "Select some text first." {
                 Button("Retry  ↵") { viewModel.retry() }
-                    .buttonStyle(PeekChipStyle(accent: accent))
+                    .buttonStyle(CompactButtonStyle(accent: accent))
             }
         }
     }
@@ -319,9 +301,17 @@ struct PeekView: View {
             Text("\(viewModel.wordCount) words · Esc")
             Spacer()
             Button(viewModel.isPinned ? "Unpin" : "Pin") { onTogglePin() }
-                .buttonStyle(PeekChipStyle(accent: viewModel.isPinned ? KColor.magenta : PeekPalette.muted))
-            Button(viewModel.copied ? "Copied ✓" : "Copy ⌘C") { viewModel.copyResult() }
-                .buttonStyle(PeekCopyStyle())
+                .buttonStyle(CompactButtonStyle(
+                    accent: viewModel.isPinned ? KColor.magenta : PeekPalette.muted,
+                    isSelected: viewModel.isPinned
+                ))
+            Button { viewModel.copyResult() } label: {
+                HStack(spacing: 4) {
+                    Text(viewModel.copied ? "Copied" : "Copy ⌘C")
+                    if viewModel.copied { Image(systemName: "checkmark") }
+                }
+            }
+            .buttonStyle(CompactButtonStyle(accent: KColor.violet, prominent: true))
         }
         .font(.system(size: 9, weight: .bold, design: .monospaced))
         .foregroundStyle(PeekPalette.muted)
@@ -330,32 +320,6 @@ struct PeekView: View {
         .background(PeekPalette.raised)
     }
 
-}
-
-private struct PeekChipStyle: ButtonStyle {
-    let accent: Color
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundStyle(configuration.isPressed ? PeekPalette.text : accent)
-            .padding(.horizontal, 8)
-            .frame(height: 25)
-            .background(configuration.isPressed ? accent.opacity(0.16) : accent.opacity(0.07))
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .overlay(RoundedRectangle(cornerRadius: 5).stroke(accent.opacity(0.7)))
-    }
-}
-
-private struct PeekCopyStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 9, weight: .black, design: .monospaced))
-            .foregroundStyle(Color.white)
-            .padding(.horizontal, 9)
-            .frame(height: 25)
-            .background(KColor.violet.opacity(configuration.isPressed ? 0.78 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-    }
 }
 
 private extension View {

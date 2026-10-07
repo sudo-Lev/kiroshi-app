@@ -417,12 +417,12 @@ struct Keycap: View {
             .foregroundStyle(active ? .white : KColor.ink)
             .frame(minWidth: 26, minHeight: 25)
             .padding(.horizontal, 1)
-            .background(active ? KColor.violet : KColor.surfaceHover)
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(active ? KColor.violet : KColor.line))
+            .background(active ? KColor.violet : KColor.surfaceHover, in: QwixitControlShape(cut: 5))
+            .overlay(QwixitControlShape(cut: 5).stroke(active ? KColor.violet : KColor.line))
             .overlay(alignment: .bottom) {
                 Rectangle().fill(active ? Color.black.opacity(0.24) : KColor.line).frame(height: 1).padding(.horizontal, 4)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(QwixitControlShape(cut: 5))
     }
 }
 
@@ -446,9 +446,8 @@ struct ShortcutBadge: View {
         .font(.system(size: 10.5, weight: .bold, design: .monospaced))
         .padding(.horizontal, 7)
         .frame(height: 25)
-        .background(KColor.surfaceHover)
-        .clipShape(RoundedRectangle(cornerRadius: 7))
-        .overlay(RoundedRectangle(cornerRadius: 7).stroke(KColor.line))
+        .background(KColor.surfaceHover, in: QwixitControlShape(cut: 5))
+        .overlay(QwixitControlShape(cut: 5).stroke(KColor.line))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel((modifiers + [key]).joined(separator: " "))
     }
@@ -471,45 +470,160 @@ struct AccessStatusBadge: View {
         .foregroundStyle(color)
         .padding(.horizontal, compact ? 6 : 9)
         .frame(height: compact ? 24 : 28)
-        .background(color.opacity(0.09))
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(color.opacity(0.35), lineWidth: 1))
+        .background(color.opacity(0.09), in: QwixitControlShape(cut: compact ? 4 : 5))
+        .overlay(QwixitControlShape(cut: compact ? 4 : 5).stroke(color.opacity(0.35), lineWidth: 1))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(granted ? "Accessibility access allowed" : "Accessibility access required")
     }
 }
 
+struct QwixitControlShape: Shape {
+    let cut: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX + cut, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cut))
+            path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + cut))
+            path.closeSubpath()
+        }
+    }
+}
+
 struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .bold))
+            .font(.system(size: 11.5, weight: .heavy, design: .rounded))
             .foregroundStyle(.white)
-            .padding(.horizontal, 15)
-            .frame(height: 32)
-            .background(
-                LinearGradient(
-                    colors: [KColor.violet, Color(red: 0.34, green: 0.08, blue: 0.88)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.18)))
-            .opacity(configuration.isPressed ? 0.82 : 1)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 32)
+            .background {
+                QwixitControlShape(cut: 6).fill(KColor.cyan).offset(x: -1.5, y: 1)
+                QwixitControlShape(cut: 6).fill(KColor.magenta).offset(x: 1.5, y: -1)
+                QwixitControlShape(cut: 6).fill(isHovering ? KColor.violet : KColor.ink)
+            }
+            .overlay { QwixitControlShape(cut: 6).stroke(KColor.violet.opacity(0.9), lineWidth: 1) }
+            .overlay(alignment: .topLeading) {
+                Rectangle().fill(.white.opacity(0.72)).frame(width: 15, height: 1).offset(x: 9, y: 5)
+            }
+            .shadow(color: KColor.violet.opacity(isHovering ? 0.22 : 0.12), radius: isHovering ? 8 : 5, y: 3)
+            .opacity(isEnabled ? 1 : 0.45)
+            .scaleEffect(configuration.isPressed ? 0.96 : isHovering ? 1.025 : 1)
+            .offset(y: configuration.isPressed ? 2 : 0)
+            .animation(.snappy(duration: 0.14), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.16), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
     }
 }
 
 struct SubtleButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(KColor.ink)
-            .padding(.horizontal, 12)
-            .frame(height: 30)
-            .background(configuration.isPressed ? KColor.surfaceHover : KColor.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(KColor.line))
+            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+            .foregroundStyle(isHovering ? KColor.violet : KColor.ink)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 28)
+            .background(isHovering ? KColor.violet.opacity(0.08) : KColor.surface, in: QwixitControlShape(cut: 5))
+            .overlay {
+                QwixitControlShape(cut: 5)
+                    .stroke(isHovering ? KColor.violet.opacity(0.7) : KColor.line, lineWidth: 1)
+            }
+            .opacity(isEnabled ? 1 : 0.45)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .offset(y: configuration.isPressed ? 1 : 0)
+            .animation(.snappy(duration: 0.14), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.16), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
+    }
+}
+
+struct CompactButtonStyle: ButtonStyle {
+    let accent: Color
+    var isSelected = false
+    var prominent = false
+
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .foregroundStyle(prominent ? Color.white : isSelected || isHovering ? KColor.ink : accent)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 24)
+            .background(
+                prominent
+                    ? accent.opacity(configuration.isPressed ? 0.78 : 1)
+                    : accent.opacity(isSelected ? 0.17 : isHovering ? 0.10 : 0.05),
+                in: QwixitControlShape(cut: 4)
+            )
+            .overlay {
+                QwixitControlShape(cut: 4)
+                    .stroke(accent.opacity(isSelected || isHovering || prominent ? 0.82 : 0.52), lineWidth: 1)
+            }
+            .opacity(isEnabled ? 1 : 0.45)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .offset(y: configuration.isPressed ? 1 : 0)
+            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
+    }
+}
+
+struct SelectionButtonStyle: ButtonStyle {
+    let accent: Color
+    let isSelected: Bool
+    var cut: CGFloat = 6
+
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                accent.opacity(isSelected ? 0.13 : isHovering ? 0.06 : 0),
+                in: QwixitControlShape(cut: cut)
+            )
+            .overlay {
+                QwixitControlShape(cut: cut)
+                    .stroke(
+                        isSelected ? accent.opacity(0.74) : isHovering ? accent.opacity(0.45) : KColor.line.opacity(0.48),
+                        lineWidth: 1
+                    )
+            }
+            .contentShape(QwixitControlShape(cut: cut))
+            .opacity(isEnabled ? 1 : 0.45)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
+    }
+}
+
+struct IconButtonStyle: ButtonStyle {
+    var accent = KColor.secondary
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(isHovering ? KColor.ink : accent)
+            .frame(width: 24, height: 24)
+            .background(isHovering ? accent.opacity(0.12) : KColor.surfaceHover, in: QwixitControlShape(cut: 5))
+            .overlay { QwixitControlShape(cut: 5).stroke(isHovering ? accent.opacity(0.65) : KColor.line) }
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .onHover { isHovering = $0 }
     }
 }
 

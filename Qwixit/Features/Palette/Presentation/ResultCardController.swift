@@ -65,7 +65,8 @@ private struct ResultCard: View {
                 Text("◆ \(state.action.name)").foregroundStyle(KColor.magenta)
                 Spacer()
                 Text("Text unchanged").foregroundStyle(KColor.secondary)
-                Button("Esc", action: onClose).buttonStyle(.plain)
+                Button("Esc", action: onClose)
+                    .buttonStyle(CompactButtonStyle(accent: KColor.secondary))
             }
             .font(.system(size: 10, weight: .bold, design: .monospaced)).padding(16)
             Divider().overlay(KColor.line)
@@ -90,8 +91,8 @@ private struct ResultCard: View {
                     }
                 Button("Copy ⌘C") {
                     NSPasteboard.general.clearContents(); NSPasteboard.general.setString(state.result, forType: .string)
-                }.buttonStyle(.bordered)
-                Button("Insert below", action: state.onInsert).buttonStyle(.borderedProminent).tint(KColor.magenta)
+                }.buttonStyle(SubtleButtonStyle())
+                Button("Insert below", action: state.onInsert).buttonStyle(PrimaryButtonStyle())
             }
             .padding(14)
         }

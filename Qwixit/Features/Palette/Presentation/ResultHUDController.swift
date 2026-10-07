@@ -44,17 +44,6 @@ final class ResultHUDController {
         )
     }
 
-    func showSubscriptionActivating(capture: PaletteCapture?) {
-        dismissTask?.cancel()
-        feedback.show(
-            phase: .subscriptionActivating,
-            reduceMotion: reduceMotion,
-            anchor: capture?.bounds,
-            fallbackPoint: capture?.fallbackPoint ?? NSEvent.mouseLocation
-        )
-        scheduleDismiss(after: 4)
-    }
-
     func showOffline(capture: PaletteCapture?) {
         dismissTask?.cancel()
         feedback.show(

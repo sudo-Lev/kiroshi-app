@@ -55,37 +55,78 @@ enum QwixitAPI {
 }
 
 enum QwixitUsage {
+    static let didChange = Notification.Name("QwixitUsageDidChange")
+
+    private static let lock = NSLock()
+
     static var remaining: Int? { AppPreferences().remainingActions }
 
-    static func record(_ response: HTTPURLResponse) {
-        let defaults = UserDefaults.standard
-        if let plan = response.value(forHTTPHeaderField: "X-Qwixit-Plan") {
-            defaults.set(plan, forKey: AppPreferenceKey.quotaPlan)
-            if plan == "unlimited" {
-                defaults.removeObject(forKey: AppPreferenceKey.quotaRemaining)
-                return
+    static func record(_ response: HTTPURLResponse, defaults: UserDefaults = .standard) {
+        let period = response.value(forHTTPHeaderField: "X-Qwixit-Period") ?? currentUTCMonth()
+        update(defaults: defaults) {
+            if let plan = response.value(forHTTPHeaderField: "X-Qwixit-Plan") {
+                defaults.set(plan, forKey: AppPreferenceKey.quotaPlan)
+                if plan == "unlimited" {
+                    defaults.removeObject(forKey: AppPreferenceKey.quotaRemaining)
+                    defaults.set(period, forKey: AppPreferenceKey.quotaPeriod)
+                    return
+                }
             }
-        }
-        if let raw = response.value(forHTTPHeaderField: "X-Qwixit-Remaining"),
-           let remaining = Int(raw) {
-            defaults.set(remaining, forKey: AppPreferenceKey.quotaRemaining)
+            if let raw = response.value(forHTTPHeaderField: "X-Qwixit-Remaining"),
+               let remaining = Int(raw) {
+                recordFreeRemaining(remaining, period: period, defaults: defaults)
+            }
         }
     }
 
-    static func recordLimitReached() {
-        let defaults = UserDefaults.standard
-        defaults.set("free", forKey: AppPreferenceKey.quotaPlan)
-        defaults.set(0, forKey: AppPreferenceKey.quotaRemaining)
+    static func recordLimitReached(defaults: UserDefaults = .standard) {
+        update(defaults: defaults) {
+            defaults.set("free", forKey: AppPreferenceKey.quotaPlan)
+            recordFreeRemaining(0, period: currentUTCMonth(), defaults: defaults)
+        }
     }
 
     static func record(_ status: BillingStatus, defaults: UserDefaults = .standard) {
-        defaults.set(status.plan, forKey: AppPreferenceKey.quotaPlan)
-        if status.isUnlimited {
-            defaults.removeObject(forKey: AppPreferenceKey.quotaRemaining)
-            AppPreferences(defaults: defaults).clearBillingActivation()
-        } else if let remaining = status.remaining {
-            defaults.set(remaining, forKey: AppPreferenceKey.quotaRemaining)
+        let period = status.period ?? currentUTCMonth()
+        update(defaults: defaults) {
+            defaults.set(status.plan, forKey: AppPreferenceKey.quotaPlan)
+            if status.isUnlimited {
+                defaults.removeObject(forKey: AppPreferenceKey.quotaRemaining)
+                defaults.set(period, forKey: AppPreferenceKey.quotaPeriod)
+            } else if let remaining = status.remaining {
+                recordFreeRemaining(remaining, period: period, defaults: defaults)
+            }
         }
+    }
+
+    private static func update(defaults: UserDefaults, mutation: () -> Void) {
+        lock.lock()
+        mutation()
+        lock.unlock()
+        NotificationCenter.default.post(name: didChange, object: defaults)
+    }
+
+    private static func recordFreeRemaining(
+        _ remaining: Int,
+        period: String,
+        defaults: UserDefaults
+    ) {
+        let clamped = min(max(remaining, 0), 30)
+        let cachedPeriod = defaults.string(forKey: AppPreferenceKey.quotaPeriod)
+        let cachedRemaining = defaults.object(forKey: AppPreferenceKey.quotaRemaining) as? Int
+        let resolved = cachedPeriod == period
+            ? min(cachedRemaining ?? clamped, clamped)
+            : clamped
+        defaults.set(period, forKey: AppPreferenceKey.quotaPeriod)
+        defaults.set(resolved, forKey: AppPreferenceKey.quotaRemaining)
+    }
+
+    private static func currentUTCMonth() -> String {
+        let components = Calendar(identifier: .gregorian).dateComponents(
+            in: TimeZone(secondsFromGMT: 0)!,
+            from: Date()
+        )
+        return String(format: "%04d-%02d", components.year ?? 0, components.month ?? 0)
     }
 }
 

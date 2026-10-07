@@ -29,10 +29,12 @@ struct PaletteView: View {
                 .font(.system(size: 13, weight: .bold, design: .monospaced))
                 .foregroundStyle(text)
                 .focused($searchFocused)
+                .layoutPriority(1)
             Text(viewModel.contextLabel)
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .tracking(1.5)
                 .foregroundStyle(muted)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 16)
         .frame(height: 50)
@@ -94,23 +96,23 @@ struct PaletteView: View {
                 RoundedRectangle(cornerRadius: 1).fill(accent(action)).frame(width: 3, height: 16)
                 Text(action.name)
                     .font(.system(size: 12, weight: .bold, design: .monospaced)).tracking(0.25)
-                Text(action.hint).font(.system(size: 11, design: .monospaced)).foregroundStyle(muted).lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text(action.hint).font(.system(size: 11, design: .monospaced)).foregroundStyle(muted).lineLimit(1).truncationMode(.tail)
                 Spacer()
                 Text(action.mode.rawValue.capitalized)
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundStyle(index == viewModel.selectedIndex ? accent(action) : muted)
+                    .fixedSize(horizontal: true, vertical: false)
                 if index < 9 { keycap("\(index + 1)") }
             }
             .padding(.horizontal, 9)
             .frame(height: 36)
-            .background(index == viewModel.selectedIndex ? accent(action).opacity(0.13) : .clear)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(index == viewModel.selectedIndex ? accent(action).opacity(0.72) : .clear, lineWidth: 1)
-            }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SelectionButtonStyle(
+            accent: accent(action),
+            isSelected: index == viewModel.selectedIndex,
+            cut: 6
+        ))
         .id(index)
     }
 
@@ -120,9 +122,11 @@ struct PaletteView: View {
             Text("Translate")
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .tracking(0.25)
+                .fixedSize(horizontal: true, vertical: false)
             Text("\(viewModel.detectedLanguage?.code.uppercased() ?? "Auto") →")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundStyle(muted)
+                .fixedSize(horizontal: true, vertical: false)
             Spacer()
             ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { languageIndex, language in
                 let index = startIndex + languageIndex
@@ -132,15 +136,12 @@ struct PaletteView: View {
                         keycap("\(index + 1)")
                     }
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(index == viewModel.selectedIndex ? KColor.ink : KColor.cyan)
-                    .padding(.leading, 9)
-                    .padding(.trailing, 4)
-                    .frame(height: 28)
-                    .background(index == viewModel.selectedIndex ? KColor.cyan.opacity(0.18) : KColor.surface)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(KColor.cyan.opacity(0.75), lineWidth: 1))
+                    .fixedSize(horizontal: true, vertical: false)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(CompactButtonStyle(
+                    accent: KColor.cyan,
+                    isSelected: index == viewModel.selectedIndex
+                ))
                 .help("Translate to \(language.name)")
             }
         }
@@ -185,17 +186,8 @@ struct PaletteView: View {
                                     Text(option).lineLimit(1)
                                 }
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundStyle(chosen ? text : muted)
-                                .padding(.horizontal, 8)
-                                .frame(height: 24)
-                                .background(chosen ? color.opacity(0.16) : .clear)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(chosen ? color.opacity(0.72) : KColor.line, lineWidth: 1)
-                                }
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(CompactButtonStyle(accent: color, isSelected: chosen))
                         }
                     }
                 }
@@ -214,9 +206,9 @@ struct PaletteView: View {
             RoundedRectangle(cornerRadius: 2)
                 .fill((viewModel.refinement?.action ?? viewModel.selectedAction).map(accent) ?? KColor.line)
                 .frame(width: 8, height: 8)
-            Text(viewModel.footerText).lineLimit(1)
+            Text(viewModel.footerText).lineLimit(1).truncationMode(.tail)
             Spacer()
-            Text("↑↓ · ↵ · Esc")
+            Text("↑↓ · ↵ · Esc").fixedSize(horizontal: true, vertical: false)
         }
         .font(.system(size: 9, weight: .bold, design: .monospaced))
         .foregroundStyle(muted)
@@ -227,7 +219,9 @@ struct PaletteView: View {
 
     private func keycap(_ value: String) -> some View {
         Text(value).font(.system(size: 9, weight: .bold, design: .monospaced))
-            .frame(width: 22, height: 20).overlay(RoundedRectangle(cornerRadius: 5).stroke(KColor.line))
+            .frame(width: 20, height: 18)
+            .background(KColor.surface.opacity(0.72), in: QwixitControlShape(cut: 4))
+            .overlay(QwixitControlShape(cut: 4).stroke(KColor.line))
     }
 
     private func accent(_ action: PaletteAction) -> Color {

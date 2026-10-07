@@ -17,9 +17,7 @@ struct PaddleCheckoutOpener: CheckoutOpening {
               var components = URLComponents(url: checkoutURL, resolvingAgainstBaseURL: false) else { return false }
         components.queryItems = [URLQueryItem(name: "installation_id", value: installationID)]
         guard let url = components.url else { return false }
-        let opened = NSWorkspace.shared.open(url)
-        if opened { AppPreferences().markBillingActivationStarted() }
-        return opened
+        return NSWorkspace.shared.open(url)
     }
 }
 
@@ -27,11 +25,12 @@ struct BillingStatus: Decodable, Equatable {
     let plan: String
     let subscriptionStatus: String
     let remaining: Int?
+    let period: String?
 
     var isUnlimited: Bool { plan == "unlimited" }
 
     enum CodingKeys: String, CodingKey {
-        case plan, remaining
+        case plan, remaining, period
         case subscriptionStatus = "subscription_status"
     }
 }

@@ -146,24 +146,13 @@ struct SettingsView: View {
 
     private var billingSection: some View {
         SettingsSection(title: "Plan · Sandbox") {
-            VStack(spacing: 0) {
-                SettingRow(
-                    icon: "creditcard.fill",
-                    iconColor: billingIconColor,
-                    title: billingTitle,
-                    detail: billingDetail
-                ) {
-                    billingControl
-                }
-
-                if !viewModel.isUnlimited, let message = viewModel.checkoutMessage {
-                    Text(message)
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(KColor.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 10)
-                }
+            SettingRow(
+                icon: "creditcard.fill",
+                iconColor: billingIconColor,
+                title: billingTitle,
+                detail: billingDetail
+            ) {
+                billingControl
             }
         }
     }
@@ -175,17 +164,6 @@ struct SettingsView: View {
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(KColor.success)
                 .accessibilityLabel("Qwixit Unlimited subscription active")
-        } else if viewModel.billingActivationState == .confirming
-                    || viewModel.billingActivationState == .delayed {
-            HStack(spacing: 6) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Syncing")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(KColor.cyan)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Subscription is syncing")
         } else {
             Button("Go unlimited") { viewModel.openStarterCheckout() }
                 .buttonStyle(PrimaryButtonStyle())
@@ -198,17 +176,11 @@ struct SettingsView: View {
 
     private var billingTitle: String {
         if viewModel.isUnlimited { return "Qwixit Unlimited" }
-        if viewModel.billingActivationState == .confirming
-            || viewModel.billingActivationState == .delayed {
-            return "Activating Unlimited"
-        }
         return "30 free AI actions / month"
     }
 
     private var billingDetail: String {
         if viewModel.isUnlimited { return "Active — every Qwixit action is unlocked." }
-        if viewModel.billingActivationState == .confirming { return "Waiting for Paddle confirmation." }
-        if viewModel.billingActivationState == .delayed { return "Paddle is taking longer than expected." }
         return "Go unlimited for $10/month. Sandbox test payments only."
     }
 

@@ -6,6 +6,7 @@ struct MenuBarView: View {
     @ObservedObject var quickImproveViewModel: QuickImproveViewModel
     let onOpenSettings: () -> Void
     let onShowOnboarding: () -> Void
+    let onShowRunningToast: () -> Void
     let onQuit: () -> Void
 
     var body: some View {
@@ -76,6 +77,10 @@ struct MenuBarView: View {
             CompactMenuAction(icon: "gearshape.fill", title: "Settings") { onOpenSettings() }
             Rectangle().fill(KColor.line).frame(width: 1, height: 24)
             CompactMenuAction(icon: "sparkles", title: "Onboarding") { onShowOnboarding() }
+#if DEBUG
+            Rectangle().fill(KColor.line).frame(width: 1, height: 24)
+            CompactMenuAction(icon: "bubble.left.fill", title: "Toast") { onShowRunningToast() }
+#endif
             Rectangle().fill(KColor.line).frame(width: 1, height: 24)
             CompactMenuAction(icon: "power", title: "Quit", destructive: true) { onQuit() }
         }
@@ -114,51 +119,31 @@ struct MenuBarView: View {
     }
 
     private var showsCheckoutAction: Bool {
-        settingsViewModel.billingActivationState == .idle
-            && settingsViewModel.remainingActions == 0
+        settingsViewModel.remainingActions == 0
             && !settingsViewModel.isUnlimited
     }
 
     private var showsBillingStatus: Bool {
         settingsViewModel.isUnlimited
             || settingsViewModel.remainingActions != nil
-            || settingsViewModel.billingActivationState == .confirming
-            || settingsViewModel.billingActivationState == .delayed
     }
 
     private var billingFace: QwixitFace {
-        switch settingsViewModel.billingActivationState {
-        case .confirming: .retry
-        case .delayed: .lost
-        case .ready: .ready
-        case .idle: usedActions == 30 ? .pay : .hello
-        }
+        if settingsViewModel.isUnlimited { return .ready }
+        return usedActions == 30 ? .pay : .hello
     }
 
     private var billingTitle: String {
-        switch settingsViewModel.billingActivationState {
-        case .confirming: "Activating…"
-        case .delayed: "Still syncing"
-        case .ready: "Unlimited ready"
-        case .idle: "\(usedActions) / 30 used"
-        }
+        settingsViewModel.isUnlimited ? "Unlimited ready" : "\(usedActions) / 30 used"
     }
 
     private var billingDetail: String {
-        switch settingsViewModel.billingActivationState {
-        case .confirming: "Unlimited sync"
-        case .delayed: "Paddle is slow"
-        case .ready: "all unlocked"
-        case .idle: remainingActions == 0 ? "free plan complete" : "\(remainingActions) free left"
-        }
+        if settingsViewModel.isUnlimited { return "all unlocked" }
+        return remainingActions == 0 ? "free plan complete" : "\(remainingActions) free left"
     }
 
     private var billingColor: Color {
-        switch settingsViewModel.billingActivationState {
-        case .confirming, .delayed: KColor.cyan
-        case .ready: KColor.success
-        case .idle: KColor.ink
-        }
+        settingsViewModel.isUnlimited ? KColor.success : KColor.ink
     }
 
     private var remainingActions: Int {
@@ -180,12 +165,18 @@ private struct CompactMenuAction: View {
             HStack(spacing: 7) {
                 Image(systemName: icon)
                 Text(title)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .font(.system(size: 10.5, weight: .semibold))
             .foregroundStyle(destructive ? KColor.danger : KColor.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SelectionButtonStyle(
+            accent: destructive ? KColor.danger : KColor.violet,
+            isSelected: false,
+            cut: 5
+        ))
     }
 }

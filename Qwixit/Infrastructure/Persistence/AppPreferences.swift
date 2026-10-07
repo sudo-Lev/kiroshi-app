@@ -13,7 +13,7 @@ enum AppPreferenceKey {
     static let needsRenamePermission = "migration.needsRenamePermission"
     static let quotaRemaining = "quota.remaining"
     static let quotaPlan = "quota.plan"
-    static let billingActivationStartedAt = "billing.activationStartedAt"
+    static let quotaPeriod = "quota.period"
 #if DEBUG
     static let developerUsageScenario = "developer.usageScenario"
 #endif
@@ -23,7 +23,7 @@ enum AppPreferenceKey {
         var keys = [
             showSuccess, animationsEnabled, priorityProcessing, appearance, hasCompletedOnboarding,
             paletteDoubleTapMS, mainHotkeyKeyCode, mainHotkeyModifiers, quotaRemaining, quotaPlan,
-            billingActivationStartedAt
+            quotaPeriod
         ] + PeekPreferenceKey.all
 #if DEBUG
         keys.append(developerUsageScenario)
@@ -124,22 +124,6 @@ struct AppPreferences {
         defaults.removeObject(forKey: AppPreferenceKey.developerUsageScenario)
     }
 #endif
-    var isBillingActivationPending: Bool {
-        guard !isUnlimited,
-              let startedAt = defaults.object(forKey: AppPreferenceKey.billingActivationStartedAt) as? Date else {
-            return false
-        }
-        return Date().timeIntervalSince(startedAt) < 15 * 60
-    }
-
-    func markBillingActivationStarted() {
-        defaults.set(Date(), forKey: AppPreferenceKey.billingActivationStartedAt)
-    }
-
-    func clearBillingActivation() {
-        defaults.removeObject(forKey: AppPreferenceKey.billingActivationStartedAt)
-    }
-
     var peekTargetLanguage: String {
         defaults.string(forKey: PeekPreferenceKey.targetLanguage)
             ?? Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier }

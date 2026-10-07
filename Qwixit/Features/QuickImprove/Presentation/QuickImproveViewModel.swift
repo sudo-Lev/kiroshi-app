@@ -72,11 +72,7 @@ final class QuickImproveViewModel: ObservableObject {
             feedback.hide()
             phase = .ready
         } catch QwixitAPIError.quotaExceeded {
-            if AppPreferences(defaults: preferences).isBillingActivationPending {
-                show(.subscriptionActivating, duration: 4)
-            } else {
-                show(.limitReached, duration: nil)
-            }
+            show(.limitReached, duration: nil)
         } catch let error where QwixitAPI.isConnectivityError(error) {
             show(.offline, duration: nil)
         } catch {

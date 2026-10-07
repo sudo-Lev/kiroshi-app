@@ -6,19 +6,7 @@ struct QwixitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuBarView(
-                settingsViewModel: appDelegate.container.settingsViewModel,
-                quickImproveViewModel: appDelegate.container.quickImproveViewModel,
-                onOpenSettings: { appDelegate.showSettings() },
-                onShowOnboarding: { appDelegate.showOnboardingReplay() },
-                onQuit: { NSApp.terminate(nil) }
-            )
-        } label: {
-            Image(nsImage: MenuBarQwixitGlyph.image)
-                .accessibilityLabel("Qwixit")
-        }
-        .menuBarExtraStyle(.window)
+        Settings { EmptyView() }
     }
 }
 
@@ -76,6 +64,9 @@ final class AppContainer {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let container = AppContainer()
     private let singleInstanceCoordinator = SingleInstanceCoordinator()
+    private let runningToast = RunningToastController()
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    private let menuPopover = NSPopover()
     private var onboardingWindowController: OnboardingWindowController?
     private lazy var settingsWindowController = SettingsWindowController(
         viewModel: container.settingsViewModel,
@@ -92,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func finishLaunching() {
         NSApp.setActivationPolicy(.accessory)
+        configureStatusItem()
         registerPeekHotkey(key: container.settingsViewModel.peekShortcutKey)
         container.settingsViewModel.onPeekShortcutChanged = { [weak self] key in
             self?.registerPeekHotkey(key: key)
@@ -107,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = container.settingsViewModel
         if !settings.hasCompletedOnboarding || settings.needsRenamePermission {
             // Upgrading users only need the permission step again.
-            if settings.hasCompletedOnboarding { settings.onboardingStep = 0 }
+            if settings.hasCompletedOnboarding { settings.onboarding.step = 1 }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.showOnboarding()
             }
@@ -137,7 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showOnboarding() {
         let controller = onboardingWindowController
-            ?? OnboardingWindowController(viewModel: container.settingsViewModel)
+            ?? OnboardingWindowController(
+                viewModel: container.settingsViewModel,
+                onFinish: { [weak self] in self?.finishOnboarding() }
+            )
         onboardingWindowController = controller
         controller.show()
     }
@@ -150,6 +145,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func togglePeek() async {
+        if onboardingWindowController?.isVisible == true {
+            return
+        }
+        runningToast.hotkeyPressed()
         if container.peekPanel.isVisible {
             container.peekPanel.close()
             return
@@ -181,26 +180,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleSingleActionHotkey() {
         if onboardingWindowController?.isVisible == true {
-            container.settingsViewModel.handleOnboardingHotkey()
+            container.settingsViewModel.onboarding.handleMainHotkey()
             return
         }
+        runningToast.hotkeyPressed()
         container.quickImproveViewModel.improveSelection()
     }
 
     private func handleDoubleActionHotkey() async {
         if onboardingWindowController?.isVisible == true {
-            let settings = container.settingsViewModel
-            if settings.onboardingStep == 2 {
+            let onboarding = container.settingsViewModel.onboarding
+            if onboarding.step == 3 {
                 // The global classifier consumes both physical taps when it
                 // recognizes a double press, so replay both for the tutorial.
-                settings.handleOnboardingHotkey()
-                settings.handleOnboardingHotkey()
+                onboarding.handleMainHotkey()
+                onboarding.handleMainHotkey()
             } else {
-                settings.handleOnboardingHotkey()
+                onboarding.handleMainHotkey()
             }
             return
         }
+        runningToast.hotkeyPressed()
         await container.palettePanel.toggle()
+    }
+
+    private func configureStatusItem() {
+        guard let button = statusItem.button else { return }
+        button.image = MenuBarQwixitGlyph.image
+        button.image?.size = NSSize(width: 18, height: 18)
+        button.imagePosition = .imageOnly
+        button.toolTip = "Qwixit"
+        button.target = self
+        button.action = #selector(toggleMenuPopover(_:))
+
+        menuPopover.behavior = .transient
+        menuPopover.animates = true
+        menuPopover.contentSize = NSSize(width: 318, height: 360)
+        menuPopover.contentViewController = NSHostingController(rootView: MenuBarView(
+            settingsViewModel: container.settingsViewModel,
+            quickImproveViewModel: container.quickImproveViewModel,
+            onOpenSettings: { [weak self] in self?.menuPopover.performClose(nil); self?.showSettings() },
+            onShowOnboarding: { [weak self] in self?.menuPopover.performClose(nil); self?.showOnboardingReplay() },
+            onShowRunningToast: { [weak self] in self?.menuPopover.performClose(nil); self?.showRunningToast() },
+            onQuit: { NSApp.terminate(nil) }
+        ))
+    }
+
+    @objc private func toggleMenuPopover(_ sender: Any?) {
+        runningToast.statusItemClicked()
+        if menuPopover.isShown {
+            menuPopover.performClose(sender)
+        } else if let button = statusItem.button {
+            menuPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
+
+    private func finishOnboarding() {
+        container.settingsViewModel.completeOnboarding()
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            self?.showRunningToast()
+        }
+    }
+
+    private func showRunningToast() {
+        let frame: () -> NSRect? = { [weak self] in
+            self?.statusItem.button?.window?.frame
+        }
+        let pulse: () -> Void = { [weak self] in
+            self?.pulseStatusItem()
+        }
+        runningToast.show(statusFrame: frame, pulse: pulse)
+    }
+
+    private func pulseStatusItem() {
+        guard let button = statusItem.button else { return }
+        button.wantsLayer = true
+        let animation = CAKeyframeAnimation(keyPath: "transform.scale")
+        animation.values = [1, 1.12, 1]
+        animation.keyTimes = [0, 0.5, 1]
+        animation.duration = 0.4
+        button.layer?.add(animation, forKey: "qwixit.runningPulse")
     }
 }
 
@@ -276,11 +337,13 @@ final class SettingsWindowController {
 @MainActor
 final class OnboardingWindowController {
     private let viewModel: SettingsViewModel
+    private let onFinish: () -> Void
     private var window: NSWindow?
     private var keyMonitor: Any?
 
-    init(viewModel: SettingsViewModel) {
+    init(viewModel: SettingsViewModel, onFinish: @escaping () -> Void) {
         self.viewModel = viewModel
+        self.onFinish = onFinish
     }
 
     var isVisible: Bool { window?.isVisible == true }
@@ -289,13 +352,16 @@ final class OnboardingWindowController {
         installKeyMonitorIfNeeded()
         if window == nil {
             let root = OnboardingView(
-                viewModel: viewModel,
-                onFinish: { [weak self] in self?.close() }
+                model: viewModel.onboarding,
+                onFinish: { [weak self] in
+                    self?.close()
+                    self?.onFinish()
+                }
             )
-            .frame(width: 820, height: 620)
+            .frame(width: 820, height: 640)
 
             let window = NSWindow(
-                contentRect: .init(x: 0, y: 0, width: 820, height: 620),
+                contentRect: .init(x: 0, y: 0, width: 820, height: 640),
                 styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
@@ -305,7 +371,13 @@ final class OnboardingWindowController {
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.isMovableByWindowBackground = true
+            window.backgroundColor = .clear
+            window.isOpaque = false
+            window.hasShadow = true
             window.contentView = NSHostingView(rootView: root)
+            window.contentView?.wantsLayer = true
+            window.contentView?.layer?.cornerRadius = 12
+            window.contentView?.layer?.masksToBounds = true
             window.center()
             self.window = window
         }
@@ -324,7 +396,7 @@ final class OnboardingWindowController {
             guard let self, isVisible else { return event }
 
             if event.type == .flagsChanged {
-                viewModel.updateOnboardingModifiers(
+                viewModel.onboarding.updateModifiers(
                     option: event.modifierFlags.contains(.option),
                     command: event.modifierFlags.contains(.command)
                 )
@@ -332,24 +404,23 @@ final class OnboardingWindowController {
             }
 
             if matchesMainHotkey(event) {
-                viewModel.handleOnboardingHotkey()
+                viewModel.onboarding.handleMainHotkey()
                 return nil
             }
 
-            if viewModel.onboardingMenuVisible {
+            let onboarding = viewModel.onboarding
+            if onboarding.phase == .palette {
                 switch event.keyCode {
                 case 53:
-                    viewModel.closeOnboardingMenu()
-                case 126:
-                    viewModel.moveOnboardingMenuSelection(by: -1)
+                    _ = onboarding.escapeOverlay()
+                case 126, 48:
+                    onboarding.moveSelection(by: -1)
                 case 125:
-                    viewModel.moveOnboardingMenuSelection(by: 1)
+                    onboarding.moveSelection(by: 1)
                 case 36, 76:
-                    viewModel.chooseHighlightedOnboardingAction()
+                    onboarding.confirmSelection()
                 case 18...21:
-                    if let action = OnboardingAction(rawValue: Int(event.keyCode - 18)) {
-                        viewModel.chooseOnboardingAction(action)
-                    }
+                    onboarding.chooseNumber(Int(event.keyCode - 18))
                 default:
                     return event
                 }
@@ -357,24 +428,12 @@ final class OnboardingWindowController {
             }
 
             if event.keyCode == 36 || event.keyCode == 76 {
-                if viewModel.onboardingStep == 0 {
-                    if viewModel.accessibilityGranted {
-                        viewModel.advanceOnboarding()
-                    } else {
-                        viewModel.requestAccessibility()
-                    }
-                } else if viewModel.onboardingDemoPhase == .complete {
-                    if viewModel.onboardingStep == 2 {
-                        viewModel.completeOnboarding()
-                        close()
-                    } else {
-                        viewModel.advanceOnboarding()
-                    }
-                } else {
-                    return event
-                }
+                guard onboarding.canContinue else { return event }
+                if onboarding.step == 4 { close(); onFinish() } else { onboarding.advance() }
                 return nil
             }
+
+            if event.keyCode == 53 { close(); return nil }
 
             return event
         }

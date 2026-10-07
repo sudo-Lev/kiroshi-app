@@ -11,6 +11,7 @@ import worker, {
 } from "./worker.js";
 
 globalThis.crypto ??= webcrypto;
+const currentPeriod = new Date().toISOString().slice(0, 7);
 
 test("sanitizes model and storage fields", async () => {
   const request = new Request("https://example.test/v1/responses", {
@@ -47,7 +48,7 @@ test("atomically stops the free plan after 30 actions", async () => {
     assert.equal((await response.json()).allowed, true);
   }
   const blocked = await ledger.fetch(new Request("https://usage.qwixit/authorize", { method: "POST" }));
-  assert.deepEqual(await blocked.json(), { allowed: false, unlimited: false, remaining: 0 });
+  assert.deepEqual(await blocked.json(), { allowed: false, unlimited: false, remaining: 0, period: currentPeriod });
 });
 
 test("active subscription unlocks unlimited actions", async () => {
@@ -64,17 +65,17 @@ test("active subscription unlocks unlimited actions", async () => {
     }),
   }));
   const response = await ledger.fetch(new Request("https://usage.qwixit/authorize", { method: "POST" }));
-  assert.deepEqual(await response.json(), { allowed: true, unlimited: true, remaining: null });
+  assert.deepEqual(await response.json(), { allowed: true, unlimited: true, remaining: null, period: currentPeriod });
 });
 
 test("reports billing status without consuming a free action", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
   const before = await ledger.fetch(new Request("https://usage.qwixit/status"));
-  assert.deepEqual(await before.json(), { plan: "free", subscription_status: "none", remaining: 30 });
+  assert.deepEqual(await before.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod });
 
   await ledger.fetch(new Request("https://usage.qwixit/authorize", { method: "POST" }));
   const after = await ledger.fetch(new Request("https://usage.qwixit/status"));
-  assert.deepEqual(await after.json(), { plan: "free", subscription_status: "none", remaining: 29 });
+  assert.deepEqual(await after.json(), { plan: "free", subscription_status: "none", remaining: 29, period: currentPeriod });
 });
 
 test("exposes the read-only billing status for the mac app", async () => {
@@ -89,7 +90,7 @@ test("exposes the read-only billing status for the mac app", async () => {
     { USAGE_LEDGER: namespace },
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { plan: "free", subscription_status: "none", remaining: 30 });
+  assert.deepEqual(await response.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod });
 });
 
 test("development reset requires its secret and clears the installation ledger", async () => {
@@ -163,7 +164,7 @@ test("development reset requires its secret and clears the installation ledger",
   assert.deepEqual(JSON.parse(paddleRequests[1].init.body), { effective_from: "immediately" });
 
   const status = await ledger.fetch(new Request("https://usage.qwixit/status"));
-  assert.deepEqual(await status.json(), { plan: "free", subscription_status: "none", remaining: 30 });
+  assert.deepEqual(await status.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod });
 });
 
 test("development reset keeps the ledger intact when Paddle cancellation fails", async () => {
@@ -211,7 +212,7 @@ test("development reset keeps the ledger intact when Paddle cancellation fails",
 
   assert.equal(response.status, 502);
   const status = await ledger.fetch(new Request("https://usage.qwixit/status"));
-  assert.deepEqual(await status.json(), { plan: "unlimited", subscription_status: "active", remaining: null });
+  assert.deepEqual(await status.json(), { plan: "unlimited", subscription_status: "active", remaining: null, period: currentPeriod });
 });
 
 test("Paddle cancellation helper uses the sandbox API and immediate cancellation", async () => {

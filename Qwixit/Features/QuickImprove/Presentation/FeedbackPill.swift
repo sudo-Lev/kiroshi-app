@@ -21,7 +21,7 @@ struct FeedbackPill: View {
             }
         }
         .foregroundStyle(KColor.ink)
-        .padding(6)
+        .padding(phase == .processing || phase == .success || isError ? 5 : 6)
         .qwixitTheme()
         .onAppear {
             if phase == .processing, !reduceMotion {
@@ -37,20 +37,20 @@ struct FeedbackPill: View {
     }
 
     private var cyberStatusBox: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             statusGlyph
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 if phase == .processing {
                     HStack(spacing: 3) {
                         Text(">").foregroundStyle(KColor.cyan)
                         CyberRewriteLabel(text: "PROCESSING", reduceMotion: reduceMotion)
                     }
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                 } else {
                     Text(statusHeadline)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .tracking(isError ? 0.75 : 1.45)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .tracking(isError ? 0.65 : 1.1)
                         .foregroundStyle(statusTone)
                         .transition(.opacity.combined(with: .move(edge: .leading)))
                 }
@@ -59,10 +59,10 @@ struct FeedbackPill: View {
                     progressTrace
                 } else {
                     HStack(spacing: 5) {
-                        Rectangle().fill(statusTone).frame(width: 14, height: 1)
+                        Rectangle().fill(statusTone).frame(width: 11, height: 1)
                         Text(statusDetail)
-                            .font(.system(size: 8, weight: .medium, design: .monospaced))
-                            .tracking(isError ? 0.75 : 1.1)
+                            .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                            .tracking(isError ? 0.6 : 0.85)
                             .foregroundStyle(cyberSecondary)
                     }
                     .frame(height: 2)
@@ -72,18 +72,23 @@ struct FeedbackPill: View {
             Spacer(minLength: 2)
 
             Text(statusBadge)
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .tracking(0.8)
+                .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                .tracking(0.65)
                 .foregroundStyle(statusTone)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.horizontal, 12)
-        .frame(width: 224, height: 46)
+        .padding(.horizontal, 10)
+        .frame(width: 206, height: 40)
         .background {
             ZStack {
-                RoundedRectangle(cornerRadius: 11)
-                    .fill(cyberSurface)
+                QwixitControlShape(cut: 7)
+                    .fill(KColor.cyan.opacity(colorScheme == .dark ? 0.78 : 0.58))
+                    .offset(x: -1.5, y: 1)
+                QwixitControlShape(cut: 7)
+                    .fill(KColor.magenta.opacity(colorScheme == .dark ? 0.78 : 0.58))
+                    .offset(x: 1.5, y: -1)
+                QwixitControlShape(cut: 7).fill(cyberSurface)
                 LinearGradient(
                     colors: [
                         KColor.violet.opacity(colorScheme == .dark ? 0.16 : 0.08),
@@ -93,11 +98,11 @@ struct FeedbackPill: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 11))
+                .clipShape(QwixitControlShape(cut: 7))
             }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 11)
+            QwixitControlShape(cut: 7)
                 .stroke(cyberBorder, lineWidth: 1)
         }
         .overlay(alignment: .topLeading) {
@@ -106,9 +111,9 @@ struct FeedbackPill: View {
                 startPoint: .leading,
                 endPoint: .trailing
             )
-            .frame(width: 68, height: 1)
-            .offset(x: borderSweep ? 224 : -68)
-            .mask(RoundedRectangle(cornerRadius: 11).stroke(lineWidth: 1))
+            .frame(width: 56, height: 1)
+            .offset(x: borderSweep ? 206 : -56)
+            .mask(QwixitControlShape(cut: 7).stroke(lineWidth: 1))
         }
         .overlay(alignment: .leading) {
             Rectangle()
@@ -119,28 +124,28 @@ struct FeedbackPill: View {
                     radius: 5
                 )
         }
-        .shadow(color: KColor.violet.opacity(colorScheme == .dark ? 0.2 : 0.12), radius: 16, y: 6)
+        .shadow(color: KColor.violet.opacity(colorScheme == .dark ? 0.2 : 0.12), radius: 12, y: 4)
     }
 
     private var statusGlyph: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            QwixitControlShape(cut: 5)
                 .stroke(
                     statusTone.opacity(isError ? 0.5 : 0.55),
                     lineWidth: 1
                 )
-                .frame(width: 57, height: 27)
-                .scaleEffect(successPulse ? 1.18 : 1)
+                .frame(width: 47, height: 23)
+                .scaleEffect(successPulse ? 1.16 : 1)
                 .opacity(successPulse ? 0 : 1)
             QwixitFaceView(
                 face: statusFace,
-                size: 13,
+                size: 11,
                 bracketed: true,
                 reduceMotion: reduceMotion,
                 color: cyberPrimary
             )
         }
-        .frame(width: 59, height: 29)
+        .frame(width: 49, height: 25)
     }
 
     private var progressTrace: some View {
@@ -152,11 +157,11 @@ struct FeedbackPill: View {
                     startPoint: .leading,
                     endPoint: .trailing
                 )
-                .frame(width: 42, height: 2)
-                .offset(x: trace ? geometry.size.width : -42)
+                .frame(width: 36, height: 2)
+                .offset(x: trace ? geometry.size.width : -36)
             }
         }
-        .frame(width: 100, height: 2)
+        .frame(width: 86, height: 2)
     }
 
     private var compactNotice: some View {
@@ -206,10 +211,6 @@ struct FeedbackPill: View {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(tone)
-            case .subscriptionActivating:
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(tone)
             case .offline:
                 Image(systemName: "wifi.slash")
                     .font(.system(size: 12, weight: .semibold))
@@ -272,13 +273,8 @@ struct FeedbackPill: View {
     private var dismissButton: some View {
         Button(action: onClose) {
             Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(KColor.secondary)
-                .frame(width: 25, height: 25)
-                .background(KColor.surfaceHover)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IconButtonStyle())
         .help("Close")
         .accessibilityLabel("Close")
     }
@@ -290,7 +286,6 @@ struct FeedbackPill: View {
         case .success: "Text replaced"
         case .noSelection: "Select some text first"
         case .permissionDenied: "Accessibility access needed"
-        case .subscriptionActivating: "Activating Unlimited…"
         case .offline: "You’re offline"
         case .error(let message): QwixitErrorCopy.title(for: message)
         case .limitReached: ""
@@ -301,7 +296,6 @@ struct FeedbackPill: View {
         switch phase {
         case .noSelection: "Highlight text in any app, then try again."
         case .permissionDenied: "Allow Qwixit in System Settings to continue."
-        case .subscriptionActivating: "Your subscription is still syncing."
         case .offline: "Your text is unchanged. Try again when you’re back online."
         case .error(let message): message
         default: nil
@@ -407,8 +401,8 @@ private struct CyberRewriteLabel: View {
 
     private var staticLabel: some View {
         Text(text)
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
-            .tracking(0.8)
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .tracking(0.65)
             .foregroundStyle(baseColor)
     }
 
@@ -429,7 +423,7 @@ private struct CyberRewriteLabel: View {
                 .offset(y: lift)
                 .opacity(isBehind ? 1 : 1 - energy * 0.35)
         }
-        .frame(width: 7.05, height: 13)
+        .frame(width: 6.4, height: 12)
         .rotation3DEffect(
             .degrees(Double((isBehind ? 1 : -1) * energy * 34)),
             axis: (x: 0, y: 1, z: 0),
@@ -439,7 +433,7 @@ private struct CyberRewriteLabel: View {
 
     private func glyphText(_ glyph: String, color: Color) -> some View {
         Text(glyph)
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
             .foregroundStyle(color)
     }
 

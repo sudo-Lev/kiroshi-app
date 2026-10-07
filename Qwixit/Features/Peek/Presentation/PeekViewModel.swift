@@ -6,7 +6,6 @@ enum PeekLoadState: Equatable {
     case idle
     case loading
     case loaded
-    case subscriptionActivating
     case limitReached
     case failed(String)
 }
@@ -325,7 +324,7 @@ final class PeekViewModel: ObservableObject {
                 return
             } catch QwixitAPIError.quotaExceeded {
                 guard mode == requestedMode else { return }
-                loadState = AppPreferences().isBillingActivationPending ? .subscriptionActivating : .limitReached
+                loadState = .limitReached
                 isRetrying = false
             } catch {
                 guard mode == requestedMode else { return }
