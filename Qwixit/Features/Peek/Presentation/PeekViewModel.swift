@@ -118,7 +118,12 @@ final class PeekViewModel: ObservableObject {
         sourceText = String(text.prefix(24_000))
         sourceLanguage = detector.detect(sourceText)
         let rememberedTarget = AppPreferences(defaults: defaults).peekTargetLanguage
-        targetLanguage = languages.contains { $0.id == rememberedTarget }
+        let normalizedSource = sourceLanguage?.code
+            .split(separator: "-")
+            .first
+            .map(String.init)?
+            .lowercased()
+        targetLanguage = rememberedTarget != normalizedSource && languages.contains { $0.id == rememberedTarget }
             ? rememberedTarget
             : Self.translationTarget(for: sourceLanguage?.code)
         summaryLength = rememberedLength()

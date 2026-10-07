@@ -100,14 +100,12 @@ struct SettingsView: View {
             SettingRow(
                 icon: "command.square.fill",
                 title: "Open actions",
-                detail: "Press twice for Translate, Slack style, and Make formal."
+                detail: viewModel.actionHotkeyConflict
+                    ? "⌥⌘A is taken by another app."
+                    : "Translate, rewrite for Slack, or make text formal."
             ) {
-                HStack(spacing: 6) {
-                    ShortcutKeycaps(binding: viewModel.mainHotkey)
-                    Text("×2")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(KColor.secondary)
-                }
+                ShortcutKeycaps(binding: .actions)
+                    .opacity(viewModel.actionHotkeyConflict ? 0.45 : 1)
             }
 
             rowDivider

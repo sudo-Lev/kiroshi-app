@@ -19,7 +19,7 @@ final class RunningToastPanel: NSPanel {
 
 @MainActor
 final class RunningToastController {
-    static let size = NSSize(width: 328, height: 140)
+    static let size = NSSize(width: 300, height: 120)
 
     private let state = RunningToastState()
     private var panel: RunningToastPanel?
@@ -124,11 +124,14 @@ final class RunningToastController {
         panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: RunningToastView(
+        let hostingView = NSHostingView(rootView: RunningToastView(
             state: state,
             onDismiss: { [weak self] in self?.hide() },
             onHover: { [weak self] hovering in self?.hoverChanged(hovering) }
         ))
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        panel.contentView = hostingView
         return panel
     }
 
@@ -138,7 +141,7 @@ final class RunningToastController {
         let preferredX = anchor.midX - Self.size.width / 2
         let x = min(max(preferredX, visible.minX + 8), visible.maxX - Self.size.width - 8)
         let y = anchor.minY - Self.size.height - 6
-        state.arrowOffset = min(max(anchor.midX - (x + Self.size.width / 2), -138), 138)
+        state.arrowOffset = min(max(anchor.midX - (x + Self.size.width / 2), -128), 128)
         panel.setFrameOrigin(NSPoint(x: x, y: max(y, visible.minY + 8)))
     }
 
@@ -175,7 +178,7 @@ final class RunningToastController {
             element: NSApp as Any,
             notification: .announcementRequested,
             userInfo: [
-                NSAccessibility.NotificationUserInfoKey.announcement: "Qwixit is working. Select text anywhere, then press Option Command X to fix, press it twice to choose an action, or press Option Command Z to peek.",
+                NSAccessibility.NotificationUserInfoKey.announcement: "Qwixit is working. Select text anywhere, then press Option Command X to fix, Option Command A for actions, or Option Command Z to peek.",
                 NSAccessibility.NotificationUserInfoKey.priority: NSAccessibilityPriorityLevel.medium.rawValue
             ]
         )
@@ -191,16 +194,23 @@ struct RunningToastView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Triangle().fill(KColor.surface).frame(width: 16, height: 8).offset(x: state.arrowOffset)
+            ZStack {
+                Triangle().fill(KColor.cyan).offset(x: -1)
+                Triangle().fill(KColor.magenta).offset(x: 1)
+                Triangle().fill(KColor.surface)
+            }
+            .frame(width: 14, height: 7)
+            .offset(x: state.arrowOffset)
+
             VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 9) {
-                        QwixitMark(size: 23)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
+                        QwixitMark(size: 20)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(state.title)
-                                .font(.system(size: 13.5, weight: .bold))
+                                .font(.system(size: 12.5, weight: .bold))
                             Text("Select text anywhere, then:")
-                                .font(.system(size: 10.5, weight: .medium))
+                                .font(.system(size: 9.5, weight: .medium))
                                 .foregroundStyle(KColor.secondary)
                         }
                         Spacer()
@@ -213,39 +223,43 @@ struct RunningToastView: View {
                         }
                     }
 
-                    HStack(spacing: 12) {
+                    HStack(spacing: 8) {
                         shortcut(modifiers: "⌥⌘", key: "X", title: "Fix")
-                        shortcut(modifiers: "⌥⌘", key: "X", suffix: "×2", title: "Choose")
+                        shortcut(modifiers: "⌥⌘", key: "A", title: "Actions")
                         shortcut(modifiers: "⌥⌘", key: "Z", title: "Peek")
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 13)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 9)
 
-                HStack(spacing: 8) {
+                HStack(spacing: 7) {
                     Text(state.blink ? "[ -_- ]" : "[ ^_^ ]")
-                        .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                        .font(.system(size: 8.5, weight: .bold, design: .monospaced))
                         .foregroundStyle(KColor.ink)
                     Text(usageLabel)
-                        .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                        .font(.system(size: 8.5, weight: .bold, design: .monospaced))
                         .foregroundStyle(KColor.ink)
                     Spacer()
                     Text(remainingLabel)
-                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .font(.system(size: 8.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(KColor.secondary)
                 }
-                .padding(.horizontal, 14)
-                .frame(height: 35)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
                 .background(KColor.canvas)
                 .overlay(alignment: .top) { Rectangle().fill(KColor.line).frame(height: 1) }
             }
-            .frame(width: 300, alignment: .leading)
+            .frame(width: 280, alignment: .leading)
             .background(KColor.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
+            .clipShape(QwixitControlShape(cut: 10))
+            .overlay { QwixitControlShape(cut: 10).stroke(KColor.line, lineWidth: 1) }
+            .background {
+                QwixitControlShape(cut: 10).fill(KColor.cyan).offset(x: -1.5, y: 1)
+                QwixitControlShape(cut: 10).fill(KColor.magenta).offset(x: 1.5, y: -1)
+            }
         }
-        .frame(width: Self.viewWidth, height: 140, alignment: .top)
+        .frame(width: Self.viewWidth, height: 120, alignment: .top)
         .contentShape(Rectangle()).onTapGesture(perform: onDismiss)
         .onHover { hovering = $0; onHover($0) }
         .opacity(state.isVisible ? 1 : 0).offset(y: state.isVisible ? 0 : -6)
@@ -253,7 +267,7 @@ struct RunningToastView: View {
         .preferredColorScheme(appearance.colorScheme)
     }
 
-    static let viewWidth: CGFloat = 328
+    static let viewWidth: CGFloat = 300
 
     private var appearance: AppAppearance {
         AppAppearance(rawValue: rawAppearance) ?? .light
@@ -274,29 +288,21 @@ struct RunningToastView: View {
     private func shortcut(
         modifiers: String,
         key: String,
-        suffix: String? = nil,
         title: String
     ) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             HStack(spacing: 2) {
                 Text(modifiers).foregroundStyle(KColor.secondary)
                 Text(key).foregroundStyle(KColor.violet)
-                if let suffix {
-                    Text(suffix).foregroundStyle(KColor.secondary)
-                }
             }
-            .font(.system(size: 8.5, weight: .bold, design: .monospaced))
-            .padding(.horizontal, 6)
-            .frame(height: 22)
-            .background(KColor.surfaceHover)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(KColor.line, lineWidth: 1)
-            }
+            .font(.system(size: 8, weight: .bold, design: .monospaced))
+            .padding(.horizontal, 5)
+            .frame(height: 20)
+            .background(KColor.surfaceHover, in: QwixitControlShape(cut: 4))
+            .overlay { QwixitControlShape(cut: 4).stroke(KColor.line, lineWidth: 1) }
 
             Text(title)
-                .font(.system(size: 10.5, weight: .bold))
+                .font(.system(size: 9.5, weight: .bold))
         }
         .fixedSize(horizontal: true, vertical: false)
     }

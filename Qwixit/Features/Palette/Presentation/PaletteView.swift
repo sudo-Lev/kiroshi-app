@@ -46,26 +46,44 @@ struct PaletteView: View {
     private var list: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 0) {
                     if let refinement = viewModel.refinement {
                         refineContent(refinement)
                     } else {
-                        ForEach(viewModel.groups) { group in
-                            groupHeader(group.title)
-                            ForEach(group.actions) { action in
-                                let index = viewModel.index(of: action, in: group)
-                                if action.id == "translate" {
-                                    translationRow(startIndex: index)
-                                } else {
-                                    actionRow(action, index: index)
+                        LazyVGrid(
+                            columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())],
+                            spacing: 8
+                        ) {
+                            ForEach(viewModel.groups) { group in
+                                ForEach(group.actions) { action in
+                                    let index = viewModel.index(of: action, in: group)
+                                    if action.id == "translate" {
+                                        ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { languageIndex, language in
+                                            translationCard(
+                                                language,
+                                                languageIndex: languageIndex,
+                                                index: index + languageIndex
+                                            )
+                                        }
+                                    } else {
+                                        actionCard(action, index: index)
+                                    }
                                 }
                             }
                         }
                         if viewModel.visibleActions.isEmpty {
-                            Text("↵  Run as custom instruction")
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundStyle(KColor.ink)
-                                .padding(16)
+                            HStack {
+                                Text("Run “\(viewModel.query)” as a custom instruction")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .lineLimit(2)
+                                Spacer()
+                                Text("↵")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, minHeight: 62)
+                            .background(KColor.surfaceHover, in: QwixitControlShape(cut: 8))
+                            .overlay(QwixitControlShape(cut: 8).stroke(KColor.line))
                         }
                     }
                 }
@@ -90,64 +108,62 @@ struct PaletteView: View {
             .padding(.bottom, 3)
     }
 
-    private func actionRow(_ action: PaletteAction, index: Int) -> some View {
+    private func actionCard(_ action: PaletteAction, index: Int) -> some View {
         Button { viewModel.runAction(action) } label: {
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 1).fill(accent(action)).frame(width: 3, height: 16)
-                Text(action.name)
-                    .font(.system(size: 12, weight: .bold, design: .monospaced)).tracking(0.25)
-                    .fixedSize(horizontal: true, vertical: false)
-                Text(action.hint).font(.system(size: 11, design: .monospaced)).foregroundStyle(muted).lineLimit(1).truncationMode(.tail)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(action.name)
+                        .font(.system(size: 13, weight: .bold))
+                    Text(action.hint)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(muted)
+                        .lineLimit(1)
+                }
                 Spacer()
-                Text(action.mode.rawValue.capitalized)
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(index == viewModel.selectedIndex ? accent(action) : muted)
-                    .fixedSize(horizontal: true, vertical: false)
                 if index < 9 { keycap("\(index + 1)") }
             }
-            .padding(.horizontal, 9)
-            .frame(height: 36)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
         }
         .buttonStyle(SelectionButtonStyle(
             accent: accent(action),
             isSelected: index == viewModel.selectedIndex,
-            cut: 6
+            cut: 8
         ))
         .id(index)
+        .accessibilityLabel("\(action.name), \(action.hint), shortcut \(index + 1)")
     }
 
-    private func translationRow(startIndex: Int) -> some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 1).fill(KColor.cyan).frame(width: 3, height: 16)
-            Text("Translate")
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .tracking(0.25)
-                .fixedSize(horizontal: true, vertical: false)
-            Text("\(viewModel.detectedLanguage?.code.uppercased() ?? "Auto") →")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(muted)
-                .fixedSize(horizontal: true, vertical: false)
-            Spacer()
-            ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { languageIndex, language in
-                let index = startIndex + languageIndex
-                Button { viewModel.runLanguage(at: languageIndex) } label: {
-                    HStack(spacing: 5) {
-                        Text(language.code)
-                        keycap("\(index + 1)")
-                    }
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .fixedSize(horizontal: true, vertical: false)
+    private func translationCard(
+        _ language: TranslationLanguage,
+        languageIndex: Int,
+        index: Int
+    ) -> some View {
+        Button { viewModel.runLanguage(at: languageIndex) } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Translate to \(language.name)")
+                        .font(.system(size: 13, weight: .bold))
+                        .lineLimit(1)
+                    Text("\(viewModel.detectedLanguage?.code.uppercased() ?? "AUTO") → \(language.code) · replaces selection")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(muted)
+                        .lineLimit(1)
                 }
-                .buttonStyle(CompactButtonStyle(
-                    accent: KColor.cyan,
-                    isSelected: index == viewModel.selectedIndex
-                ))
-                .help("Translate to \(language.name)")
+                Spacer()
+                keycap("\(index + 1)")
             }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
         }
-        .padding(.horizontal, 9)
-        .frame(height: 42)
-        .id(startIndex)
+        .buttonStyle(SelectionButtonStyle(
+            accent: KColor.cyan,
+            isSelected: index == viewModel.selectedIndex,
+            cut: 8
+        ))
+        .id(index)
+        .help("Translate to \(language.name)")
+        .accessibilityLabel("Translate to \(language.name), shortcut \(index + 1)")
     }
 
     private var placeholder: String {
@@ -219,9 +235,9 @@ struct PaletteView: View {
 
     private func keycap(_ value: String) -> some View {
         Text(value).font(.system(size: 9, weight: .bold, design: .monospaced))
-            .frame(width: 20, height: 18)
-            .background(KColor.surface.opacity(0.72), in: QwixitControlShape(cut: 4))
-            .overlay(QwixitControlShape(cut: 4).stroke(KColor.line))
+            .frame(width: 24, height: 24)
+            .background(KColor.surface, in: QwixitControlShape(cut: 5))
+            .overlay(QwixitControlShape(cut: 5).stroke(KColor.line))
     }
 
     private func accent(_ action: PaletteAction) -> Color {

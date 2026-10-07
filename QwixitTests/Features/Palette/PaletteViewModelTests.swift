@@ -22,36 +22,12 @@ final class PaletteViewModelTests: XCTestCase {
         XCTAssertEqual(PaletteFilter.apply("polski", to: actions).flatMap(\.actions).map(\.id), ["translate"])
     }
 
-    func testDoubleTapInsideIntervalWinsAndCancelsSingle() {
-        var classifier = DoubleTapClassifier(interval: 0.3)
-        XCTAssertEqual(classifier.registerTap(at: 10), .pendingSingle)
-        XCTAssertEqual(classifier.registerTap(at: 10.299), .double)
-        XCTAssertFalse(classifier.consumePendingSingle(at: 10.6))
-    }
-
-    func testTapOutsideIntervalStartsANewSingle() {
-        var classifier = DoubleTapClassifier(interval: 0.3)
-        XCTAssertEqual(classifier.registerTap(at: 10), .pendingSingle)
-        XCTAssertEqual(classifier.registerTap(at: 10.301), .pendingSingle)
-        XCTAssertFalse(classifier.consumePendingSingle(at: 10.5))
-        XCTAssertTrue(classifier.consumePendingSingle(at: 10.601))
-    }
-
-    func testPaletteRegistersOptionCommandX() {
+    func testPaletteRegistersOptionCommandA() {
         let hotKey = PaletteHotKeySpy()
-        HotkeyManager(hotKey: hotKey).start(intervalMilliseconds: 300, onSingle: {}, onDouble: {})
+        ActionHotkey(hotKey: hotKey).start {}
 
-        XCTAssertEqual(hotKey.keyCode, 0x07)
+        XCTAssertEqual(hotKey.keyCode, 0x00)
         XCTAssertEqual(hotKey.modifiers, [.option, .command])
-    }
-
-    func testPaletteRegistersCustomBinding() {
-        let hotKey = PaletteHotKeySpy()
-        let custom = HotkeyBinding(keyCode: 0x0F, modifiers: [.control, .shift])
-        HotkeyManager(hotKey: hotKey).start(binding: custom, intervalMilliseconds: 300, onSingle: {}, onDouble: {})
-
-        XCTAssertEqual(hotKey.keyCode, 0x0F)
-        XCTAssertEqual(hotKey.modifiers, [.control, .shift])
     }
 
     func testLegacyDefaultHotkeyMigratesToOptionCommandX() {

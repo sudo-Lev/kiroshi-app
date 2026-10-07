@@ -12,8 +12,11 @@ struct HotkeyBinding: Equatable {
     let keyCode: UInt32
     let modifiers: GlobalHotKey.Modifiers
 
-    /// ⌥⌘X — single press fixes; double press opens the three-action palette.
+    /// ⌥⌘X — fixes the selected text immediately.
     static let defaultMain = HotkeyBinding(keyCode: UInt32(kVK_ANSI_X), modifiers: [.option, .command])
+
+    /// ⌥⌘A — opens the action palette.
+    static let actions = HotkeyBinding(keyCode: UInt32(kVK_ANSI_A), modifiers: [.option, .command])
 
     /// Defaults shipped before the rename; stored bindings equal to these move to `defaultMain`.
     static let legacyDefaults = [

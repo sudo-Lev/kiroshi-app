@@ -23,6 +23,23 @@ enum TranslationLanguages {
     static func targets(for sourceLanguage: String?) -> [TranslationLanguage] {
         supported
     }
+
+    /// Actions stays intentionally compact: two useful replacement targets,
+    /// excluding the detected source language. Peek keeps the full chooser.
+    static func actionTargets(for sourceLanguage: String?) -> [TranslationLanguage] {
+        let source = sourceLanguage?
+            .split(separator: "-")
+            .first
+            .map(String.init)?
+            .lowercased()
+        let preferredIDs: [String] = switch source {
+        case "en": ["uk", "pl"]
+        case "uk": ["en", "pl"]
+        case "pl", "de", .none: ["en", "uk"]
+        default: ["en", "uk"]
+        }
+        return preferredIDs.compactMap { id in supported.first(where: { $0.id == id }) }
+    }
 }
 
 protocol LanguageDetecting {

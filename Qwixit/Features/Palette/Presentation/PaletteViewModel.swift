@@ -29,7 +29,7 @@ final class PaletteViewModel: ObservableObject {
 
     /// Two useful targets for the selected text. The source language is never offered.
     var languages: [TranslationLanguage] {
-        TranslationLanguages.targets(for: detectedLanguage?.code)
+        TranslationLanguages.actionTargets(for: detectedLanguage?.code)
     }
 
     var onRun: ((PaletteAction) -> Void)?
@@ -213,7 +213,7 @@ final class PaletteViewModel: ObservableObject {
     }
 
     nonisolated static func translationTargets(for sourceLanguage: String?) -> [String] {
-        TranslationLanguages.targets(for: sourceLanguage).map(\.id)
+        TranslationLanguages.actionTargets(for: sourceLanguage).map(\.id)
     }
 
     private var choiceCount: Int {

@@ -6,7 +6,7 @@
 **Canvas unit:** 1 point at native macOS scale  
 **Source of truth:** the current Qwixit implementation on `main`
 
-This document is intended to be pasted into Claude Design or handed to a designer or engineer. Recreate the system precisely before proposing variations. Preserve the supplied brand assets and the current behavior of the classic action palette and dedicated translator.
+This document is intended to be handed to a designer or engineer. Recreate the system precisely before proposing variations. Preserve the supplied brand assets and the distinct behavior of the Actions palette and dedicated Peek surface.
 
 ---
 
@@ -38,9 +38,9 @@ The visual character combines:
 
 - The main hotkey is **Option + Command + X**.
 - One press fixes and replaces selected text.
-- Two presses open the classic action palette.
+- **Option + Command + A** opens the action palette.
 - **Option + Command + Z** opens Peek.
-- The classic action palette and the focused translator are intentionally separate surfaces. Preserve their distinct behavior.
+- The action palette and the focused translator are intentionally separate surfaces. Preserve their distinct behavior.
 - Do not display an interruptive **29/30** notification. Limit interruption happens only when usage reaches **30/30**.
 - Onboarding requests Accessibility access first, then teaches the real hotkeys through direct interaction.
 - Onboarding can advance by mouse click or Return. Never present a Continue control that only looks clickable.
@@ -51,19 +51,19 @@ The visual character combines:
 ```mermaid
 flowchart LR
     S[Selected text] --> X1[Option Command X once]
-    S --> X2[Option Command X twice]
+    S --> A1[Option Command A]
     S --> Z[Option Command Z]
     X1 --> H[Processing HUD]
     H --> R[Replace text]
     R --> OK[Success HUD]
-    X2 --> P[Classic action palette]
+    A1 --> P[Action palette]
     P --> R
     P --> RC[Panel result card]
     Z --> PK[Translator language chooser]
     PK --> PR[Read or copy result]
     A[First launch] --> OA[Accessibility]
     OA --> O1[Practice one press]
-    O1 --> O2[Practice two presses]
+    O1 --> O2[Practice Actions]
 ```
 
 ---
@@ -431,18 +431,18 @@ No selection hides after 2.4 seconds. Permission and ordinary errors hide after 
 
 ---
 
-## 10. Classic action palette: double press X
+## 10. Action palette: Option + Command + A
 
-This surface is intentionally the compact classic version.
+This surface uses large, explicit cards so each action can be understood before it runs.
 
 ### Window
 
-- Size: **432 × 260**.
+- Size: **520 × 270**.
 - Panel radius: 14.
 - Entrance: 140 ms alpha fade; 80 ms with Reduce Motion.
 - Header: 50 pt high, `canvasRaised`, bottom divider.
 - Footer: 38 pt high, `canvasRaised`.
-- List padding: 12 horizontal, 10 vertical; maximum content height 380.
+- Grid padding: 12 horizontal, 10 vertical; maximum content height 380.
 
 ### Header
 
@@ -452,24 +452,23 @@ This surface is intentionally the compact classic version.
 - Optional context label: 9 pt Bold Mono, tracking 1.5.
 - No large face, explanatory paragraph, or redundant shortcut legend.
 
-### Action rows
+### Action cards
 
-- Standard row height: 36.
-- Translation row height: 42.
-- Horizontal row padding: 9.
-- Accent bar: 3 × 16.
-- Action title: 12 pt Bold Mono.
-- Hint: 11 pt Mono.
-- Mode label: 9 pt Bold Mono.
+- Two equal columns with an 8 pt gap.
+- Card height: 66.
+- Horizontal card padding: 12.
+- Action title: 13 pt Bold.
+- Hint: 10.5 pt Regular.
+- Number keycap: 24 × 24.
 - Selected fill: accent at 13%.
 - Selected border: accent at 72%.
 - Selected radius: 8.
 
 ### Actions
 
-1. **Translate** — choose Ukrainian or English; cyan accent; replaces selection.
-2. **Slack style** — clear, concise, human; success green accent; replaces selection.
-3. **Make formal** — polished professional tone; success green accent; replaces selection.
+1–2. **Translate to…** — one card per useful target language; cyan accent; replaces selection.
+3. **Slack style** — clear, concise, human; success green accent; replaces selection.
+4. **Make formal** — polished professional tone; success green accent; replaces selection.
 
 ### Refinement state
 
@@ -598,7 +597,7 @@ Onboarding is a real interactive rehearsal, not a slideshow.
 - Main title: 30 pt Black Rounded.
 - Content maximum width: 660.
 - Footer: 58 pt, horizontal padding 28, top divider.
-- Steps: **Access → Press once → Tap twice**.
+- Steps: **Access → Fix → Actions**.
 
 ### Step 1: Accessibility access
 
@@ -624,14 +623,13 @@ Guide copy must clearly say `PRESS ENTER TO CONTINUE` whenever Return advances t
   `Hello, I think this sentence sounds weird.`
 - After completion, the visible Continue button and Return both advance.
 
-### Step 3: Tap twice
+### Step 3: Actions
 
 - Selected sample: `yo can u send me the file asap pls`.
-- User presses Option + Command + X twice.
-- Double press timeout: 900 ms in onboarding rehearsal.
-- Open the onboarding palette 120 ms after the second press.
-- The palette is **520 × 244**, radius 17, header 45, footer 34.
-- Choices: Ukrainian, Polish, Slack, Formal.
+- User presses Option + Command + A once.
+- Open the onboarding palette immediately.
+- The palette is **500 × 270** and uses the same large cards as the live Actions surface.
+- Choices: two useful translation targets, Slack style, and Make formal.
 - Arrow keys move selection; Return chooses; 1–4 chooses directly; Escape closes.
 - Show processing and type the chosen result.
 - After completion, Continue or Return finishes onboarding.
@@ -658,11 +656,10 @@ Guide copy must clearly say `PRESS ENTER TO CONTINUE` whenever Return advances t
 The animated key diagram demonstrates the expected rhythm while waiting for real input:
 
 1. idle for 850 ms;
-2. Option down for 240 ms;
-3. Command down for 240 ms;
-4. X down for 150 ms;
-5. on Tap twice, return to modifier state for 160 ms and press X again for 150 ms;
-6. reset and wait 850 ms before repeating.
+2. Option and Command down for 220 ms;
+3. X down for 150 ms on Fix, or A down for 150 ms on Actions;
+4. return to the held modifiers for 140 ms;
+5. reset and wait 900 ms before repeating.
 
 Key press state changes use a 160 ms snappy transition. Stop the demonstration when real user input starts.
 
@@ -790,7 +787,7 @@ Actions configured for panel output use a larger result card.
 ### Interaction
 
 - [ ] One press fixes selected text and shows the processing HUD.
-- [ ] Two presses open the 432 × 260 classic action palette.
+- [ ] Option-Command-A opens the 520 × 270 action palette.
 - [ ] Option + Command + Z opens the four-language translator chooser.
 - [ ] Arrow keys, Tab, Return, Escape, and number keys work as specified.
 - [ ] Every visible action also responds to a mouse click.
@@ -804,7 +801,7 @@ Actions configured for panel output use a larger result card.
 - [ ] Permission polling updates the UI and unlocks the next step.
 - [ ] `PRESS ENTER TO CONTINUE` appears when Return can advance.
 - [ ] Continue buttons click and Return produces the same result.
-- [ ] The user performs the real one press and two press shortcuts.
+- [ ] The user performs the real Fix and Actions shortcuts.
 
 ### Motion
 
@@ -822,11 +819,11 @@ Actions configured for panel output use a larger result card.
 
 ---
 
-## 19. Claude Design handoff prompt
+## 19. Design handoff prompt
 
 Paste the following together with this document:
 
-> Design Qwixit for macOS from the attached normative blueprint. Reproduce its tokens, fixed window sizes, keyboard behavior, state hierarchy, face system, and motion timings exactly. Use the supplied Qwixit assets without redrawing them. Treat the one press feedback HUD, classic double press action palette, dedicated Option-Command-Z translator, onboarding, Settings, menu bar popover, and result card as one coherent system. Keep quick actions compact and keyboard first. Do not add helper labels, generic AI chat patterns, large mascot art, glassmorphism, new gradients, new actions, or internal design annotations. Provide light and dark variants, all loading/success/error/limit states, and static Reduced Motion variants. Show interaction specifications for mouse, arrows, Tab, Return, Escape, and number keys. Validate every screen against the acceptance checklist before presenting it.
+> Design Qwixit for macOS from the attached normative blueprint. Reproduce its tokens, fixed window sizes, keyboard behavior, state hierarchy, face system, and motion timings exactly. Use the supplied Qwixit assets without redrawing them. Treat the Option-Command-X feedback HUD, Option-Command-A action palette, dedicated Option-Command-Z translator, onboarding, Settings, menu bar popover, and result card as one coherent system. Keep quick actions clear and keyboard first. Do not add generic AI chat patterns, large mascot art, glassmorphism, new gradients, new actions, or internal design annotations. Provide light and dark variants, all loading/success/error/limit states, and static Reduced Motion variants. Show interaction specifications for mouse, arrows, Tab, Return, Escape, and number keys. Validate every screen against the acceptance checklist before presenting it.
 
 ---
 

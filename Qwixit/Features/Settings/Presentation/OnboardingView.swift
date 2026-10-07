@@ -1,12 +1,20 @@
 import SwiftUI
 
+private struct DemoKeys: OptionSet {
+    let rawValue: Int
+
+    static let option = DemoKeys(rawValue: 1 << 0)
+    static let command = DemoKeys(rawValue: 1 << 1)
+    static let action = DemoKeys(rawValue: 1 << 2)
+}
+
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingModel
     let onFinish: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var demoKeys = 0
+    @State private var demoKeys: DemoKeys = []
     @State private var accessPulse = false
-    private let labels = ["Welcome", "Access", "Fix", "Choose", "Done"]
+    private let labels = ["Welcome", "Access", "Fix", "Actions", "Done"]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -194,7 +202,7 @@ struct OnboardingView: View {
                 }
                 Text(practiceTitle).onboardingTitle(27).multilineTextAlignment(.leading)
                 Text(practiceSubtitle).onboardingBody()
-                DemoKeyRow(step: model.step, accent: stepAccent, activeCount: demoKeys, optionDown: model.optionDown, commandDown: model.commandDown)
+                DemoKeyRow(step: model.step, accent: stepAccent, activeKeys: demoKeys, optionDown: model.optionDown, commandDown: model.commandDown)
                     .opacity([.idle, .palette].contains(model.phase) ? 1 : 0.4)
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(checklist.indices, id: \.self) { checklistRow($0, checklist[$0]) }
@@ -254,7 +262,7 @@ struct OnboardingView: View {
             Text("Two ways to use Qwixit in any app.").onboardingBody()
             VStack(spacing: 0) {
                 cheatRow("⌥⌘X", "Fix", "Correct selected text in place."); Divider().padding(.leading, 150)
-                cheatRow("⌥⌘X ×2", "Choose", "Rewrite, translate, or change tone.")
+                cheatRow("⌥⌘A", "Actions", "Rewrite, translate, or change tone.")
             }.frame(width: 520).qwixitPanel()
             HStack(spacing: 12) {
                 HStack(spacing: 8) { Image(systemName: "wifi"); QwixitMark(size: 16, style: .light); Text("9:41") }.font(.system(size: 11, weight: .medium)).foregroundStyle(.white).padding(.horizontal, 12).frame(height: 30).background(KColor.ink).clipShape(Capsule())
@@ -289,13 +297,13 @@ struct OnboardingView: View {
 
     private var primaryTitle: String { model.step == 0 ? "Get started" : model.step == 4 ? "Start using Qwixit" : "Continue" }
     private var footerFace: QwixitFace { model.phase == .done || model.step == 4 ? .ready : model.phase == .processing ? .scanning : .hello }
-    private var practiceName: String { [2: "Fix", 3: "Choose"][model.step] ?? "" }
+    private var practiceName: String { [2: "Fix", 3: "Actions"][model.step] ?? "" }
     private var practiceTitle: String { [2: "Fix it in place.", 3: "Choose what happens."][model.step] ?? "" }
-    private var practiceSubtitle: String { [2: "One shortcut replaces the selected text.", 3: "Press twice, then pick an action."][model.step] ?? "" }
+    private var practiceSubtitle: String { [2: "One shortcut replaces the selected text.", 3: "Open Actions, then choose what happens."][model.step] ?? "" }
     private var stepAccent: Color { model.step == 3 ? KColor.magenta : KColor.violet }
     private var mockWindowTitle: String { [2: "Draft — Notes", 3: "Message — Slack"][model.step] ?? "" }
     private var displayedPracticeText: String { model.phase == .typing || model.phase == .done ? model.typed : model.originalText }
-    private var checklist: [String] { model.step == 2 ? ["Text is selected", "Press ⌥⌘X", "Fixed text replaces it"] : ["Text is selected", "Press ⌥⌘X twice", "Pick an action — 1–6 or ↵", "Result replaces the text"] }
+    private var checklist: [String] { model.step == 2 ? ["Text is selected", "Press ⌥⌘X", "Fixed text replaces it"] : ["Text is selected", "Press ⌥⌘A", "Pick an action — 1–4 or ↵", "Result replaces the text"] }
     private var completedChecklistRows: Int { model.phase == .done ? checklist.count : model.phase == .processing || model.phase == .typing ? max(2, checklist.count - 1) : model.phase == .palette ? 2 : 1 }
     private var feedbackPhase: AppPhase? {
         switch model.phase {
@@ -314,22 +322,25 @@ struct OnboardingView: View {
         case (2, .typing): "Replacing the text…"
         case (2, .done): "Fixed. That's the main move."
         case (2, _): "Press ⌥⌘X once."
-        case (3, .palette): "Pick an action — 1–6 or ↵."
+        case (3, .palette): "Pick an action — 1–4 or ↵."
         case (3, .done): "Chosen and replaced."
-        case (3, _): "Press ⌥⌘X twice."
+        case (3, _): "Press ⌥⌘A to open Actions."
         default: "Qwixit is ready in every app."
         }
     }
 
     private func runKeyDemo() async {
-        demoKeys = 0
+        demoKeys = []
         guard (2...3).contains(model.step), !reduceMotion else { return }
         while !Task.isCancelled, !model.hasRealInput, model.phase == .idle {
-            try? await Task.sleep(for: .milliseconds(900)); demoKeys = 1
-            try? await Task.sleep(for: .milliseconds(220)); demoKeys = 2
-            try? await Task.sleep(for: .milliseconds(220)); demoKeys = 3
-            try? await Task.sleep(for: .milliseconds(160)); demoKeys = 0
-            if model.step == 3 { try? await Task.sleep(for: .milliseconds(180)); demoKeys = 3; try? await Task.sleep(for: .milliseconds(160)); demoKeys = 0 }
+            do { try await Task.sleep(for: .milliseconds(900)) } catch { return }
+            demoKeys = [.option, .command]
+            do { try await Task.sleep(for: .milliseconds(220)) } catch { return }
+            demoKeys = [.option, .command, .action]
+            do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+            demoKeys = [.option, .command]
+            do { try await Task.sleep(for: .milliseconds(140)) } catch { return }
+            demoKeys = []
         }
     }
 }
@@ -349,22 +360,12 @@ private struct SmallKeycap: View {
 }
 
 private struct DemoKeyRow: View {
-    let step: Int; let accent: Color; let activeCount: Int; let optionDown: Bool; let commandDown: Bool
+    let step: Int; let accent: Color; let activeKeys: DemoKeys; let optionDown: Bool; let commandDown: Bool
     var body: some View {
         HStack(spacing: 7) {
-            key("⌥", "option", optionDown || activeCount >= 1)
-            key("⌘", "command", commandDown || activeCount >= 2)
-            key("X", "qwixit", activeCount >= 3)
-            if step == 3 {
-                Text("×2")
-                    .font(.system(size: 10, weight: .black, design: .monospaced))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 7)
-                    .frame(height: 23)
-                    .background(KColor.ink, in: QwixitControlShape(cut: 4))
-                    .overlay { QwixitControlShape(cut: 4).stroke(accent, lineWidth: 1) }
-                    .rotationEffect(.degrees(-3))
-            }
+            key("⌥", "option", optionDown || activeKeys.contains(.option))
+            key("⌘", "command", commandDown || activeKeys.contains(.command))
+            key(step == 3 ? "A" : "X", step == 3 ? "actions" : "qwixit", activeKeys.contains(.action))
         }
     }
 
@@ -405,7 +406,7 @@ private struct OnboardingPaletteSurface: View {
 
     var body: some View {
         PaletteView(viewModel: viewModel, onClose: { _ = model.escapeOverlay() })
-            .frame(width: 500, height: 260)
+            .frame(width: 500, height: 270)
             .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
             .onAppear {
                 viewModel.open(capture: PaletteCapture(

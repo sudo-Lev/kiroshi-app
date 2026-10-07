@@ -54,23 +54,18 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(model.hasRealInput)
     }
 
-    func testChooseRequiresTwoTapsAndOpensPalette() {
+    func testActionsHotkeyOpensPalette() {
         let model = makeModel()
         model.step = 3
 
-        model.handleMainHotkey()
-        XCTAssertEqual(model.phase, .idle)
-        XCTAssertEqual(model.tapCount, 1)
-
-        model.handleMainHotkey()
+        model.handleActionHotkey()
         XCTAssertEqual(model.phase, .palette)
     }
 
     func testPaletteChoiceStartsReplacement() {
         let model = makeModel()
         model.step = 3
-        model.handleMainHotkey()
-        model.handleMainHotkey()
+        model.handleActionHotkey()
 
         model.chooseAction(.polish)
 
@@ -81,13 +76,12 @@ final class OnboardingViewModelTests: XCTestCase {
     func testCanGoBackThroughCompletedSteps() {
         let model = makeModel()
         model.step = 3
-        model.handleMainHotkey()
+        model.handleActionHotkey()
 
         model.goBack()
 
         XCTAssertEqual(model.step, 2)
         XCTAssertEqual(model.phase, .idle)
-        XCTAssertEqual(model.tapCount, 0)
     }
 
     func testSkipCompletesOnlyPracticeSteps() {

@@ -43,21 +43,15 @@ final class SettingsViewModel: ObservableObject {
             onPeekShortcutChanged?(peekShortcutKey)
         }
     }
-    @Published var paletteDoubleTapMS: Int {
-        didSet {
-            defaults.set(paletteDoubleTapMS, forKey: AppPreferenceKey.paletteDoubleTapMS)
-            onPaletteTimingChanged?(paletteDoubleTapMS)
-        }
-    }
-
     @Published private(set) var mainHotkey: HotkeyBinding
     /// Set when macOS refused to register `mainHotkey` because another app owns it.
     @Published var mainHotkeyConflict = false
+    /// Set when macOS refuses the fixed ⌥⌘A Actions shortcut.
+    @Published var actionHotkeyConflict = false
     /// The rename to Qwixit reset Accessibility trust for an existing user.
     @Published private(set) var needsRenamePermission: Bool
 
     var onPeekShortcutChanged: ((String) -> Void)?
-    var onPaletteTimingChanged: ((Int) -> Void)?
     var onMainHotkeyChanged: ((HotkeyBinding) -> Void)?
 
     var hasCompletedOnboarding: Bool {
@@ -99,7 +93,6 @@ final class SettingsViewModel: ObservableObject {
         peekRememberMode = preferences.peekRememberMode
         peekPrefetch = preferences.peekPrefetch
         peekShortcutKey = "Z"
-        paletteDoubleTapMS = defaults.object(forKey: AppPreferenceKey.paletteDoubleTapMS) as? Int ?? 300
         mainHotkey = preferences.mainHotkey
         needsRenamePermission = defaults.bool(forKey: AppPreferenceKey.needsRenamePermission)
             && !accessibility.isTrusted

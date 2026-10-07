@@ -6,7 +6,6 @@ enum AppPreferenceKey {
     static let priorityProcessing = "priorityProcessing"
     static let appearance = "appearance"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
-    static let paletteDoubleTapMS = "palette.doubleTapMS"
     static let mainHotkeyKeyCode = "hotkey.main.keyCode"
     static let mainHotkeyModifiers = "hotkey.main.modifiers"
     static let legacyMigrationDone = "migration.legacyImportDone"
@@ -22,7 +21,7 @@ enum AppPreferenceKey {
     static var all: [String] {
         var keys = [
             showSuccess, animationsEnabled, priorityProcessing, appearance, hasCompletedOnboarding,
-            paletteDoubleTapMS, mainHotkeyKeyCode, mainHotkeyModifiers, quotaRemaining, quotaPlan,
+            mainHotkeyKeyCode, mainHotkeyModifiers, quotaRemaining, quotaPlan,
             quotaPeriod
         ] + PeekPreferenceKey.all
 #if DEBUG

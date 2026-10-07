@@ -18,7 +18,7 @@ The project targets macOS 14 and has App Sandbox disabled because global Accessi
 ## What it does
 
 - Native menu-bar app lifecycle (`LSUIElement`)
-- Global `⌥⌘X` hotkey (`⌥⌘X` twice opens Translate, Slack style, and Make formal; `⌥⌘Z` opens Peek)
+- Global shortcuts: `⌥⌘X` fixes selected text, `⌥⌘A` opens Actions, and `⌥⌘Z` opens Peek
 - Accessibility-based selection reading and in-place replacement
 - Copy/paste fallbacks for web-backed editors, with full clipboard restoration
 - Non-activating feedback near the selected text
@@ -75,10 +75,11 @@ Run the Debug build again. It starts at welcome/onboarding with a new installati
 
 ## Project structure
 
-- `AppViewModel.swift` owns explicit presentation state and coordinates the improve-and-replace workflow.
-- `QwixitApp.swift` is the composition root that injects live service implementations into the app-scoped view model.
-- `Services/` contains protocol-backed system integrations and the OpenAI client.
-- `Views/` render view-model state and forward user intents; transient animation state stays local to each view.
-- `DesignSystem.swift` contains the shared compact dark visual vocabulary.
+- `Qwixit/App/` is the composition root and owns application lifecycle, menu-bar integration, and global shortcut routing.
+- `Qwixit/Core/` contains shared design-system and presentation primitives.
+- `Qwixit/Infrastructure/` contains app-wide Accessibility, billing, hotkey, networking, and persistence adapters.
+- `Qwixit/Features/` contains feature-first Domain, Data, Services, and Presentation code as each feature requires.
+- `QwixitTests/` contains feature-focused Swift tests.
+- `cloudflare-worker/` contains the model proxy, quota ledger, Paddle integration, and server tests.
 
-The app follows MVVM with dependency direction `View → AppViewModel → service protocols`. Async improvement and permission tasks are owned and cancelled by the view model, while AppKit window and application lifecycle work remains in the composition root.
+The project uses feature-first MVVM with AppKit window controllers around SwiftUI content. See [AGENTS.md](AGENTS.md) for repository guidance, [docs/PRODUCT.md](docs/PRODUCT.md) for product intent, [ARCHITECTURE.md](ARCHITECTURE.md) for technical boundaries, and [docs/OPERATIONS.md](docs/OPERATIONS.md) for development and release procedures.

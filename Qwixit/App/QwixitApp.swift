@@ -29,7 +29,8 @@ final class AppContainer {
     let quickImproveViewModel: QuickImproveViewModel
     let feedback = FeedbackWindowController()
     let peekHotkey = PeekHotkey()
-    let actionHotkey = HotkeyManager()
+    let fixHotkey = GlobalHotKey()
+    let actionHotkey = ActionHotkey()
     let selectionReader: SelectionReading = SelectionReader()
     let peekPanel: PeekPanelController
     let palettePanel: PalettePanelController
@@ -88,12 +89,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         container.settingsViewModel.onPeekShortcutChanged = { [weak self] key in
             self?.registerPeekHotkey(key: key)
         }
+        registerFixHotkey()
         registerActionHotkey()
-        container.settingsViewModel.onPaletteTimingChanged = { [weak self] _ in
-            self?.registerActionHotkey()
-        }
         container.settingsViewModel.onMainHotkeyChanged = { [weak self] _ in
-            self?.registerActionHotkey()
+            self?.registerFixHotkey()
         }
 
         let settings = container.settingsViewModel
@@ -110,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         container.settingsViewModel.stop()
         container.quickImproveViewModel.stop()
         container.peekHotkey.stop()
+        container.fixHotkey.unregister()
         container.actionHotkey.stop()
     }
 
@@ -163,22 +163,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func registerActionHotkey() {
+    private func registerFixHotkey() {
         let settings = container.settingsViewModel
-        let registered = container.actionHotkey.start(
-            binding: settings.mainHotkey,
-            intervalMilliseconds: settings.paletteDoubleTapMS,
-            onSingle: { [weak self] in
-                Task { @MainActor in self?.handleSingleActionHotkey() }
-            },
-            onDouble: { [weak self] in
-                Task { @MainActor in await self?.handleDoubleActionHotkey() }
-            }
-        )
+        let registered = container.fixHotkey.register(
+            keyCode: settings.mainHotkey.keyCode,
+            modifiers: settings.mainHotkey.modifiers
+        ) { [weak self] in
+            Task { @MainActor in self?.handleFixHotkey() }
+        }
         settings.mainHotkeyConflict = !registered
     }
 
-    private func handleSingleActionHotkey() {
+    private func registerActionHotkey() {
+        let registered = container.actionHotkey.start { [weak self] in
+            Task { @MainActor in await self?.handleActionHotkey() }
+        }
+        container.settingsViewModel.actionHotkeyConflict = !registered
+    }
+
+    private func handleFixHotkey() {
         if onboardingWindowController?.isVisible == true {
             container.settingsViewModel.onboarding.handleMainHotkey()
             return
@@ -187,17 +190,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         container.quickImproveViewModel.improveSelection()
     }
 
-    private func handleDoubleActionHotkey() async {
+    private func handleActionHotkey() async {
         if onboardingWindowController?.isVisible == true {
-            let onboarding = container.settingsViewModel.onboarding
-            if onboarding.step == 3 {
-                // The global classifier consumes both physical taps when it
-                // recognizes a double press, so replay both for the tutorial.
-                onboarding.handleMainHotkey()
-                onboarding.handleMainHotkey()
-            } else {
-                onboarding.handleMainHotkey()
-            }
+            container.settingsViewModel.onboarding.handleActionHotkey()
             return
         }
         runningToast.hotkeyPressed()
@@ -403,6 +398,11 @@ final class OnboardingWindowController {
                 return event
             }
 
+            if matchesActionHotkey(event) {
+                viewModel.onboarding.handleActionHotkey()
+                return nil
+            }
+
             if matchesMainHotkey(event) {
                 viewModel.onboarding.handleMainHotkey()
                 return nil
@@ -440,7 +440,14 @@ final class OnboardingWindowController {
     }
 
     private func matchesMainHotkey(_ event: NSEvent) -> Bool {
-        let binding = viewModel.mainHotkey
+        matches(event, binding: viewModel.mainHotkey)
+    }
+
+    private func matchesActionHotkey(_ event: NSEvent) -> Bool {
+        matches(event, binding: .actions)
+    }
+
+    private func matches(_ event: NSEvent, binding: HotkeyBinding) -> Bool {
         var expected: NSEvent.ModifierFlags = []
         if binding.modifiers.contains(.control) { expected.insert(.control) }
         if binding.modifiers.contains(.option) { expected.insert(.option) }

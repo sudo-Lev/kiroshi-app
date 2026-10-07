@@ -58,7 +58,6 @@ final class OnboardingModel: ObservableObject {
     @Published private(set) var isRequestingAccessibility = false
     @Published private(set) var optionDown = false
     @Published private(set) var commandDown = false
-    @Published private(set) var tapCount = 0
     @Published private(set) var selectionIndex = 0
     @Published private(set) var hasRealInput = false
 
@@ -143,15 +142,15 @@ final class OnboardingModel: ObservableObject {
 
     func handleMainHotkey() {
         hasRealInput = true
-        guard phase == .idle else { return }
-        switch step {
-        case 2:
-            runReplacement("Hello, I think this sentence sounds weird.")
-        case 3:
-            registerDoubleTap()
-        default:
-            break
-        }
+        guard step == 2, phase == .idle else { return }
+        runReplacement("Hello, I think this sentence sounds weird.")
+    }
+
+    func handleActionHotkey() {
+        hasRealInput = true
+        guard step == 3, phase == .idle else { return }
+        phase = .palette
+        selectionIndex = 0
     }
 
     func moveSelection(by delta: Int) {
@@ -176,7 +175,6 @@ final class OnboardingModel: ObservableObject {
         guard phase == .palette else { return false }
         cancelTasks()
         phase = .idle
-        tapCount = 0
         return true
     }
 
@@ -191,22 +189,6 @@ final class OnboardingModel: ObservableObject {
         step = 0
         resetStepState()
         refreshAccessibility()
-    }
-
-    private func registerDoubleTap() {
-        tapCount += 1
-        cancelTasks()
-        if tapCount >= 2 {
-            tapCount = 0
-            phase = .palette
-            selectionIndex = 0
-        } else {
-            addTask { [weak self] in
-                try? await Task.sleep(for: .milliseconds(900))
-                guard !Task.isCancelled else { return }
-                self?.tapCount = 0
-            }
-        }
     }
 
     private func runReplacement(_ result: String) {
@@ -235,7 +217,6 @@ final class OnboardingModel: ObservableObject {
         typed = ""
         optionDown = false
         commandDown = false
-        tapCount = 0
         selectionIndex = 0
         hasRealInput = false
     }

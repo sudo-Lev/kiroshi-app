@@ -103,6 +103,8 @@ enum KColor {
     static let surfaceHover = adaptive(light: rgb(0.965, 0.955, 0.992), dark: rgb(0.145, 0.122, 0.19))
     static let line = adaptive(light: rgb(0.875, 0.855, 0.925), dark: rgb(0.25, 0.215, 0.315))
     static let violet = adaptive(light: rgb(0.427, 0.157, 1), dark: rgb(0.59, 0.38, 1))
+    static let primaryAction = adaptive(light: rgb(0.086, 0.075, 0.122), dark: rgb(0.31, 0.14, 0.68))
+    static let primaryActionHover = adaptive(light: rgb(0.427, 0.157, 1), dark: rgb(0.43, 0.24, 0.84))
     static let magenta = adaptive(light: rgb(1, 0.176, 0.608), dark: rgb(1, 0.31, 0.68))
     static let cyan = adaptive(light: rgb(0, 0.67, 0.78), dark: rgb(0.15, 0.79, 0.89))
     static let success = adaptive(light: rgb(0.08, 0.57, 0.27), dark: rgb(0.27, 0.78, 0.44))
@@ -506,7 +508,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .background {
                 QwixitControlShape(cut: 6).fill(KColor.cyan).offset(x: -1.5, y: 1)
                 QwixitControlShape(cut: 6).fill(KColor.magenta).offset(x: 1.5, y: -1)
-                QwixitControlShape(cut: 6).fill(isHovering ? KColor.violet : KColor.ink)
+                QwixitControlShape(cut: 6).fill(isHovering ? KColor.primaryActionHover : KColor.primaryAction)
             }
             .overlay { QwixitControlShape(cut: 6).stroke(KColor.violet.opacity(0.9), lineWidth: 1) }
             .overlay(alignment: .topLeading) {
