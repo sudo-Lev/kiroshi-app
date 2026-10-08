@@ -611,6 +611,136 @@ struct SelectionButtonStyle: ButtonStyle {
     }
 }
 
+enum QwixitCardAccent {
+    case language(String)
+    case slack
+    case formal
+    case single(Color)
+
+    var colors: [Color] {
+        switch self {
+        case .language("uk"):
+            [
+                Color(red: 0.12, green: 0.55, blue: 0.88),
+                Color(red: 0.96, green: 0.78, blue: 0.20)
+            ]
+        case .language("pl"):
+            [
+                Color(red: 0.79, green: 0.80, blue: 0.85),
+                Color(red: 0.86, green: 0.20, blue: 0.32)
+            ]
+        case .language("fr"):
+            [
+                Color(red: 0.20, green: 0.39, blue: 0.76),
+                Color(red: 0.79, green: 0.80, blue: 0.85),
+                Color(red: 0.84, green: 0.20, blue: 0.31)
+            ]
+        case .language("en"):
+            [
+                Color(red: 0.20, green: 0.39, blue: 0.76),
+                Color(red: 0.84, green: 0.20, blue: 0.31)
+            ]
+        case .slack:
+            [
+                Color(red: 0.22, green: 0.77, blue: 0.74),
+                Color(red: 0.93, green: 0.69, blue: 0.18),
+                Color(red: 0.88, green: 0.25, blue: 0.42),
+                Color(red: 0.20, green: 0.68, blue: 0.43)
+            ]
+        case .formal:
+            [KColor.line, KColor.violet]
+        case .single(let color):
+            [color]
+        case .language:
+            [KColor.cyan]
+        }
+    }
+}
+
+struct QwixitSemanticCardButtonStyle: ButtonStyle {
+    let accent: QwixitCardAccent
+    let isSelected: Bool
+    var cut: CGFloat = 8
+
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
+    private var colors: [Color] { accent.colors }
+    private var primary: Color { colors.first ?? KColor.violet }
+    private var border: LinearGradient {
+        LinearGradient(
+            colors: colors.count > 1 ? colors : [primary, primary],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                primary.opacity(isSelected ? 0.10 : isHovering ? 0.045 : 0),
+                in: QwixitControlShape(cut: cut)
+            )
+            .overlay {
+                QwixitControlShape(cut: cut)
+                    .stroke(
+                        border.opacity(isSelected ? 0.82 : isHovering ? 0.58 : 0.34),
+                        lineWidth: 1
+                    )
+            }
+            .contentShape(QwixitControlShape(cut: cut))
+            .opacity(isEnabled ? 1 : 0.45)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
+    }
+}
+
+struct QwixitSemanticCompactButtonStyle: ButtonStyle {
+    let accent: QwixitCardAccent
+    var isSelected = false
+
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
+    private var colors: [Color] { accent.colors }
+    private var primary: Color { colors.first ?? KColor.violet }
+    private var border: LinearGradient {
+        LinearGradient(
+            colors: colors.count > 1 ? colors : [primary, primary],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .foregroundStyle(isSelected || isHovering ? KColor.ink : primary)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 24)
+            .background(
+                primary.opacity(isSelected ? 0.14 : isHovering ? 0.08 : 0.035),
+                in: QwixitControlShape(cut: 4)
+            )
+            .overlay {
+                QwixitControlShape(cut: 4)
+                    .stroke(
+                        border.opacity(isSelected ? 0.82 : isHovering ? 0.60 : 0.40),
+                        lineWidth: 1
+                    )
+            }
+            .contentShape(QwixitControlShape(cut: 4))
+            .opacity(isEnabled ? 1 : 0.45)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .offset(y: configuration.isPressed ? 1 : 0)
+            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
+    }
+}
+
 struct IconButtonStyle: ButtonStyle {
     var accent = KColor.secondary
     @State private var isHovering = false

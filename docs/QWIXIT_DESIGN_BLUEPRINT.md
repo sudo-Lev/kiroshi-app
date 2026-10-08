@@ -460,19 +460,23 @@ This surface uses large, explicit cards so each action can be understood before 
 - Action title: 13 pt Bold.
 - Hint: 10.5 pt Regular.
 - Number keycap: 24 × 24.
-- Selected fill: accent at 13%.
-- Selected border: accent at 72%.
+- No leading icon or face. Keep the text edge aligned and let the title carry recognition.
+- Translation cards use a delicate border inspired by the target language: blue/yellow for Ukrainian, soft white/red for Polish, blue/soft white/red for French, and blue/red for English.
+- Slack style uses a quiet cyan/yellow/red/green border. Make formal uses the neutral system treatment.
+- Semantic color is supplementary: titles and hints must identify every action without relying on color.
+- Resting border opacity: 34%; hover: 58%; selected: 82%.
+- Selected fill: the first semantic color at 10%.
 - Selected radius: 8.
 
 ### Actions
 
-1–2. **Translate to…** — one card per useful target language; cyan accent; replaces selection.
-3. **Slack style** — clear, concise, human; success green accent; replaces selection.
-4. **Make formal** — polished professional tone; success green accent; replaces selection.
+1–2. **Translate to…** — one card per useful target language; target-language border; replaces selection.
+3. **Slack style** — clear, concise, human; quiet four-color product border; replaces selection.
+4. **Make formal** — polished professional tone; neutral system border; replaces selection.
 
 ### Refinement state
 
-If an action asks quick questions, keep them inside the same panel. Focused question fill is violet at 6%. Answer chips are 24 pt high, radius 6, with the selected answer at 16% accent fill and 72% border.
+If an action asks quick questions, keep them inside the same panel. Focused question fill is violet at 6%. Answer chips are 24 pt high, radius 6, with the selected answer at 16% accent fill and 72% border. While questions load, reuse the compact branded `PROCESSING` chip; never show a generic system spinner or skeleton.
 
 ### Keyboard map
 
@@ -500,7 +504,8 @@ Option + Command + Z is a dedicated read-only translator. It never replaces the 
 | State | Size |
 |---|---:|
 | Initial chooser | 440 × 250 |
-| Loading or loaded | 440 × 360 |
+| Loading or success | 440 × 158 |
+| Loaded | 440 × 360 |
 | Pinned | 440 × 560 |
 | Limit | 420 × 220 |
 | Subscription activation | 420 × 190 |
@@ -516,13 +521,13 @@ Option + Command + Z is a dedicated read-only translator. It never replaces the 
 - Height: 48.
 - Qwixit mark: 20 × 20.
 - Awaiting choice title: `Translate to…`, 12 pt Semibold Sans.
-- Result header: source code, arrow, then `UA PL DE EN` as compact text buttons. The active target is Black Mono; other targets use secondary text.
+- Result header: source code, arrow, then `UA PL FR EN` as compact text buttons. Both compact buttons and chooser cards use the same target-language accent borders as Actions.
 - Close control: `×`, 17 pt.
 
 ### Initial chooser
 
 - Use a 2 × 2 grid with 8 pt gaps and 12 pt outer padding.
-- Languages, in order: Українська, Polski, Deutsch, English.
+- Languages, in order: Українська, Polski, Français, English.
 - Language card: 62 pt high, radius 10, horizontal padding 12.
 - Native language name: 13 pt Bold Sans.
 - English description: 10 pt Regular Sans. The remembered target adds `· last used`.
@@ -555,9 +560,9 @@ The translation request returns logical semantic blocks rather than one item per
 
 ### Loading and state content
 
-- Loading label: `Qwixing…`, 10 pt Bold Mono, tracking 0.35.
-- Skeleton: three 9 pt bars at 92%, 78%, and 85% width, 13 pt vertical gap, radius 3.
-- Retry uses `[ @_@ ]` at 13 pt.
+- Loading reuses the standard compact cyber status chip with the scanning face, animated `PROCESSING` label, moving trace, and `AI` badge.
+- Completion changes the same chip to the green ready face, `READY`, `RESULT READY`, and `OK` for 520 ms before revealing the result.
+- The chip respects Reduce Motion; the state remains readable without its trace, sweep, or pulse.
 - Limit uses `[ ^o^ ]` at 14 pt and a compact upgrade button.
 - Offline uses `[ ?_? ]` or `[ #_# ]` with concise unchanged text.
 

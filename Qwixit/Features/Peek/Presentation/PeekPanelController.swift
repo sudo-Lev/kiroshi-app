@@ -150,7 +150,8 @@ final class PeekPanelController {
         if viewModel.isPinned { return NSSize(width: 440, height: 560) }
         return switch state {
         case .idle: NSSize(width: 440, height: 250)
-        case .loading, .loaded: NSSize(width: 440, height: 360)
+        case .loading, .success: NSSize(width: 440, height: 158)
+        case .loaded: NSSize(width: 440, height: 360)
         case .limitReached: NSSize(width: 420, height: 220)
         case .failed: NSSize(width: 420, height: 220)
         }

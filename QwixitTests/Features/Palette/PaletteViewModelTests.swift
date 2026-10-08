@@ -109,7 +109,7 @@ final class PaletteViewModelTests: XCTestCase {
         XCTAssertEqual(PaletteViewModel.translationTargets(for: "en"), ["uk", "pl"])
         XCTAssertEqual(PaletteViewModel.translationTargets(for: "uk-UA"), ["en", "pl"])
         XCTAssertEqual(PaletteViewModel.translationTargets(for: "pl"), ["en", "uk"])
-        XCTAssertEqual(PaletteViewModel.translationTargets(for: "de-DE"), ["en", "uk"])
+        XCTAssertEqual(PaletteViewModel.translationTargets(for: "fr-FR"), ["en", "uk"])
         XCTAssertEqual(PaletteViewModel.translationTargets(for: nil), ["en", "uk"])
     }
 

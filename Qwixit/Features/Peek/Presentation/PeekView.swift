@@ -12,6 +12,7 @@ struct PeekView: View {
     @ObservedObject var viewModel: PeekViewModel
     let onClose: () -> Void
     let onTogglePin: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,8 +49,8 @@ struct PeekView: View {
                     .foregroundStyle(PeekPalette.muted)
                 ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { index, language in
                     Button(language.code) { viewModel.runTranslation(at: index) }
-                        .buttonStyle(CompactButtonStyle(
-                            accent: KColor.cyan,
+                        .buttonStyle(QwixitSemanticCompactButtonStyle(
+                            accent: .language(language.id),
                             isSelected: viewModel.targetLanguage == language.id
                         ))
                 }
@@ -113,7 +114,11 @@ struct PeekView: View {
             .padding(.horizontal, 12)
             .frame(height: 62)
         }
-        .buttonStyle(SelectionButtonStyle(accent: KColor.violet, isSelected: selected, cut: 8))
+        .buttonStyle(QwixitSemanticCardButtonStyle(
+            accent: .language(language.id),
+            isSelected: selected,
+            cut: 8
+        ))
         .help("Translate to \(language.name)")
     }
 
@@ -121,7 +126,7 @@ struct PeekView: View {
         let englishName = switch language.id {
         case "uk": "Ukrainian"
         case "pl": "Polish"
-        case "de": "German"
+        case "fr": "French"
         case "en": sourceBaseLanguage == "en" ? "Clean up English" : "English"
         default: language.code
         }
@@ -139,7 +144,9 @@ struct PeekView: View {
                 case .idle:
                     EmptyView()
                 case .loading:
-                    skeleton
+                    statusChip(.processing)
+                case .success:
+                    statusChip(.success, successDetail: "RESULT READY")
                 case .loaded:
                     VStack(alignment: .leading, spacing: 12) {
                         if QwixitUsage.remaining == 0 {
@@ -191,30 +198,18 @@ struct PeekView: View {
         }
     }
 
-    private var skeleton: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            if viewModel.isRetrying {
-                HStack(spacing: 8) {
-                    QwixitFaceView(face: .retry, size: 13)
-                    Text(QwixitFace.retry.line)
-                }
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(accent)
-            } else {
-                Text("Qwixing…")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .tracking(0.35)
-                    .foregroundStyle(accent)
-            }
-            ForEach([0.92, 0.78, 0.85], id: \.self) { width in
-                GeometryReader { proxy in
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(viewModel.receivedFirstToken ? PeekPalette.muted.opacity(0.38) : PeekPalette.line.opacity(0.8))
-                        .frame(width: proxy.size.width * width, height: 9)
-                }
-                .frame(height: 9)
-            }
-        }
+    private func statusChip(
+        _ phase: AppPhase,
+        successDetail: String = "TEXT REPLACED"
+    ) -> some View {
+        FeedbackPill(
+            phase: phase,
+            reduceMotion: reduceMotion,
+            successDetail: successDetail,
+            onClose: {}
+        )
+        .id(phase == .success ? "peek-success" : "peek-processing")
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder

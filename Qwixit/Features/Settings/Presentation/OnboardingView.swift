@@ -424,7 +424,7 @@ private struct OnboardingPaletteSurface: View {
                     default:
                         choice = switch action.language {
                         case "pl": .polish
-                        case "de": .german
+                        case "fr": .french
                         case "en": .english
                         default: .ukrainian
                         }

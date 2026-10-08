@@ -4,6 +4,7 @@ struct PaletteView: View {
     @ObservedObject var viewModel: PaletteViewModel
     let onClose: () -> Void
     @FocusState private var searchFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let text = KColor.ink
     private let muted = KColor.secondary
@@ -125,8 +126,8 @@ struct PaletteView: View {
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
         }
-        .buttonStyle(SelectionButtonStyle(
-            accent: accent(action),
+        .buttonStyle(QwixitSemanticCardButtonStyle(
+            accent: cardAccent(for: action),
             isSelected: index == viewModel.selectedIndex,
             cut: 8
         ))
@@ -142,10 +143,10 @@ struct PaletteView: View {
         Button { viewModel.runLanguage(at: languageIndex) } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Translate to \(language.name)")
+                    Text(language.name)
                         .font(.system(size: 13, weight: .bold))
                         .lineLimit(1)
-                    Text("\(viewModel.detectedLanguage?.code.uppercased() ?? "AUTO") → \(language.code) · replaces selection")
+                    Text("Translate · \(viewModel.detectedLanguage?.code.uppercased() ?? "AUTO") → \(language.code)")
                         .font(.system(size: 10.5))
                         .foregroundStyle(muted)
                         .lineLimit(1)
@@ -156,8 +157,8 @@ struct PaletteView: View {
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
         }
-        .buttonStyle(SelectionButtonStyle(
-            accent: KColor.cyan,
+        .buttonStyle(QwixitSemanticCardButtonStyle(
+            accent: .language(language.id),
             isSelected: index == viewModel.selectedIndex,
             cut: 8
         ))
@@ -176,14 +177,7 @@ struct PaletteView: View {
         let color = accent(refinement.action)
         groupHeader("\(refinement.action.name) · Quick questions")
         if refinement.isLoading {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small).tint(color)
-                Text("Qwixing…  ↵ skips")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(muted)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 36)
+            refinementStatusChip
         } else {
             ForEach(Array(refinement.questions.enumerated()), id: \.offset) { questionIndex, question in
                 let focused = questionIndex == refinement.focusedQuestion
@@ -217,6 +211,17 @@ struct PaletteView: View {
         }
     }
 
+    private var refinementStatusChip: some View {
+        FeedbackPill(
+            phase: .processing,
+            reduceMotion: reduceMotion,
+            onClose: {}
+        )
+        .id("palette-refinement-processing")
+        .allowsHitTesting(false)
+        .accessibilityLabel("Qwixing. Press Return to skip questions.")
+    }
+
     private var footer: some View {
         HStack(spacing: 9) {
             RoundedRectangle(cornerRadius: 2)
@@ -247,6 +252,14 @@ struct PaletteView: View {
         case .replace: KColor.success
         case .insert: KColor.violet
         case .panel: KColor.magenta
+        }
+    }
+
+    private func cardAccent(for action: PaletteAction) -> QwixitCardAccent {
+        switch action.id {
+        case "slack": .slack
+        case "formal": .formal
+        default: .single(accent(action))
         }
     }
 }

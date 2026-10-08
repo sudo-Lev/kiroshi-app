@@ -3,7 +3,20 @@ import SwiftUI
 struct FeedbackPill: View {
     let phase: AppPhase
     let reduceMotion: Bool
+    let successDetail: String
     let onClose: () -> Void
+
+    init(
+        phase: AppPhase,
+        reduceMotion: Bool,
+        successDetail: String = "TEXT REPLACED",
+        onClose: @escaping () -> Void
+    ) {
+        self.phase = phase
+        self.reduceMotion = reduceMotion
+        self.successDetail = successDetail
+        self.onClose = onClose
+    }
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var trace = false
@@ -360,7 +373,7 @@ struct FeedbackPill: View {
     }
 
     private var statusDetail: String {
-        isError ? "TEXT UNCHANGED" : "TEXT REPLACED"
+        isError ? "TEXT UNCHANGED" : successDetail
     }
 
     private var statusBadge: String {

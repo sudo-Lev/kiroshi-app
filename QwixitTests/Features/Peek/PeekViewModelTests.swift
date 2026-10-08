@@ -12,7 +12,7 @@ final class PeekViewModelTests: XCTestCase {
 
     func testSmartDefaultChoosesTranslationForDifferentLanguage() {
         XCTAssertEqual(
-            PeekViewModel.smartDefault(sourceLanguage: "de", targetLanguage: "en", wordCount: 12),
+            PeekViewModel.smartDefault(sourceLanguage: "fr", targetLanguage: "en", wordCount: 12),
             .translate
         )
     }
@@ -36,7 +36,7 @@ final class PeekViewModelTests: XCTestCase {
         XCTAssertEqual(PeekViewModel.translationTarget(for: "uk-UA"), "en")
         XCTAssertEqual(PeekViewModel.translationTarget(for: "en"), "uk")
         XCTAssertEqual(PeekViewModel.translationTarget(for: "pl"), "en")
-        XCTAssertEqual(PeekViewModel.translationTarget(for: "de"), "en")
+        XCTAssertEqual(PeekViewModel.translationTarget(for: "fr"), "en")
     }
 
     @MainActor
@@ -84,7 +84,7 @@ final class PeekViewModelTests: XCTestCase {
         let viewModel = PeekViewModel(client: client, detector: StubLanguageDetector(code: "en"))
         viewModel.open(text: "A short selected sentence.")
 
-        XCTAssertEqual(viewModel.languages.map(\.code), ["UA", "PL", "DE", "EN"])
+        XCTAssertEqual(viewModel.languages.map(\.code), ["UA", "PL", "FR", "EN"])
         viewModel.chooseNumber(2)
         for _ in 0..<4 { await Task.yield() }
 
@@ -102,7 +102,22 @@ final class PeekViewModelTests: XCTestCase {
         for _ in 0..<4 { await Task.yield() }
 
         XCTAssertEqual(client.requests.map(\.mode), [.translate])
-        XCTAssertEqual(client.requests.map(\.targetLanguage), ["de"])
+        XCTAssertEqual(client.requests.map(\.targetLanguage), ["fr"])
+    }
+
+    @MainActor
+    func testCompletedTranslationShowsSuccessBeforeResult() async {
+        let viewModel = PeekViewModel(
+            client: PeekClientSpy(),
+            detector: StubLanguageDetector(code: "en")
+        )
+        viewModel.open(text: "A short selected sentence.")
+
+        viewModel.chooseNumber(1)
+        for _ in 0..<4 { await Task.yield() }
+
+        XCTAssertEqual(viewModel.loadState, .success)
+        XCTAssertNotNil(viewModel.result)
     }
 
     func testTranslationDecodePreservesSentenceAlignment() throws {

@@ -16,7 +16,7 @@ enum TranslationLanguages {
     private static let supported = [
         TranslationLanguage(id: "uk", code: "UA", name: "Українська"),
         TranslationLanguage(id: "pl", code: "PL", name: "Polski"),
-        TranslationLanguage(id: "de", code: "DE", name: "Deutsch"),
+        TranslationLanguage(id: "fr", code: "FR", name: "Français"),
         TranslationLanguage(id: "en", code: "EN", name: "English")
     ]
 
@@ -35,7 +35,7 @@ enum TranslationLanguages {
         let preferredIDs: [String] = switch source {
         case "en": ["uk", "pl"]
         case "uk": ["en", "pl"]
-        case "pl", "de", .none: ["en", "uk"]
+        case "pl", "fr", .none: ["en", "uk"]
         default: ["en", "uk"]
         }
         return preferredIDs.compactMap { id in supported.first(where: { $0.id == id }) }

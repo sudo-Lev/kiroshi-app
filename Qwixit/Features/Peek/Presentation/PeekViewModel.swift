@@ -5,6 +5,7 @@ import Foundation
 enum PeekLoadState: Equatable {
     case idle
     case loading
+    case success
     case loaded
     case limitReached
     case failed(String)
@@ -307,8 +308,13 @@ final class PeekViewModel: ObservableObject {
         let key = cacheKey(mode: requestedMode)
         if let cached = cache[key] {
             result = cached
-            loadState = .loaded
             receivedFirstToken = true
+            loadState = .success
+            requestTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(520))
+                guard !Task.isCancelled, let self, mode == requestedMode else { return }
+                loadState = .loaded
+            }
             return
         }
 
@@ -323,8 +329,12 @@ final class PeekViewModel: ObservableObject {
                 guard mode == requestedMode else { return }
                 cache[key] = value
                 result = value
-                loadState = .loaded
                 isRetrying = false
+                loadState = .success
+                try await Task.sleep(for: .milliseconds(520))
+                try Task.checkCancellation()
+                guard mode == requestedMode else { return }
+                loadState = .loaded
             } catch is CancellationError {
                 return
             } catch QwixitAPIError.quotaExceeded {

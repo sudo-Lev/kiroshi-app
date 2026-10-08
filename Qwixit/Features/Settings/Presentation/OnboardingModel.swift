@@ -12,7 +12,7 @@ enum OnboardingPhase: Equatable {
 enum OnboardingChoice: Int, CaseIterable, Identifiable {
     case ukrainian
     case polish
-    case german
+    case french
     case english
     case slack
     case formal
@@ -25,7 +25,7 @@ enum OnboardingChoice: Int, CaseIterable, Identifiable {
         case .formal: "Formal"
         case .ukrainian: "Ukrainian"
         case .polish: "Polish"
-        case .german: "German"
+        case .french: "French"
         case .english: "English"
         }
     }
@@ -36,7 +36,7 @@ enum OnboardingChoice: Int, CaseIterable, Identifiable {
         case .formal: "Could you please send me the file at your earliest convenience?"
         case .ukrainian: "Можеш надіслати мені файл якнайшвидше, будь ласка?"
         case .polish: "Możesz wysłać mi plik jak najszybciej?"
-        case .german: "Kannst du mir die Datei bitte so schnell wie möglich schicken?"
+        case .french: "Peux-tu m’envoyer le fichier dès que possible, s’il te plaît ?"
         case .english: "Could you send me the file as soon as possible, please?"
         }
     }
