@@ -99,8 +99,9 @@ All semantic colors have explicit light and dark variants. Use sRGB values exact
 | `canvasRaised` | `#FDFCFF` | `#120F19` | Headers, footers, utility bands |
 | `surface` | `#FFFFFF` | `#17141F` | Cards and panels |
 | `surfaceHover` | `#F6F4FD` | `#251F30` | Hover, keycap, quiet selected areas |
-| `line` | `#DFDAEC` | `#403750` | Borders and dividers |
-| `violet` | `#6D28FF` | `#9661FF` | Primary actions, processing, active focus |
+| `line` | `#DCDBE2` | `#34323C` | Borders and dividers (neutral, no violet tint) |
+| `violet` | `#6D28FF` | `#9661FF` | Primary buttons and active focus |
+| `hudTone` | `#7B5CF0` | `#A98BFF` | Processing HUD only: left accent bar and glow, face outline, `AI` badge |
 | `magenta` | `#FF2D9B` | `#FF4FAD` | Panel output and chromatic split |
 | `cyan` | `#00ABC7` | `#26C9E3` | Translation, cloud state, chromatic split |
 | `success` | `#149145` | `#45C770` | Allowed and completed states |
@@ -184,9 +185,11 @@ Rounded rectangles use continuous corners where available.
 
 ### Shadows
 
-- Standard card: violet at 8% opacity, blur 12, y offset 5.
-- Processing HUD: violet at 12% light or 20% dark, blur 16, y offset 6.
+- Standard card: `#16131F` at 6% light / black at 30% dark, blur 12, y offset 5. No violet-tinted shadows.
+- Violet glow is allowed only on primary buttons and the logo mark, at most 16% light / 24% dark.
+- Processing HUD: `#16131F` at 10%, blur 14, y offset 6 (light); black at 45%, blur 16, y offset 6 (dark).
 - Use AppKit panel shadow for floating windows. Avoid stacking additional heavy shadows.
+- Exception: the status chip (processing, success, error) draws its own shadow, so its panel disables the native shadow and keeps a clear 36 pt margin so the dark-mode shadow fades out before the window edge. The chip panel ignores mouse events so the margin never blocks clicks near the selection. A native shadow would trace the transparent panel rectangle as a visible plate.
 
 ### Standard surface recipe
 
@@ -373,17 +376,18 @@ The one press fix flow uses a compact processing/success/error HUD beside the se
 
 ### Surface
 
-- Light: `surface` at 98%.
-- Dark: `#0E0C16` at 96%.
-- Add a diagonal wash: violet at 8% light/16% dark → clear → cyan at 5% light/8% dark.
-- Border: `line` in light mode, white at 12% in dark mode.
-- Apply the processing shadow defined in the elevation section.
+- Light: `#FAFAFC` at 98%.
+- Dark: `#121116` at 96%.
+- Add a 135° wash: lilac (`#8F6BFF` at 5% light / `#A98BFF` at 8% dark) → clear.
+- Border: `line` in light mode, white at 7% in dark mode.
+- Cyan/magenta offset edges: 58% light, 38% dark.
+- Apply the Processing HUD shadow defined in the elevation section.
 
 ### Processing state
 
 - Face: animated scanning face at 13 pt.
 - Headline: cyan `>` plus animated `PROCESSING`.
-- Badge: `AI` in violet.
+- Badge: `AI` in `hudTone`.
 - Progress track: 100 × 2, base `line`, 42 pt violet/magenta/cyan moving trace.
 - Border sweep runs while processing.
 

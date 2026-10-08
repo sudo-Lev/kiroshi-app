@@ -12,10 +12,11 @@ final class FeedbackWindowController: FeedbackPresenting {
         anchor accessibilityBounds: CGRect? = nil,
         fallbackPoint: CGPoint? = nil
     ) {
+        var isStatusChip = phase == .processing || phase == .success
+        if case .error = phase { isStatusChip = true }
         let size: NSSize
         if phase == .limitReached { size = .init(width: 374, height: 158) }
-        else if phase == .processing || phase == .success { size = .init(width: 216, height: 50) }
-        else if case .error = phase { size = .init(width: 216, height: 50) }
+        else if isStatusChip { size = .init(width: 216, height: 50) }
         else if phase == .permissionDenied || phase == .offline { size = .init(width: 326, height: 86) }
         else if phase == .noSelection { size = .init(width: 306, height: 82) }
         else { size = .init(width: 272, height: 66) }
@@ -35,10 +36,18 @@ final class FeedbackWindowController: FeedbackPresenting {
             )
             self.panel = panel
         }
+        // The status chip draws its own shadow. A native shadow would trace the transparent
+        // panel rectangle, so the chip gets a clear margin wide enough for the shadow to fade
+        // out fully, and lets clicks pass through it since the chip has no controls.
+        // The margin is SwiftUI padding because NSHostingView sizes the panel to its content.
+        let shadowMargin: CGFloat = isStatusChip ? 36 : 0
         state.reduceMotion = reduceMotion
+        state.shadowMargin = shadowMargin
         state.phase = phase
-        panel?.setContentSize(size)
-        position(anchor: accessibilityBounds, fallbackPoint: fallbackPoint, panelSize: size)
+        panel?.hasShadow = !isStatusChip
+        panel?.ignoresMouseEvents = isStatusChip
+        panel?.setContentSize(NSSize(width: size.width + shadowMargin * 2, height: size.height + shadowMargin * 2))
+        position(anchor: accessibilityBounds, fallbackPoint: fallbackPoint, visibleSize: size, margin: shadowMargin)
         panel?.alphaValue = 0
         panel?.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { context in
@@ -49,14 +58,14 @@ final class FeedbackWindowController: FeedbackPresenting {
 
     func hide() { panel?.orderOut(nil) }
 
-    private func position(anchor accessibilityBounds: CGRect?, fallbackPoint: CGPoint?, panelSize: NSSize) {
+    private func position(anchor accessibilityBounds: CGRect?, fallbackPoint: CGPoint?, visibleSize: NSSize, margin: CGFloat) {
         guard let panel else { return }
         guard let origin = ContextPanelPlacement.resolve(
             accessibilityBounds: accessibilityBounds,
             fallbackPoint: fallbackPoint ?? NSEvent.mouseLocation,
-            panelSize: panelSize
+            panelSize: visibleSize
         ) else { return }
-        panel.setFrameOrigin(origin)
+        panel.setFrameOrigin(NSPoint(x: origin.x - margin, y: origin.y - margin))
     }
 }
 
@@ -64,6 +73,7 @@ final class FeedbackWindowController: FeedbackPresenting {
 private final class FeedbackWindowState: ObservableObject {
     @Published var phase: AppPhase = .ready
     @Published var reduceMotion = false
+    @Published var shadowMargin: CGFloat = 0
 }
 
 private struct FeedbackHost: View {
@@ -86,6 +96,7 @@ private struct FeedbackHost: View {
                 )
         }
         .animation(state.reduceMotion ? nil : .snappy(duration: 0.13), value: phaseKey)
+        .padding(state.shadowMargin)
     }
 
     private var phaseKey: String {

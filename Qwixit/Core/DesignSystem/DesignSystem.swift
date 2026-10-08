@@ -101,8 +101,11 @@ enum KColor {
     static let canvasRaised = adaptive(light: rgb(0.992, 0.99, 1), dark: rgb(0.07, 0.059, 0.098))
     static let surface = adaptive(light: .white, dark: rgb(0.09, 0.078, 0.122))
     static let surfaceHover = adaptive(light: rgb(0.965, 0.955, 0.992), dark: rgb(0.145, 0.122, 0.19))
-    static let line = adaptive(light: rgb(0.875, 0.855, 0.925), dark: rgb(0.25, 0.215, 0.315))
+    static let line = adaptive(light: hex(0xDCDBE2), dark: hex(0x34323C))
     static let violet = adaptive(light: rgb(0.427, 0.157, 1), dark: rgb(0.59, 0.38, 1))
+    /// Softer violet reserved for the Processing HUD; `violet` stays for primary buttons and focus.
+    static let hudTone = adaptive(light: hex(0x7B5CF0), dark: hex(0xA98BFF))
+    static let cardShadow = adaptive(light: hex(0x16131F, alpha: 0.06), dark: hex(0x000000, alpha: 0.30))
     static let primaryAction = adaptive(light: rgb(0.086, 0.075, 0.122), dark: rgb(0.31, 0.14, 0.68))
     static let primaryActionHover = adaptive(light: rgb(0.427, 0.157, 1), dark: rgb(0.43, 0.24, 0.84))
     static let magenta = adaptive(light: rgb(1, 0.176, 0.608), dark: rgb(1, 0.31, 0.68))
@@ -121,6 +124,15 @@ enum KColor {
 
     private static func rgb(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat) -> NSColor {
         NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
+    }
+
+    static func hex(_ value: UInt32, alpha: CGFloat = 1) -> NSColor {
+        NSColor(
+            srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: alpha
+        )
     }
 }
 
@@ -497,6 +509,7 @@ struct QwixitControlShape: Shape {
 
 struct PrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -514,7 +527,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .overlay(alignment: .topLeading) {
                 Rectangle().fill(.white.opacity(0.72)).frame(width: 15, height: 1).offset(x: 9, y: 5)
             }
-            .shadow(color: KColor.violet.opacity(isHovering ? 0.22 : 0.12), radius: isHovering ? 8 : 5, y: 3)
+            .shadow(color: KColor.violet.opacity(isHovering ? (colorScheme == .dark ? 0.24 : 0.16) : 0.12), radius: isHovering ? 8 : 5, y: 3)
             .opacity(isEnabled ? 1 : 0.45)
             .scaleEffect(configuration.isPressed ? 0.96 : isHovering ? 1.025 : 1)
             .offset(y: configuration.isPressed ? 2 : 0)
@@ -765,7 +778,7 @@ struct CardModifier: ViewModifier {
             .background(KColor.surface)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(KColor.line))
-            .shadow(color: KColor.violet.opacity(0.08), radius: 12, y: 5)
+            .shadow(color: KColor.cardShadow, radius: 12, y: 5)
     }
 }
 

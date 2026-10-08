@@ -96,17 +96,18 @@ struct FeedbackPill: View {
         .background {
             ZStack {
                 QwixitControlShape(cut: 7)
-                    .fill(KColor.cyan.opacity(colorScheme == .dark ? 0.78 : 0.58))
+                    .fill(KColor.cyan.opacity(colorScheme == .dark ? 0.38 : 0.58))
                     .offset(x: -1.5, y: 1)
                 QwixitControlShape(cut: 7)
-                    .fill(KColor.magenta.opacity(colorScheme == .dark ? 0.78 : 0.58))
+                    .fill(KColor.magenta.opacity(colorScheme == .dark ? 0.38 : 0.58))
                     .offset(x: 1.5, y: -1)
                 QwixitControlShape(cut: 7).fill(cyberSurface)
                 LinearGradient(
                     colors: [
-                        KColor.violet.opacity(colorScheme == .dark ? 0.16 : 0.08),
-                        .clear,
-                        KColor.cyan.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                        colorScheme == .dark
+                            ? Color(nsColor: KColor.hex(0xA98BFF, alpha: 0.08))
+                            : Color(nsColor: KColor.hex(0x8F6BFF, alpha: 0.05)),
+                        .clear
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -137,7 +138,11 @@ struct FeedbackPill: View {
                     radius: 5
                 )
         }
-        .shadow(color: KColor.violet.opacity(colorScheme == .dark ? 0.2 : 0.12), radius: 12, y: 4)
+        .shadow(
+            color: colorScheme == .dark ? .black.opacity(0.45) : Color(nsColor: KColor.hex(0x16131F, alpha: 0.10)),
+            radius: colorScheme == .dark ? 16 : 14,
+            y: 6
+        )
     }
 
     private var statusGlyph: some View {
@@ -328,8 +333,8 @@ struct FeedbackPill: View {
 
     private var cyberSurface: Color {
         colorScheme == .dark
-            ? Color(red: 0.055, green: 0.047, blue: 0.085).opacity(0.96)
-            : KColor.surface.opacity(0.98)
+            ? Color(nsColor: KColor.hex(0x121116, alpha: 0.96))
+            : Color(nsColor: KColor.hex(0xFAFAFC, alpha: 0.98))
     }
 
     private var cyberPrimary: Color {
@@ -341,7 +346,7 @@ struct FeedbackPill: View {
     }
 
     private var cyberBorder: Color {
-        colorScheme == .dark ? .white.opacity(0.12) : KColor.line
+        colorScheme == .dark ? .white.opacity(0.07) : KColor.line
     }
 
     private var cyberSweepHighlight: Color {
@@ -355,7 +360,7 @@ struct FeedbackPill: View {
 
     private var statusTone: Color {
         if isError { return KColor.danger }
-        return phase == .success ? KColor.terminalGreen : KColor.violet
+        return phase == .success ? KColor.terminalGreen : KColor.hudTone
     }
 
     private var statusFace: QwixitFace {
