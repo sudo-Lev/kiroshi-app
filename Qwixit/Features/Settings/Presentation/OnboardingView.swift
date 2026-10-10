@@ -406,7 +406,7 @@ private struct OnboardingPaletteSurface: View {
 
     var body: some View {
         PaletteView(viewModel: viewModel, onClose: { _ = model.escapeOverlay() })
-            .frame(width: 500, height: 270)
+            .frame(width: 440, height: 190)
             .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
             .onAppear {
                 viewModel.open(capture: PaletteCapture(

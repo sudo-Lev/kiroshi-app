@@ -38,7 +38,7 @@ struct PaletteView: View {
                 .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 16)
-        .frame(height: 50)
+        .frame(height: 44)
         .background(KColor.canvasRaised)
         .onAppear { searchFocused = true }
         .onChange(of: viewModel.wordCount) { _, _ in searchFocused = true }
@@ -52,8 +52,8 @@ struct PaletteView: View {
                         refineContent(refinement)
                     } else {
                         LazyVGrid(
-                            columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())],
-                            spacing: 8
+                            columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())],
+                            spacing: 4
                         ) {
                             ForEach(viewModel.groups) { group in
                                 ForEach(group.actions) { action in
@@ -74,12 +74,11 @@ struct PaletteView: View {
                         }
                         if viewModel.visibleActions.isEmpty {
                             HStack {
-                                Text("Run “\(viewModel.query)” as a custom instruction")
+                                Text("No action matches “\(viewModel.query)”")
                                     .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(muted)
                                     .lineLimit(2)
                                 Spacer()
-                                Text("↵")
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                             }
                             .padding(14)
                             .frame(maxWidth: .infinity, minHeight: 62)
@@ -88,8 +87,8 @@ struct PaletteView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             }
             .frame(maxHeight: 380)
             .onChange(of: viewModel.selectedIndex) { _, value in proxy.scrollTo(value, anchor: .center) }
@@ -111,8 +110,8 @@ struct PaletteView: View {
 
     private func actionCard(_ action: PaletteAction, index: Int) -> some View {
         Button { viewModel.runAction(action) } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(action.name)
                         .font(.system(size: 13, weight: .bold))
                     Text(action.hint)
@@ -123,13 +122,13 @@ struct PaletteView: View {
                 Spacer()
                 if index < 9 { keycap("\(index + 1)") }
             }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
         }
         .buttonStyle(QwixitSemanticCardButtonStyle(
             accent: cardAccent(for: action),
             isSelected: index == viewModel.selectedIndex,
-            cut: 8
+            cut: 5
         ))
         .id(index)
         .accessibilityLabel("\(action.name), \(action.hint), shortcut \(index + 1)")
@@ -141,8 +140,8 @@ struct PaletteView: View {
         index: Int
     ) -> some View {
         Button { viewModel.runLanguage(at: languageIndex) } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(language.name)
                         .font(.system(size: 13, weight: .bold))
                         .lineLimit(1)
@@ -154,13 +153,13 @@ struct PaletteView: View {
                 Spacer()
                 keycap("\(index + 1)")
             }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
         }
         .buttonStyle(QwixitSemanticCardButtonStyle(
             accent: .language(language.id),
             isSelected: index == viewModel.selectedIndex,
-            cut: 8
+            cut: 5
         ))
         .id(index)
         .help("Translate to \(language.name)")
@@ -168,8 +167,8 @@ struct PaletteView: View {
     }
 
     private var placeholder: String {
-        if viewModel.isRefining { return "Anything else? (optional)" }
-        return "Action or instruction…"
+        if viewModel.isRefining { return "Pick answers below · ↵ runs" }
+        return "Search actions…"
     }
 
     @ViewBuilder
@@ -234,15 +233,15 @@ struct PaletteView: View {
         .font(.system(size: 9, weight: .bold, design: .monospaced))
         .foregroundStyle(muted)
         .padding(.horizontal, 16)
-        .frame(height: 38)
+        .frame(height: 34)
         .background(KColor.canvasRaised)
     }
 
     private func keycap(_ value: String) -> some View {
         Text(value).font(.system(size: 9, weight: .bold, design: .monospaced))
-            .frame(width: 24, height: 24)
-            .background(KColor.surface, in: QwixitControlShape(cut: 5))
-            .overlay(QwixitControlShape(cut: 5).stroke(KColor.line))
+            .frame(width: 20, height: 20)
+            .background(KColor.surface, in: QwixitControlShape(cut: 4))
+            .overlay(QwixitControlShape(cut: 4).stroke(KColor.line))
     }
 
     private func accent(_ action: PaletteAction) -> Color {

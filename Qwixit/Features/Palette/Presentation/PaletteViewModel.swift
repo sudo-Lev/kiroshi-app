@@ -57,7 +57,7 @@ final class PaletteViewModel: ObservableObject {
 
     var footerText: String {
         if isRefining { return "Answer · ←→ or 1–4 · ↵ runs" }
-        guard let mode = selectedAction?.mode else { return "Replace · custom instruction · ⌘Z undoes" }
+        guard let mode = selectedAction?.mode else { return "No matching action · Esc closes" }
         return switch mode {
         case .replace: "Replace · rewrites the selection · ⌘Z undoes"
         case .insert: "Insert · adds after the selection · original kept"
@@ -124,17 +124,15 @@ final class PaletteViewModel: ObservableObject {
     /// Runs the refined action; with no questions loaded it runs with the base prompt.
     func finishRefinement() {
         guard let refinement else { return }
-        var action = refinement.action
-        let note = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        action = PaletteAction(
+        let action = refinement.action
+        onRun?(PaletteAction(
             id: action.id,
             name: action.name,
             hint: action.hint,
             mode: action.mode,
-            prompt: refinement.instruction + (note.isEmpty ? "" : "\nAlso: \(note)"),
+            prompt: refinement.instruction,
             language: action.language
-        )
-        onRun?(action)
+        ))
     }
 
     func chooseNumber(_ number: Int) {
@@ -186,8 +184,6 @@ final class PaletteViewModel: ObservableObject {
             run(action)
         } else if let action = actionChoice(at: selectedIndex) {
             select(action)
-        } else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            run(PaletteAction(id: "custom", name: "Custom", hint: query, mode: .replace, prompt: query))
         }
     }
 

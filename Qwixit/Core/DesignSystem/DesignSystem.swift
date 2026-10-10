@@ -508,29 +508,31 @@ struct QwixitControlShape: Shape {
 }
 
 struct PrimaryButtonStyle: ButtonStyle {
+    var compact = false
+
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 11.5, weight: .heavy, design: .rounded))
+            .font(.system(size: compact ? 10 : 11.5, weight: .heavy, design: .rounded))
             .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 32)
+            .padding(.horizontal, compact ? 9 : 14)
+            .frame(minHeight: compact ? 24 : 32)
             .background {
-                QwixitControlShape(cut: 6).fill(KColor.cyan).offset(x: -1.5, y: 1)
-                QwixitControlShape(cut: 6).fill(KColor.magenta).offset(x: 1.5, y: -1)
-                QwixitControlShape(cut: 6).fill(isHovering ? KColor.primaryActionHover : KColor.primaryAction)
+                QwixitControlShape(cut: compact ? 4 : 6).fill(KColor.cyan).offset(x: -1.5, y: 1)
+                QwixitControlShape(cut: compact ? 4 : 6).fill(KColor.magenta).offset(x: 1.5, y: -1)
+                QwixitControlShape(cut: compact ? 4 : 6).fill(isHovering ? KColor.primaryActionHover : KColor.primaryAction)
             }
-            .overlay { QwixitControlShape(cut: 6).stroke(KColor.violet.opacity(0.9), lineWidth: 1) }
+            .overlay { QwixitControlShape(cut: compact ? 4 : 6).stroke(KColor.violet.opacity(0.9), lineWidth: 1) }
             .overlay(alignment: .topLeading) {
-                Rectangle().fill(.white.opacity(0.72)).frame(width: 15, height: 1).offset(x: 9, y: 5)
+                Rectangle().fill(.white.opacity(0.72)).frame(width: compact ? 12 : 15, height: 1).offset(x: compact ? 7 : 9, y: compact ? 4 : 5)
             }
-            .shadow(color: KColor.violet.opacity(isHovering ? (colorScheme == .dark ? 0.24 : 0.16) : 0.12), radius: isHovering ? 8 : 5, y: 3)
+            .shadow(color: KColor.violet.opacity(isHovering ? (colorScheme == .dark ? 0.24 : 0.16) : 0.12), radius: isHovering ? (compact ? 6 : 8) : (compact ? 4 : 5), y: compact ? 2 : 3)
             .opacity(isEnabled ? 1 : 0.45)
-            .scaleEffect(configuration.isPressed ? 0.96 : isHovering ? 1.025 : 1)
-            .offset(y: configuration.isPressed ? 2 : 0)
+            .scaleEffect(configuration.isPressed ? (compact ? 0.97 : 0.96) : isHovering ? (compact ? 1.015 : 1.025) : 1)
+            .offset(y: configuration.isPressed ? (compact ? 1 : 2) : 0)
             .animation(.snappy(duration: 0.14), value: configuration.isPressed)
             .animation(.easeOut(duration: 0.16), value: isHovering)
             .onHover { isHovering = isEnabled && $0 }

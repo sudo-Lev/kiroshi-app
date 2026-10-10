@@ -35,7 +35,7 @@ struct PeekView: View {
     private var accent: Color { KColor.cyan }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             QwixitMark(size: 20, style: .automatic)
                 .frame(width: 20)
             if viewModel.isAwaitingChoice {
@@ -61,7 +61,7 @@ struct PeekView: View {
                 .accessibilityLabel("Close")
         }
         .padding(.horizontal, 12)
-        .frame(height: 48)
+        .frame(height: 42)
         .contentShape(Rectangle())
         .background(PeekPalette.raised)
     }
@@ -69,14 +69,14 @@ struct PeekView: View {
     private var choiceContent: some View {
         VStack(spacing: 0) {
             LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())],
-                spacing: 8
+                columns: [GridItem(.flexible(), spacing: 4), GridItem(.flexible())],
+                spacing: 4
             ) {
                 ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { index, language in
                     languageCard(language, index: index)
                 }
             }
-            .padding(12)
+            .padding(8)
 
             Divider().overlay(PeekPalette.line)
 
@@ -89,15 +89,15 @@ struct PeekView: View {
             .font(.system(size: 9, weight: .bold, design: .monospaced))
             .foregroundStyle(PeekPalette.muted)
             .padding(.horizontal, 14)
-            .frame(height: 40)
+            .frame(height: 32)
         }
     }
 
     private func languageCard(_ language: TranslationLanguage, index: Int) -> some View {
         let selected = viewModel.selectedChoiceIndex == index
         return Button { viewModel.runTranslation(at: index) } label: {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(language.name)
                         .font(.system(size: 13, weight: .bold))
                     Text(languageDetail(language))
@@ -107,17 +107,17 @@ struct PeekView: View {
                 Spacer()
                 Text("\(index + 1)")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .frame(width: 24, height: 24)
-                    .background(KColor.surface, in: QwixitControlShape(cut: 5))
-                    .overlay(QwixitControlShape(cut: 5).stroke(PeekPalette.line))
+                    .frame(width: 20, height: 20)
+                    .background(KColor.surface, in: QwixitControlShape(cut: 4))
+                    .overlay(QwixitControlShape(cut: 4).stroke(PeekPalette.line))
             }
-            .padding(.horizontal, 12)
-            .frame(height: 62)
+            .padding(.horizontal, 8)
+            .frame(height: 44)
         }
         .buttonStyle(QwixitSemanticCardButtonStyle(
             accent: .language(language.id),
             isSelected: selected,
-            cut: 8
+            cut: 5
         ))
         .help("Translate to \(language.name)")
     }

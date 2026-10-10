@@ -27,6 +27,8 @@ struct FeedbackPill: View {
         Group {
             if phase == .limitReached {
                 upgradeCard
+            } else if phase == .permissionDenied {
+                accessNotice
             } else if phase == .processing || phase == .success || isError {
                 cyberStatusBox
             } else {
@@ -47,6 +49,77 @@ struct FeedbackPill: View {
                 withAnimation(.linear(duration: 0.64).repeatForever(autoreverses: false)) { borderSweep = true }
             }
         }
+    }
+
+    private var accessNotice: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                QwixitControlShape(cut: 5)
+                    .fill(KColor.warning.opacity(0.16))
+                    .frame(width: 35, height: 35)
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(KColor.warning)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                Text(detail ?? "")
+                    .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 3)
+
+            Text("AX")
+                .font(.system(size: 9, weight: .heavy, design: .monospaced))
+                .foregroundStyle(KColor.warning)
+                .padding(.horizontal, 6)
+                .frame(height: 22)
+                .background(
+                    QwixitControlShape(cut: 4)
+                        .fill(KColor.warning.opacity(0.08))
+                )
+                .overlay {
+                    QwixitControlShape(cut: 4)
+                        .stroke(KColor.warning.opacity(0.58), lineWidth: 1)
+                }
+        }
+        .padding(.horizontal, 12)
+        .frame(width: 314, height: 68)
+        .background {
+            ZStack {
+                QwixitControlShape(cut: 9)
+                    .fill(KColor.cyan)
+                    .offset(x: -1.5, y: 1)
+                QwixitControlShape(cut: 9)
+                    .fill(KColor.magenta)
+                    .offset(x: 1.5, y: -1)
+                QwixitControlShape(cut: 9)
+                    .fill(KColor.primaryAction)
+            }
+        }
+        .overlay {
+            QwixitControlShape(cut: 9)
+                .stroke(KColor.violet.opacity(0.9), lineWidth: 1)
+        }
+        .overlay(alignment: .topLeading) {
+            Rectangle()
+                .fill(.white.opacity(0.72))
+                .frame(width: 28, height: 1)
+                .offset(x: 10, y: 5)
+        }
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(KColor.warning)
+                .frame(width: 2, height: 34)
+        }
+        .shadow(color: KColor.cardShadow, radius: 12, y: 5)
     }
 
     private var cyberStatusBox: some View {

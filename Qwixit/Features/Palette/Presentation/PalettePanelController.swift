@@ -46,7 +46,7 @@ final class PalettePanelController {
     }
 
     private func show(capture: PaletteCapture) {
-        let size = NSSize(width: 520, height: 270)
+        let size = NSSize(width: 440, height: 190)
         if panel == nil {
             let panel = KeyboardPanel(contentRect: .init(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.level = .popUpMenu

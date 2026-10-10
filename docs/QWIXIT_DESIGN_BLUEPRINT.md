@@ -437,33 +437,33 @@ No selection hides after 2.4 seconds. Permission and ordinary errors hide after 
 
 ## 10. Action palette: Option + Command + A
 
-This surface uses large, explicit cards so each action can be understood before it runs.
+This surface uses compact, explicit cards so each action can be understood before it runs without turning the palette into a dashboard.
 
 ### Window
 
-- Size: **520 × 270**.
+- Size: **440 × 190**.
 - Panel radius: 14.
 - Entrance: 140 ms alpha fade; 80 ms with Reduce Motion.
-- Header: 50 pt high, `canvasRaised`, bottom divider.
-- Footer: 38 pt high, `canvasRaised`.
-- Grid padding: 12 horizontal, 10 vertical; maximum content height 380.
+- Header: 44 pt high, `canvasRaised`, bottom divider.
+- Footer: 34 pt high, `canvasRaised`.
+- Grid padding: 8 horizontal, 6 vertical; maximum content height 380.
 
 ### Header
 
 - Qwixit mark: 27 pt in a 28 pt slot.
-- Search/instruction field: 13 pt Bold Mono.
-- Placeholder: `Action or instruction…`.
+- Search field: 13 pt Bold Mono. It filters actions and matches a target language name; it never sends free-form instructions to the model.
+- Placeholder: `Search actions…`.
 - Optional context label: 9 pt Bold Mono, tracking 1.5.
 - No large face, explanatory paragraph, or redundant shortcut legend.
 
 ### Action cards
 
-- Two equal columns with an 8 pt gap.
-- Card height: 66.
-- Horizontal card padding: 12.
+- Two equal columns with a 6 pt gap.
+- Card height: 46.
+- Horizontal card padding: 8.
 - Action title: 13 pt Bold.
 - Hint: 10.5 pt Regular.
-- Number keycap: 24 × 24.
+- Number keycap: 20 × 20.
 - No leading icon or face. Keep the text edge aligned and let the title carry recognition.
 - Translation cards use a delicate border inspired by the target language: blue/yellow for Ukrainian, soft white/red for Polish, blue/soft white/red for French, and blue/red for English.
 - Slack style uses a quiet cyan/yellow/red/green border. Make formal uses the neutral system treatment.
@@ -507,13 +507,13 @@ Option + Command + Z is a dedicated read-only translator. It never replaces the 
 
 | State | Size |
 |---|---:|
-| Initial chooser | 440 × 250 |
-| Loading or success | 440 × 158 |
-| Loaded | 440 × 360 |
-| Pinned | 440 × 560 |
-| Limit | 420 × 220 |
+| Initial chooser | 360 × 185 |
+| Loading or success | 400 × 150 |
+| Loaded | 400 × 340 |
+| Pinned | 400 × 560 |
+| Limit | 380 × 200 |
 | Subscription activation | 420 × 190 |
-| Failure | 420 × 220 |
+| Failure | 380 × 200 |
 
 - Entrance: 150 ms alpha fade; 80 ms with Reduce Motion.
 - State resize: 180 ms ease out with the top edge fixed.
@@ -522,7 +522,7 @@ Option + Command + Z is a dedicated read-only translator. It never replaces the 
 
 ### Header
 
-- Height: 48.
+- Height: 42.
 - Qwixit mark: 20 × 20.
 - Awaiting choice title: `Translate to…`, 12 pt Semibold Sans.
 - Result header: source code, arrow, then `UA PL FR EN` as compact text buttons. Both compact buttons and chooser cards use the same target-language accent borders as Actions.
@@ -530,14 +530,14 @@ Option + Command + Z is a dedicated read-only translator. It never replaces the 
 
 ### Initial chooser
 
-- Use a 2 × 2 grid with 8 pt gaps and 12 pt outer padding.
+- Use a 2 × 2 grid with 4 pt gaps and 8 pt outer padding.
 - Languages, in order: Українська, Polski, Français, English.
-- Language card: 62 pt high, radius 10, horizontal padding 12.
+- Language card: 44 pt high, radius 7, horizontal padding 8.
 - Native language name: 13 pt Bold Sans.
 - English description: 10 pt Regular Sans. The remembered target adds `· last used`.
-- Numeric keycap: 24 × 24, radius 6, 9 pt Bold Mono.
+- Numeric keycap: 20 × 20, radius 5, 9 pt Bold Mono.
 - Selected card: violet fill at 7% and 1.5 pt violet border.
-- Footer: 40 pt. Left shows source word count. Right shows `1–4 or ↵ to translate` and `Esc`.
+- Footer: 32 pt. Left shows source word count. Right shows `1–4 or ↵ to translate` and `Esc`.
 - Clicking a card or pressing 1–4 starts translation immediately.
 
 ### Translation result
@@ -637,7 +637,7 @@ Guide copy must clearly say `PRESS ENTER TO CONTINUE` whenever Return advances t
 - Selected sample: `yo can u send me the file asap pls`.
 - User presses Option + Command + A once.
 - Open the onboarding palette immediately.
-- The palette is **500 × 270** and uses the same large cards as the live Actions surface.
+- The palette is **440 × 190** and uses the same compact cards as the live Actions surface.
 - Choices: two useful translation targets, Slack style, and Make formal.
 - Arrow keys move selection; Return chooses; 1–4 chooses directly; Escape closes.
 - Show processing and type the chosen result.
@@ -723,6 +723,8 @@ Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have 
 
 - Width: **318**.
 - Background: `canvas`.
+- Wrapper: `QwixitControlShape` with a 16 pt chamfer on the top-left and bottom-right corners, plus a 1 pt `line` stroke; do not use a rounded outer container.
+- AppKit host: borderless, nonactivating panel with a native shadow; do not expose the system popover bubble or chevron.
 - Utility bar: 28 pt, horizontal padding 12, version left and cyan `Cloud` right.
 - Brand header: 68 pt, horizontal padding 14, lockup 108 × 34.
 - Show the main shortcut badge and compact access badge.

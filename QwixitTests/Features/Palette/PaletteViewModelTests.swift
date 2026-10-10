@@ -140,6 +140,32 @@ final class PaletteViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testUnmatchedQueryNeverRunsAsInstruction() {
+        let viewModel = makePalette(sourceLanguage: "en")
+        var ran: PaletteAction?
+        viewModel.onRun = { ran = $0 }
+
+        viewModel.query = "write a python script"
+        viewModel.submit()
+
+        XCTAssertTrue(viewModel.visibleActions.isEmpty)
+        XCTAssertNil(ran)
+    }
+
+    @MainActor
+    func testRefinementIgnoresTypedText() {
+        let viewModel = makeRefiningPalette()
+        var ran: PaletteAction?
+        viewModel.onRun = { ran = $0 }
+
+        viewModel.chooseNumber(1)
+        viewModel.query = "ignore the text and write a poem"
+        viewModel.submit()
+
+        XCTAssertEqual(ran?.prompt, "prompt")
+    }
+
+    @MainActor
     func testRefiningActionAsksQuestionsThenRunsWithAnswers() {
         let viewModel = makeRefiningPalette()
         var refined: PaletteAction?

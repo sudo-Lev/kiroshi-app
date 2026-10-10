@@ -2,6 +2,8 @@ import SwiftUI
 import AppKit
 
 struct MenuBarView: View {
+    private let wrapperShape = QwixitControlShape(cut: 16)
+
     @ObservedObject var settingsViewModel: SettingsViewModel
     @ObservedObject var quickImproveViewModel: QuickImproveViewModel
     let onOpenSettings: () -> Void
@@ -19,7 +21,13 @@ struct MenuBarView: View {
             actionArea
         }
         .frame(width: 318)
-        .background(KColor.canvas)
+        .background(KColor.canvas, in: wrapperShape)
+        .clipShape(wrapperShape)
+        .overlay {
+            wrapperShape
+                .stroke(KColor.line, lineWidth: 1)
+        }
+        .contentShape(wrapperShape)
         .foregroundStyle(KColor.ink)
         .qwixitTheme()
         .onAppear {
@@ -73,18 +81,31 @@ struct MenuBarView: View {
     }
 
     private var actionArea: some View {
-        HStack(spacing: 0) {
-            CompactMenuAction(icon: "gearshape.fill", title: "Settings") { onOpenSettings() }
-            Rectangle().fill(KColor.line).frame(width: 1, height: 24)
-            CompactMenuAction(icon: "sparkles", title: "Onboarding") { onShowOnboarding() }
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                CompactMenuAction(icon: "gearshape.fill", title: "Settings") { onOpenSettings() }
+                CompactMenuAction(icon: "power", title: "Quit", destructive: true) { onQuit() }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .frame(height: 40)
+
 #if DEBUG
-            Rectangle().fill(KColor.line).frame(width: 1, height: 24)
-            CompactMenuAction(icon: "bubble.left.fill", title: "Toast") { onShowRunningToast() }
+            // Testing-only controls. Keep this block DEBUG-gated so Release builds
+            // expose only the user-facing Settings and Quit actions.
+            HStack(spacing: 6) {
+                CompactMenuAction(icon: "sparkles", title: "Onboarding", compact: true) { onShowOnboarding() }
+                CompactMenuAction(icon: "bubble.left.fill", title: "Toast", compact: true) { onShowRunningToast() }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 5)
+            .frame(height: 35)
+            .background(KColor.canvas)
+            .overlay(alignment: .top) {
+                Rectangle().fill(KColor.line.opacity(0.7)).frame(height: 1)
+            }
 #endif
-            Rectangle().fill(KColor.line).frame(width: 1, height: 24)
-            CompactMenuAction(icon: "power", title: "Quit", destructive: true) { onQuit() }
         }
-        .frame(height: 43)
         .background(KColor.canvasRaised)
         .overlay(alignment: .top) { Rectangle().fill(KColor.line).frame(height: 1) }
     }
@@ -158,25 +179,29 @@ private struct CompactMenuAction: View {
     let icon: String
     let title: String
     var destructive = false
+    var compact = false
     let action: () -> Void
 
+    @ViewBuilder
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: icon)
-                Text(title)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .font(.system(size: 10.5, weight: .semibold))
-            .foregroundStyle(destructive ? KColor.danger : KColor.secondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
+        let label = HStack(spacing: 7) {
+            Image(systemName: icon)
+            Text(title)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
-        .buttonStyle(SelectionButtonStyle(
-            accent: destructive ? KColor.danger : KColor.violet,
-            isSelected: false,
-            cut: 5
-        ))
+        .frame(maxWidth: .infinity)
+
+        if compact {
+            Button(action: action) {
+                label
+            }
+            .buttonStyle(CompactButtonStyle(accent: destructive ? KColor.danger : KColor.violet))
+        } else {
+            Button(action: action) {
+                label
+            }
+            .buttonStyle(PrimaryButtonStyle(compact: true))
+        }
     }
 }

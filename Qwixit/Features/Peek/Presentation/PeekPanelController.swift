@@ -147,13 +147,13 @@ final class PeekPanelController {
     }
 
     private func preferredSize(for state: PeekLoadState) -> NSSize {
-        if viewModel.isPinned { return NSSize(width: 440, height: 560) }
+        if viewModel.isPinned { return NSSize(width: 400, height: 560) }
         return switch state {
-        case .idle: NSSize(width: 440, height: 250)
-        case .loading, .success: NSSize(width: 440, height: 158)
-        case .loaded: NSSize(width: 440, height: 360)
-        case .limitReached: NSSize(width: 420, height: 220)
-        case .failed: NSSize(width: 420, height: 220)
+        case .idle: NSSize(width: 360, height: 185)
+        case .loading, .success: NSSize(width: 400, height: 150)
+        case .loaded: NSSize(width: 400, height: 340)
+        case .limitReached: NSSize(width: 380, height: 200)
+        case .failed: NSSize(width: 380, height: 200)
         }
     }
 

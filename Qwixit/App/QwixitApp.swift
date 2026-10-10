@@ -67,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let singleInstanceCoordinator = SingleInstanceCoordinator()
     private let runningToast = RunningToastController()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    private let menuPopover = NSPopover()
+    private let menuPopover = MenuBarPopoverController()
     private var onboardingWindowController: OnboardingWindowController?
     private lazy var settingsWindowController = SettingsWindowController(
         viewModel: container.settingsViewModel,
@@ -208,25 +208,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.target = self
         button.action = #selector(toggleMenuPopover(_:))
 
-        menuPopover.behavior = .transient
-        menuPopover.animates = true
-        menuPopover.contentSize = NSSize(width: 318, height: 360)
-        menuPopover.contentViewController = NSHostingController(rootView: MenuBarView(
+        menuPopover.setContentView(NSHostingView(rootView: MenuBarView(
             settingsViewModel: container.settingsViewModel,
             quickImproveViewModel: container.quickImproveViewModel,
-            onOpenSettings: { [weak self] in self?.menuPopover.performClose(nil); self?.showSettings() },
-            onShowOnboarding: { [weak self] in self?.menuPopover.performClose(nil); self?.showOnboardingReplay() },
-            onShowRunningToast: { [weak self] in self?.menuPopover.performClose(nil); self?.showRunningToast() },
+            onOpenSettings: { [weak self] in self?.menuPopover.close(); self?.showSettings() },
+            onShowOnboarding: { [weak self] in self?.menuPopover.close(); self?.showOnboardingReplay() },
+            onShowRunningToast: { [weak self] in self?.menuPopover.close(); self?.showRunningToast() },
             onQuit: { NSApp.terminate(nil) }
-        ))
+        )))
     }
 
     @objc private func toggleMenuPopover(_ sender: Any?) {
         runningToast.statusItemClicked()
         if menuPopover.isShown {
-            menuPopover.performClose(sender)
+            menuPopover.close()
         } else if let button = statusItem.button {
-            menuPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            menuPopover.show(relativeTo: button)
         }
     }
 
@@ -257,6 +254,113 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         animation.keyTimes = [0, 0.5, 1]
         animation.duration = 0.4
         button.layer?.add(animation, forKey: "qwixit.runningPulse")
+    }
+}
+
+@MainActor
+private final class MenuBarPopoverController: NSObject {
+    private let panel: MenuBarPopoverPanel
+    private var globalMouseMonitor: Any?
+    private var localMouseMonitor: Any?
+
+    var isShown: Bool { panel.isVisible }
+
+    override init() {
+        panel = MenuBarPopoverPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 318, height: 1),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        super.init()
+
+        panel.isFloatingPanel = true
+        panel.level = .popUpMenu
+        // The app is an accessory process, so it remains inactive when the
+        // status item is clicked. Closing on deactivation would hide the panel
+        // immediately after it is ordered front; the mouse monitors below keep
+        // the transient behavior instead.
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.onCancel = { [weak self] in self?.close() }
+    }
+
+    deinit {
+        if let globalMouseMonitor { NSEvent.removeMonitor(globalMouseMonitor) }
+        if let localMouseMonitor { NSEvent.removeMonitor(localMouseMonitor) }
+    }
+
+    func setContentView(_ contentView: NSView) {
+        contentView.wantsLayer = true
+        contentView.layer?.backgroundColor = NSColor.clear.cgColor
+        panel.contentView = contentView
+        contentView.frame = NSRect(x: 0, y: 0, width: 318, height: 1)
+        contentView.layoutSubtreeIfNeeded()
+
+        let fittingSize = contentView.fittingSize
+        panel.setContentSize(NSSize(
+            width: 318,
+            height: max(1, fittingSize.height)
+        ))
+    }
+
+    func show(relativeTo button: NSStatusBarButton) {
+        guard let buttonWindow = button.window else { return }
+
+        let buttonRect = buttonWindow.convertToScreen(
+            button.convert(button.bounds, to: nil)
+        )
+        var visibleFrame = NSScreen.main?.visibleFrame
+        let buttonCenter = NSPoint(x: buttonRect.midX, y: buttonRect.midY)
+        for screen in NSScreen.screens where screen.frame.contains(buttonCenter) {
+            visibleFrame = screen.visibleFrame
+            break
+        }
+        guard let visibleFrame else { return }
+
+        let panelSize = panel.frame.size
+        let x = min(
+            max(buttonRect.midX - panelSize.width / 2, visibleFrame.minX + 8),
+            visibleFrame.maxX - panelSize.width - 8
+        )
+        let y = min(
+            max(buttonRect.minY - panelSize.height - 8, visibleFrame.minY + 8),
+            visibleFrame.maxY - panelSize.height - 8
+        )
+
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        installMouseMonitorsIfNeeded()
+        panel.orderFrontRegardless()
+    }
+
+    func close() {
+        panel.orderOut(nil)
+    }
+
+    private func installMouseMonitorsIfNeeded() {
+        guard globalMouseMonitor == nil else { return }
+
+        let events: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
+            guard let self, self.isShown, !self.panel.frame.contains(NSEvent.mouseLocation) else { return }
+            self.close()
+        }
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
+            guard let self, self.isShown, !self.panel.frame.contains(NSEvent.mouseLocation) else { return event }
+            self.close()
+            return event
+        }
+    }
+}
+
+private final class MenuBarPopoverPanel: NSPanel {
+    var onCancel: (() -> Void)?
+
+    override func cancelOperation(_ sender: Any?) {
+        onCancel?()
     }
 }
 
