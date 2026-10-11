@@ -68,8 +68,8 @@ AppKit objects owning windows or panels end in `WindowController` or `PanelContr
 2. `QuickImproveViewModel` verifies Accessibility access and captures the selected text and its screen bounds.
 3. `TextImprovementService` sends a conservative correction request through `OpenAIClient`.
 4. The Worker atomically authorizes usage before proxying the request with server-controlled model policy and `store: false`.
-5. Qwixit restores focus and replaces the selection through Accessibility, using the clipboard fallback only when necessary.
-6. The feedback controller reports processing, success, limit, permission, connectivity, or unchanged-text failure.
+5. In the default mode, Qwixit restores focus and replaces the selection through Accessibility, using the clipboard fallback only when necessary. With **Review before applying** enabled, it keeps a transient selection snapshot and proposed output in memory, shows an anchored review panel, and runs the same replacement path only after the user applies it.
+6. The feedback controller reports processing, success, limit, permission, connectivity, or unchanged-text failure. Esc, Keep original, or a failed replacement leaves the source text unchanged.
 
 The original text must remain unchanged whenever capture, authorization, model output, or replacement fails.
 

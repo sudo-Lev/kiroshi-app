@@ -11,6 +11,25 @@ enum AppPhase: Equatable {
     case error(String)
 }
 
+@MainActor
+protocol ReviewPresenting: AnyObject {
+    func show(
+        original: String,
+        proposed: String,
+        anchor accessibilityBounds: CGRect?,
+        fallbackPoint: CGPoint?,
+        onApply: @escaping () -> Void,
+        onCancel: @escaping () -> Void
+    )
+    func hide()
+}
+
+protocol SelectionSnapshotProviding: AnyObject {
+    func captureSelection() async -> TextSelectionSnapshot?
+    func replaceSelection(_ snapshot: TextSelectionSnapshot, with replacement: String) async -> Bool
+    func restoreFocus(_ snapshot: TextSelectionSnapshot)
+}
+
 protocol AccessibilityServicing: AnyObject {
     var isTrusted: Bool { get }
     func requestPermission()

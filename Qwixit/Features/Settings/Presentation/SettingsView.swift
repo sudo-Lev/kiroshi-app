@@ -98,6 +98,18 @@ struct SettingsView: View {
             rowDivider
 
             SettingRow(
+                icon: "eye.fill",
+                title: "Review before applying",
+                detail: "Show the proposed fix before changing selected text."
+            ) {
+                Toggle("Review before applying", isOn: $viewModel.reviewBeforeApplying)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+
+            rowDivider
+
+            SettingRow(
                 icon: "command.square.fill",
                 title: "Open actions",
                 detail: viewModel.actionHotkeyConflict

@@ -37,7 +37,7 @@ The visual character combines:
 ### Nonnegotiable product rules
 
 - The main hotkey is **Option + Command + X**.
-- One press fixes and replaces selected text.
+- One press fixes and replaces selected text by default. An optional Review before applying mode can show the proposed result first and wait for explicit Apply.
 - **Option + Command + A** opens the action palette.
 - **Option + Command + Z** opens Peek.
 - The action palette and the focused translator are intentionally separate surfaces. Preserve their distinct behavior.
@@ -407,7 +407,7 @@ The one press fix flow uses a compact processing/success/error HUD beside the se
 - Tone: danger.
 - Badge: `ERR`.
 - Detail: `TEXT UNCHANGED`.
-- Choose the headline from the cause: `NOT REPLACED`, `EMPTY REPLY`, `SERVICE ERROR`, or `FAILED`.
+- Choose the headline from the cause: `NOT REPLACED`, `EMPTY REPLY`, `BAD REPLY`, `SERVICE ERROR`, or `NOT COMPLETED`.
 - Typical duration: 4 seconds.
 
 ### Other compact notices
@@ -421,6 +421,18 @@ Permission, no selection, subscription sync, and offline states use a standard c
 - window sizes: no selection 306 × 82, permission/subscription/offline 326 × 86.
 
 No selection hides after 2.4 seconds. Permission and ordinary errors hide after 4 seconds. Offline and limit states may remain until explicitly dismissed or superseded in the one press flow.
+
+## 9.1 Fix review panel
+
+When Review before applying is enabled, the processing HUD transitions to an interactive review panel without changing the source selection.
+
+- The panel is a non-activating keyboard-capable surface anchored beside the selection.
+- Show `FIX · REVIEW` and `TEXT UNCHANGED` in the header.
+- Present one selectable, scrollable suggested-text view with additions and removals inline; expose the untouched original through a small `Show original` toggle instead of showing two full blocks at once.
+- Highlight additions and removals with both color and text decoration; never rely on color alone.
+- `Return` applies the suggestion. `Esc`, Keep original, or clicking outside dismisses it without changing the source.
+- Apply restores the captured focus and runs the same Accessibility/clipboard replacement path as the default Fix flow; it reports an error only when that replacement operation fails.
+- The original and suggested text are transient and must never be persisted or logged.
 
 ### Limit card
 

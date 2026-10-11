@@ -195,24 +195,61 @@ private struct QwixitPanelModifier: ViewModifier {
 }
 
 enum QwixitErrorCopy {
-    static func title(for message: String) -> String {
+    enum Kind {
+        case replacement
+        case emptyReply
+        case unreadableReply
+        case permission
+        case service
+        case unknown
+    }
+
+    static func kind(for message: String) -> Kind {
         let normalized = message.lowercased()
         if normalized.contains("replace") || normalized.contains("text change") {
-            return "Couldn’t replace the text"
+            return .replacement
         }
         if normalized.contains("no text") || normalized.contains("empty") {
-            return "No text came back"
+            return .emptyReply
         }
         if normalized.contains("unreadable") || normalized.contains("decode") {
-            return "The reply couldn’t be read"
+            return .unreadableReply
         }
         if normalized.contains("permission") || normalized.contains("accessibility") {
-            return "Tokiri needs access"
+            return .permission
         }
         if normalized.contains("service") || normalized.contains("server") || normalized.contains("status") {
-            return "The service couldn’t finish that"
+            return .service
         }
-        return "Couldn’t finish that"
+        return .unknown
+    }
+
+    static func title(for message: String) -> String {
+        switch kind(for: message) {
+        case .replacement:
+            return "Couldn’t replace the text"
+        case .emptyReply:
+            return "No text came back"
+        case .unreadableReply:
+            return "The reply couldn’t be read"
+        case .permission:
+            return "Tokiri needs access"
+        case .service:
+            return "The service couldn’t finish that"
+        case .unknown:
+            return "Couldn’t finish that"
+        }
+    }
+
+    static func headline(for message: String) -> String {
+        switch kind(for: message) {
+        case .replacement: "NOT REPLACED"
+        case .emptyReply: "EMPTY REPLY"
+        case .unreadableReply: "BAD REPLY"
+        case .permission: "ACCESS NEEDED"
+        case .service: "SERVICE ERROR"
+        case .unknown: "NOT COMPLETED"
+        }
     }
 }
 

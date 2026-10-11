@@ -2,6 +2,7 @@ import Foundation
 
 enum AppPreferenceKey {
     static let showSuccess = "showSuccess"
+    static let reviewBeforeApplying = "reviewBeforeApplying"
     static let animationsEnabled = "animationsEnabled"
     static let priorityProcessing = "priorityProcessing"
     static let appearance = "appearance"
@@ -20,7 +21,7 @@ enum AppPreferenceKey {
     /// Every app-owned key; used when carrying settings over from the pre-rename build.
     static var all: [String] {
         var keys = [
-            showSuccess, animationsEnabled, priorityProcessing, appearance, hasCompletedOnboarding,
+            showSuccess, reviewBeforeApplying, animationsEnabled, priorityProcessing, appearance, hasCompletedOnboarding,
             mainHotkeyKeyCode, mainHotkeyModifiers, quotaRemaining, quotaPlan,
             quotaPeriod
         ] + PeekPreferenceKey.all
@@ -85,6 +86,7 @@ struct AppPreferences {
     }
 
     var showSuccess: Bool { bool(for: AppPreferenceKey.showSuccess, default: true) }
+    var reviewBeforeApplying: Bool { bool(for: AppPreferenceKey.reviewBeforeApplying, default: false) }
     var animationsEnabled: Bool { bool(for: AppPreferenceKey.animationsEnabled, default: true) }
     var appearance: AppAppearance {
         defaults.string(forKey: AppPreferenceKey.appearance)

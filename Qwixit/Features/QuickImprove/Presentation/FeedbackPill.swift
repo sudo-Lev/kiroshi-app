@@ -445,11 +445,7 @@ struct FeedbackPill: View {
 
     private var statusHeadline: String {
         guard case .error(let message) = phase else { return "READY" }
-        let normalized = message.lowercased()
-        if normalized.contains("replace") || normalized.contains("text change") { return "NOT REPLACED" }
-        if normalized.contains("empty") || normalized.contains("no text") { return "EMPTY REPLY" }
-        if normalized.contains("service") || normalized.contains("server") { return "SERVICE ERROR" }
-        return "FAILED"
+        return QwixitErrorCopy.headline(for: message)
     }
 
     private var statusDetail: String {

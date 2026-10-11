@@ -16,6 +16,9 @@ final class SettingsViewModel: ObservableObject {
     @Published var showSuccess: Bool {
         didSet { defaults.set(showSuccess, forKey: AppPreferenceKey.showSuccess) }
     }
+    @Published var reviewBeforeApplying: Bool {
+        didSet { defaults.set(reviewBeforeApplying, forKey: AppPreferenceKey.reviewBeforeApplying) }
+    }
     @Published var animationsEnabled: Bool {
         didSet { defaults.set(animationsEnabled, forKey: AppPreferenceKey.animationsEnabled) }
     }
@@ -80,6 +83,7 @@ final class SettingsViewModel: ObservableObject {
         self.defaults = defaults
         accessibilityGranted = accessibility.isTrusted
         showSuccess = defaults.object(forKey: AppPreferenceKey.showSuccess) as? Bool ?? true
+        reviewBeforeApplying = AppPreferences(defaults: defaults).reviewBeforeApplying
         animationsEnabled = defaults.object(forKey: AppPreferenceKey.animationsEnabled) as? Bool ?? true
         priorityProcessing = defaults.bool(forKey: AppPreferenceKey.priorityProcessing)
         let preferences = AppPreferences(defaults: defaults)

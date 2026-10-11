@@ -27,6 +27,7 @@ final class AppContainer {
     let settingsViewModel: SettingsViewModel
     let quickImproveViewModel: QuickImproveViewModel
     let feedback = FeedbackWindowController()
+    let review = ReviewPanelController()
     let peekHotkey = PeekHotkey()
     let fixHotkey = GlobalHotKey()
     let actionHotkey = ActionHotkey()
@@ -55,7 +56,9 @@ final class AppContainer {
         quickImproveViewModel = QuickImproveViewModel(
             accessibility: accessibility,
             improver: improver,
-            feedback: feedback
+            feedback: feedback,
+            review: review,
+            selectionSnapshots: accessibility
         )
     }
 }

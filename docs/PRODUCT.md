@@ -40,6 +40,8 @@ Fix replaces selected text in place. For the current product stage it should:
 - avoid adding facts, changing claims, or turning the text into generic AI prose;
 - complete with minimal interruption and no trip to another app.
 
+The default Fix behavior remains immediate replacement. An optional **Review before applying** setting can keep the original selection unchanged, show the proposed correction with a local diff, and wait for an explicit Apply action.
+
 The long-term aspiration is a highly intelligent assistant that understands what the user meant. Until quality can be validated confidently, conservative correction is preferred over ambitious rewriting.
 
 ### 2. Actions — explicit transformations

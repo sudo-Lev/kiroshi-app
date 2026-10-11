@@ -1,7 +1,44 @@
 import AppKit
 import ApplicationServices
 
-final class AccessibilityService: AccessibilityServicing {
+final class TextSelectionSnapshot {
+    let text: String
+    let bounds: CGRect?
+    let fallbackPoint: CGPoint
+
+    fileprivate let element: AXUIElement?
+    fileprivate let focusElement: AXUIElement?
+    fileprivate let range: CFRange?
+
+    fileprivate init(
+        text: String,
+        bounds: CGRect?,
+        fallbackPoint: CGPoint,
+        element: AXUIElement?,
+        focusElement: AXUIElement?,
+        range: CFRange?
+    ) {
+        self.text = text
+        self.bounds = bounds
+        self.fallbackPoint = fallbackPoint
+        self.element = element
+        self.focusElement = focusElement
+        self.range = range
+    }
+
+    convenience init(text: String, bounds: CGRect? = nil, fallbackPoint: CGPoint = .zero) {
+        self.init(
+            text: text,
+            bounds: bounds,
+            fallbackPoint: fallbackPoint,
+            element: nil,
+            focusElement: nil,
+            range: nil
+        )
+    }
+}
+
+final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProviding {
     private struct PasteboardSnapshot {
         let items: [[NSPasteboard.PasteboardType: Data]]
 
@@ -47,6 +84,67 @@ final class AccessibilityService: AccessibilityServicing {
         return await selectedTextUsingCopy()
     }
 
+    func captureSelection() async -> TextSelectionSnapshot? {
+        let fallbackPoint = NSEvent.mouseLocation
+        let focusElement = focusedElement()
+
+        for element in accessibilityCandidates() {
+            let range = selectedRange(of: element)
+            let bounds = range.flatMap { selectionBounds(for: element, range: $0) }
+            if let text = selectedText(in: element),
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return TextSelectionSnapshot(
+                    text: text,
+                    bounds: bounds,
+                    fallbackPoint: fallbackPoint,
+                    element: element,
+                    focusElement: focusElement,
+                    range: range
+                )
+            }
+        }
+
+        guard let text = await selectedTextUsingCopy(),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let element = focusedElement()
+        return TextSelectionSnapshot(
+            text: text,
+            bounds: nil,
+            fallbackPoint: fallbackPoint,
+            element: element,
+            focusElement: focusElement ?? element,
+            range: element.flatMap(selectedRange(of:))
+        )
+    }
+
+    func replaceSelection(_ snapshot: TextSelectionSnapshot, with replacement: String) async -> Bool {
+        restoreFocus(snapshot)
+        if let element = snapshot.element, isInsideWebArea(element) {
+            return await replaceUsingPasteboard(replacement)
+        }
+
+        if let element = snapshot.element,
+           var range = snapshot.range,
+           let rangeValue = AXValueCreate(.cfRange, &range) {
+            _ = AXUIElementSetAttributeValue(
+                element,
+                kAXSelectedTextRangeAttribute as CFString,
+                rangeValue
+            )
+        }
+
+        if let element = snapshot.element,
+           AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, replacement as CFTypeRef) == .success {
+            return true
+        }
+        return await replaceUsingPasteboard(replacement)
+    }
+
+    func restoreFocus(_ snapshot: TextSelectionSnapshot) {
+        guard let focusElement = snapshot.focusElement ?? snapshot.element else { return }
+        AXUIElementSetAttributeValue(focusElement, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    }
+
     func selectionBounds() -> CGRect? {
         for element in accessibilityCandidates() {
             if let bounds = selectedTextBounds(for: element) { return bounds }
@@ -62,6 +160,31 @@ final class AccessibilityService: AccessibilityServicing {
 
     func fallbackPoint() -> CGPoint {
         NSEvent.mouseLocation
+    }
+
+    private func selectedText(in element: AXUIElement) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &value) == .success else { return nil }
+        return value as? String
+    }
+
+    private func selectedRange(of element: AXUIElement) -> CFRange? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var range = CFRange()
+        return AXValueGetValue(value as! AXValue, .cfRange, &range) && range.length > 0 ? range : nil
+    }
+
+    private func selectionBounds(for element: AXUIElement, range: CFRange) -> CGRect? {
+        var mutableRange = range
+        guard let rangeValue = AXValueCreate(.cfRange, &mutableRange) else { return nil }
+        return parameterizedBounds(
+            for: element,
+            attribute: kAXBoundsForRangeParameterizedAttribute as String,
+            range: rangeValue
+        )
     }
 
     @discardableResult
