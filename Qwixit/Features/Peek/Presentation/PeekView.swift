@@ -36,8 +36,8 @@ struct PeekView: View {
 
     private var header: some View {
         HStack(spacing: 7) {
-            QwixitMark(size: 20, style: .automatic)
-                .frame(width: 20)
+            QwixitLockup()
+                .frame(width: 86, height: 34, alignment: .leading)
             if viewModel.isAwaitingChoice {
                 Text("Translate to…")
                     .font(.system(size: 12, weight: .semibold))
@@ -179,7 +179,7 @@ struct PeekView: View {
                 Text("Ready for more?")
                     .font(.system(size: 16, weight: .bold))
             }
-            Text("You’ve used 30 free Qwixes this month.")
+            Text("You’ve used 30 free actions this month.")
                 .contentFont()
                 .foregroundStyle(PeekPalette.muted)
             Button {

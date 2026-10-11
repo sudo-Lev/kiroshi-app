@@ -53,6 +53,7 @@ final class SettingsViewModel: ObservableObject {
 
     var onPeekShortcutChanged: ((String) -> Void)?
     var onMainHotkeyChanged: ((HotkeyBinding) -> Void)?
+    var onAppearanceChanged: ((AppAppearance) -> Void)?
 
     var hasCompletedOnboarding: Bool {
         defaults.bool(forKey: AppPreferenceKey.hasCompletedOnboarding)

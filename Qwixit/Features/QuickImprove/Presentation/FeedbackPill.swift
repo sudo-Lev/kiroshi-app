@@ -289,7 +289,8 @@ struct FeedbackPill: View {
 
             switch phase {
             case .processing:
-                QwixitMark(size: 21, animated: !reduceMotion)
+                QwixitLockup()
+                    .frame(width: 28, height: 12)
             case .success:
                 Image(systemName: "checkmark")
                     .font(.system(size: 12, weight: .bold))
@@ -311,7 +312,8 @@ struct FeedbackPill: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(tone)
             default:
-                QwixitMark(size: 20)
+                QwixitLockup()
+                    .frame(width: 28, height: 12)
             }
         }
         .frame(width: 32, height: 32)
@@ -331,7 +333,7 @@ struct FeedbackPill: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Ready for more?")
                         .font(.system(size: 16, weight: .bold))
-                    Text("You’ve used 30 free Qwixes this month.")
+                    Text("You’ve used 30 free actions this month.")
                         .font(.system(size: 11))
                         .foregroundStyle(KColor.secondary)
                 }
@@ -373,7 +375,7 @@ struct FeedbackPill: View {
     private var title: String {
         switch phase {
         case .ready: "Ready"
-        case .processing: "Qwixing your text…"
+        case .processing: "Sharpening your text…"
         case .success: "Text replaced"
         case .noSelection: "Select some text first"
         case .permissionDenied: "Accessibility access needed"
@@ -386,7 +388,7 @@ struct FeedbackPill: View {
     private var detail: String? {
         switch phase {
         case .noSelection: "Highlight text in any app, then try again."
-        case .permissionDenied: "Allow Qwixit in System Settings to continue."
+        case .permissionDenied: "Allow Tokiri in System Settings to continue."
         case .offline: "Your text is unchanged. Try again when you’re back online."
         case .error(let message): message
         default: nil

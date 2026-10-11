@@ -1,5 +1,5 @@
 import XCTest
-@testable import Qwixit
+@testable import Tokiri
 
 @MainActor
 final class OnboardingViewModelTests: XCTestCase {

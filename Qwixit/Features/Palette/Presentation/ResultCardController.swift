@@ -74,7 +74,7 @@ private struct ResultCard: View {
                 if state.isLoading {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small).tint(KColor.magenta)
-                        Text("Qwixing…").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(0.35)
+                        Text("Sharpening…").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(0.35)
                     }
                     .padding(18)
                 }

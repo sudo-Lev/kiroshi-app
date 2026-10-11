@@ -1,5 +1,5 @@
 import XCTest
-@testable import Qwixit
+@testable import Tokiri
 
 final class PaletteViewModelTests: XCTestCase {
     private let actions = [

@@ -1,6 +1,6 @@
 {
   "images" : [
-    { "filename" : "qwixit-lockup-dark.svg", "idiom" : "universal", "scale" : "1x" },
+    { "filename" : "tokiri-lockup-integrated-dark.svg", "idiom" : "universal", "scale" : "1x" },
     { "idiom" : "universal", "scale" : "2x" },
     { "idiom" : "universal", "scale" : "3x" }
   ],

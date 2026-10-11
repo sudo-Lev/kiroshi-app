@@ -207,7 +207,7 @@ enum QwixitErrorCopy {
             return "The reply couldn’t be read"
         }
         if normalized.contains("permission") || normalized.contains("accessibility") {
-            return "Qwixit needs access"
+            return "Tokiri needs access"
         }
         if normalized.contains("service") || normalized.contains("server") || normalized.contains("status") {
             return "The service couldn’t finish that"
@@ -397,7 +397,7 @@ struct QwixitLockup: View {
         Image(assetName)
             .resizable()
             .scaledToFit()
-            .accessibilityLabel("Qwixit")
+            .accessibilityLabel("Tokiri")
     }
 
     private var assetName: String {
@@ -406,6 +406,18 @@ struct QwixitLockup: View {
         case .light: "QwixitLockupLight"
         case .dark: "QwixitLockupDark"
         }
+    }
+}
+
+/// The supplied menu-bar asset is the complete one-color Tokiri lockup.
+/// Keep it as one image so compact surfaces never split the blade from the wordmark.
+struct QwixitMenuBarLogo: View {
+    var body: some View {
+        Image("QwixitMenuBar")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .accessibilityLabel("Tokiri")
     }
 }
 

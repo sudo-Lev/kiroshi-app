@@ -24,7 +24,7 @@ struct PaletteView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            QwixitMark(size: 27, style: .automatic).frame(width: 28)
+            QwixitLockup().frame(width: 92, height: 36, alignment: .leading)
             TextField(placeholder, text: $viewModel.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13, weight: .bold, design: .monospaced))
@@ -218,7 +218,7 @@ struct PaletteView: View {
         )
         .id("palette-refinement-processing")
         .allowsHitTesting(false)
-        .accessibilityLabel("Qwixing. Press Return to skip questions.")
+        .accessibilityLabel("Sharpening. Press Return to skip questions.")
     }
 
     private var footer: some View {

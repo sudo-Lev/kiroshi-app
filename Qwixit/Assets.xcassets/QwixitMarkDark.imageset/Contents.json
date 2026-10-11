@@ -1,6 +1,6 @@
 {
   "images" : [
-    { "filename" : "qwixit-mark-dark.svg", "idiom" : "universal", "scale" : "1x" },
+    { "filename" : "tokiri-mark-glow.svg", "idiom" : "universal", "scale" : "1x" },
     { "idiom" : "universal", "scale" : "2x" },
     { "idiom" : "universal", "scale" : "3x" }
   ],

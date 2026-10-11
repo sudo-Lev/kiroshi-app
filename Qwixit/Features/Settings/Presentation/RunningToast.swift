@@ -178,7 +178,7 @@ final class RunningToastController {
             element: NSApp as Any,
             notification: .announcementRequested,
             userInfo: [
-                NSAccessibility.NotificationUserInfoKey.announcement: "Qwixit is working. Select text anywhere, then press Option Command X to fix, Option Command A for actions, or Option Command Z to peek.",
+                NSAccessibility.NotificationUserInfoKey.announcement: "Tokiri is working. Select text anywhere, then press Option Command X to fix, Option Command A for actions, or Option Command Z to peek.",
                 NSAccessibility.NotificationUserInfoKey.priority: NSAccessibilityPriorityLevel.medium.rawValue
             ]
         )
@@ -205,7 +205,8 @@ struct RunningToastView: View {
             VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top, spacing: 8) {
-                        QwixitMark(size: 20)
+                        QwixitLockup()
+                            .frame(width: 74, height: 29, alignment: .leading)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(state.title)
                                 .font(.system(size: 12.5, weight: .bold))

@@ -11,7 +11,7 @@ enum QwixitAPIError: LocalizedError {
         case .invalidResponse: "The AI service returned an unreadable response. Your text is unchanged."
         case .emptyOutput: "The AI service returned no text. Your text is unchanged."
         case .quotaExceeded: "You’re out of tokens!"
-        case .api(let status, let message): "Qwixit service error \(status): \(message)"
+        case .api(let status, let message): "Tokiri service error \(status): \(message)"
         }
     }
 }

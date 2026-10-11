@@ -36,7 +36,7 @@ export default {
       if (request.method !== "GET") return errorResponse(405, "Method not allowed.", {}, { Allow: "GET" });
       const installationID = url.searchParams.get("installation_id") ?? "";
       if (!INSTALLATION_ID_PATTERN.test(installationID)) {
-        return errorResponse(400, "A valid Qwixit installation identity is required.");
+        return errorResponse(400, "A valid Tokiri installation identity is required.");
       }
       if (!env.USAGE_LEDGER) return errorResponse(500, "Worker usage storage is not configured.");
       return billingStatusResponse(env, installationID);
@@ -61,7 +61,7 @@ export default {
 
     const installationID = request.headers.get("x-qwixit-installation-id") ?? "";
     if (!INSTALLATION_ID_PATTERN.test(installationID)) {
-      return errorResponse(401, "A valid Qwixit installation identity is required.", { code: "invalid_installation" });
+      return errorResponse(401, "A valid Tokiri installation identity is required.", { code: "invalid_installation" });
     }
     if (!env.USAGE_LEDGER) {
       console.error("Missing USAGE_LEDGER Durable Object binding");
@@ -244,7 +244,7 @@ async function handleDevelopmentReset(request, env) {
     return errorResponse(400, "Request body must be valid JSON.");
   }
   if (!INSTALLATION_ID_PATTERN.test(installationID)) {
-    return errorResponse(400, "A valid Qwixit installation identity is required.");
+    return errorResponse(400, "A valid Tokiri installation identity is required.");
   }
   if (!env.USAGE_LEDGER) return errorResponse(500, "Worker usage storage is not configured.");
 
@@ -431,16 +431,16 @@ function constantTimeEqual(left, right) {
 
 function checkoutPage(url) {
   const installationID = url.searchParams.get("installation_id") ?? "";
-  if (!INSTALLATION_ID_PATTERN.test(installationID)) return errorResponse(400, "Open checkout from the Qwixit app.");
+  if (!INSTALLATION_ID_PATTERN.test(installationID)) return errorResponse(400, "Open checkout from the Tokiri app.");
   const successUrl = `${url.origin}/billing/success?installation_id=${encodeURIComponent(installationID)}`;
   const html = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Qwixit Unlimited</title><script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+    <title>Tokiri Unlimited</title><script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
     <style>:root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f3ee;color:#16131f}main{width:min(440px,calc(100% - 40px));padding:32px;border:1px solid #dedbd4;border-radius:18px;background:white;box-shadow:0 18px 60px rgba(17,21,20,.08)}.eyebrow{margin:0 0 10px;color:#6959d9;font:700 12px/1.2 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}h1{margin:0;font-size:32px;letter-spacing:-.04em}.price-row{display:flex;align-items:center;gap:14px;margin:18px 0 4px}.price{margin:0;font-size:28px;font-weight:750}.face{white-space:pre;font:800 15px/1 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:-1.25px 0 #00d8f0,1.25px 0 #ff2d9b}.billing-details{margin:0 0 24px;color:#646b68}button{width:100%;min-height:48px;border:0;border-radius:12px;background:#16131f;color:white;font:inherit;font-weight:700;cursor:pointer}button:disabled{cursor:wait;opacity:.55}button:focus-visible{outline:3px solid #d9ccff;outline-offset:3px}#status{min-height:20px;margin:14px 0 0;color:#646b68;font-size:13px;text-align:center}@media(prefers-reduced-motion:reduce){.face{animation:none}}</style>
   </head>
-  <body><main><p class="eyebrow">Qwixit sandbox</p><h1>Unlimited</h1><div class="price-row"><p class="price">$10 / month</p><span class="face" data-open="[ ¬_¬ ]" data-shut="[ -_- ]">[ ¬_¬ ]</span></div><p class="billing-details">Unlimited AI actions. Cancel anytime. Sandbox test payments only.</p><button id="checkout" disabled>Preparing checkout…</button><p id="status" role="status"></p></main>
+  <body><main><p class="eyebrow">Tokiri sandbox</p><h1>Unlimited</h1><div class="price-row"><p class="price">$10 / month</p><span class="face" data-open="[ ¬_¬ ]" data-shut="[ -_- ]">[ ¬_¬ ]</span></div><p class="billing-details">Unlimited AI actions. Cancel anytime. Sandbox test payments only.</p><button id="checkout" disabled>Preparing checkout…</button><p id="status" role="status"></p></main>
     <script>
       const button=document.getElementById("checkout");const status=document.getElementById("status");
       Paddle.Environment.set("sandbox");
@@ -456,13 +456,13 @@ function checkoutPage(url) {
 
 function checkoutSuccessPage(url) {
   const installationID = url.searchParams.get("installation_id") ?? "";
-  if (!INSTALLATION_ID_PATTERN.test(installationID)) return errorResponse(400, "Open checkout from the Qwixit app.");
+  if (!INSTALLATION_ID_PATTERN.test(installationID)) return errorResponse(400, "Open checkout from the Tokiri app.");
   const statusUrl = `${url.origin}/billing/status?installation_id=${encodeURIComponent(installationID)}`;
   const html = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Activating Unlimited · Qwixit</title>
+    <title>Activating Unlimited · Tokiri</title>
     <style>
       :root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f3ee;color:#16131f}
       body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,#fff 0,#f8f5f0 42%,#f1eee8 100%)}
@@ -475,14 +475,14 @@ function checkoutSuccessPage(url) {
       @media(prefers-reduced-motion:no-preference){.track span{animation:pulse 1.2s ease-in-out infinite}.track span:nth-child(2){animation-delay:.15s}.track span:nth-child(3){animation-delay:.3s}@keyframes pulse{0%,70%,100%{opacity:.28;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}}
     </style>
   </head>
-  <body><main aria-live="polite"><span class="face" id="face">[ @_@ ]</span><h1 id="title">Payment received.</h1><p id="message">Activating Unlimited… keep Qwixit open.</p><div class="track" id="track" aria-hidden="true"><span></span><span></span><span></span></div><button id="retry" hidden>Check again</button></main>
+  <body><main aria-live="polite"><span class="face" id="face">[ @_@ ]</span><h1 id="title">Payment received.</h1><p id="message">Activating Unlimited… keep Tokiri open.</p><div class="track" id="track" aria-hidden="true"><span></span><span></span><span></span></div><button id="retry" hidden>Check again</button></main>
     <script>
       const face=document.getElementById("face"),title=document.getElementById("title"),message=document.getElementById("message"),track=document.getElementById("track"),retry=document.getElementById("retry");
       const statusUrl=${JSON.stringify(statusUrl)};let attempts=0,timer;
-      function showReady(){clearTimeout(timer);document.title="Unlimited is ready · Qwixit";face.textContent="[ ^_- ]";title.textContent="Unlimited is ready.";message.textContent="All actions are unlocked. Go Qwix something.";track.hidden=true;retry.hidden=true}
-      function showDelayed(){face.textContent="[ ?_? ]";title.textContent="Still syncing.";message.textContent="Paddle is taking a little longer. Qwixit will keep checking.";retry.hidden=false}
+      function showReady(){clearTimeout(timer);document.title="Unlimited is ready · Tokiri";face.textContent="[ ^_- ]";title.textContent="Unlimited is ready.";message.textContent="All actions are unlocked. Tokiri is ready.";track.hidden=true;retry.hidden=true}
+      function showDelayed(){face.textContent="[ ?_? ]";title.textContent="Still syncing.";message.textContent="Paddle is taking a little longer. Tokiri will keep checking.";retry.hidden=false}
       async function check(){retry.hidden=true;try{const response=await fetch(statusUrl,{cache:"no-store"});if(response.ok&&(await response.json()).plan==="unlimited"){showReady();return}}catch{}attempts+=1;if(attempts===12)showDelayed();timer=setTimeout(check,attempts<8?1200:attempts<20?2200:5000)}
-      retry.addEventListener("click",()=>{attempts=0;face.textContent="[ @_@ ]";title.textContent="Checking again.";message.textContent="Activating Unlimited… keep Qwixit open.";track.hidden=false;check()});check();
+      retry.addEventListener("click",()=>{attempts=0;face.textContent="[ @_@ ]";title.textContent="Checking again.";message.textContent="Activating Unlimited… keep Tokiri open.";track.hidden=false;check()});check();
       if(!matchMedia("(prefers-reduced-motion: reduce)").matches){setInterval(()=>{if(face.textContent==="[ @_@ ]"){face.textContent="[ -_- ]";setTimeout(()=>{if(face.textContent==="[ -_- ]")face.textContent="[ @_@ ]"},170)}},4200)}
     </script>
   </body>
@@ -491,7 +491,7 @@ function checkoutSuccessPage(url) {
 }
 
 function notFoundPage() {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found · Qwixit</title><style>:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff;background:#100b17}body{margin:0;min-height:100vh;display:grid;place-items:center}main{text-align:center;padding:32px}.face{display:block;margin-bottom:18px;white-space:pre;font:800 34px/1 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:-2.8px 0 #00d8f0,2.8px 0 #ff2d9b}p{margin:0;color:#c9c1d3;font:700 14px/1.5 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}</style></head><body><main><span class="face">[ ?_? ]</span><p>page not found.</p></main></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found · Tokiri</title><style>:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff;background:#100b17}body{margin:0;min-height:100vh;display:grid;place-items:center}main{text-align:center;padding:32px}.face{display:block;margin-bottom:18px;white-space:pre;font:800 34px/1 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:-2.8px 0 #00d8f0,2.8px 0 #ff2d9b}p{margin:0;color:#c9c1d3;font:700 14px/1.5 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}</style></head><body><main><span class="face">[ ?_? ]</span><p>page not found.</p></main></body></html>`;
   return new Response(html, { status: 404, headers: securityHeaders({ "Content-Type": "text/html; charset=utf-8" }) });
 }
 

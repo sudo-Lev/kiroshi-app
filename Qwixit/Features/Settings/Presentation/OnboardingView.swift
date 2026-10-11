@@ -33,7 +33,7 @@ struct OnboardingView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            QwixitLockup().frame(width: 86, height: 24)
+            QwixitLockup().frame(width: 120, height: 46)
             Spacer()
             HStack(spacing: 0) {
                 ForEach(labels.indices, id: \.self) { index in
@@ -53,7 +53,7 @@ struct OnboardingView: View {
                 }
             }
         }
-        .padding(.leading, 78).padding(.trailing, 22).frame(height: 52)
+        .padding(.leading, 42).padding(.trailing, 22).frame(height: 52)
         .background(KColor.canvasRaised).overlay(alignment: .bottom) { Rectangle().fill(KColor.line).frame(height: 1) }
     }
 
@@ -68,11 +68,11 @@ struct OnboardingView: View {
 
     private var welcome: some View {
         VStack(spacing: 16) {
-            QwixitMark(size: 72)
-            Text("Fix selected text. Right where it is.").onboardingTitle(32)
-            Text("Qwixit’s main move works in any app: select text, then press Option + Command + X.")
+            QwixitLockup(style: .light).frame(width: 188, height: 73)
+            Text("Your words. Sharper.").onboardingTitle(32)
+            Text("Select text anywhere, then press a shortcut to sharpen it in place.")
                 .onboardingBody().frame(maxWidth: 570).multilineTextAlignment(.center)
-            welcomeCard("Qwixit", "⌥⌘X", "Fix typos, grammar, and awkward wording without leaving the app you’re in.", KColor.violet)
+            welcomeCard("Fix", "⌥⌘X", "Select. Shortcut. Done. Fix typos, grammar, and awkward wording without leaving the app.", KColor.violet)
                 .frame(width: 430)
         }.padding(.top, 20)
     }
@@ -106,8 +106,8 @@ struct OnboardingView: View {
     private var noAccess: some View {
         VStack(spacing: 18) {
             accessIcon(systemName: "lock.fill", active: false)
-            Text("Qwixit needs Accessibility access.").onboardingTitle(30)
-            Text("This lets Qwixit read and replace selected text only when you use a shortcut.")
+            Text("Tokiri needs Accessibility access.").onboardingTitle(30)
+            Text("This lets Tokiri read and replace selected text only when you use a shortcut.")
                 .onboardingBody().multilineTextAlignment(.center).frame(maxWidth: 500)
             Button { model.requestAccessibility() } label: {
                 HStack(spacing: 9) {
@@ -125,7 +125,7 @@ struct OnboardingView: View {
         VStack(spacing: 18) {
             accessIcon(systemName: "lock.open.fill", active: true)
             Text("Finish in System Settings.").onboardingTitle(30)
-            Text("Turn on Qwixit under Accessibility. We’ll continue automatically when access is ready.")
+            Text("Turn on Tokiri under Accessibility. We’ll continue automatically when access is ready.")
                 .onboardingBody().multilineTextAlignment(.center).frame(maxWidth: 520)
 
             HStack(spacing: 13) {
@@ -133,7 +133,7 @@ struct OnboardingView: View {
                 Image(systemName: "chevron.right")
                 accessPathItem("accessibility", "Accessibility")
                 Image(systemName: "chevron.right")
-                accessPathItem("switch.2", "Qwixit on")
+                accessPathItem("switch.2", "Tokiri on")
             }
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(KColor.secondary)
@@ -259,14 +259,14 @@ struct OnboardingView: View {
         VStack(spacing: 15) {
             QwixitFaceView(face: .ready, size: 22, reduceMotion: reduceMotion, color: KColor.violet)
             Text("You're all set.").onboardingTitle(32)
-            Text("Two ways to use Qwixit in any app.").onboardingBody()
+            Text("Two ways to use Tokiri in any app.").onboardingBody()
             VStack(spacing: 0) {
                 cheatRow("⌥⌘X", "Fix", "Correct selected text in place."); Divider().padding(.leading, 150)
                 cheatRow("⌥⌘A", "Actions", "Rewrite, translate, or change tone.")
             }.frame(width: 520).qwixitPanel()
             HStack(spacing: 12) {
-                HStack(spacing: 8) { Image(systemName: "wifi"); QwixitMark(size: 16, style: .light); Text("9:41") }.font(.system(size: 11, weight: .medium)).foregroundStyle(.white).padding(.horizontal, 12).frame(height: 30).background(KColor.ink).clipShape(Capsule())
-                Text("Qwixit lives in your menu bar — settings and usage are there.").font(.system(size: 12.5)).foregroundStyle(KColor.secondary)
+                HStack(spacing: 8) { Image(systemName: "wifi"); QwixitMenuBarLogo().frame(width: 38, height: 15); Text("9:41") }.font(.system(size: 11, weight: .medium)).foregroundStyle(.white).padding(.horizontal, 12).frame(height: 30).background(KColor.ink).clipShape(Capsule())
+                Text("Tokiri lives in your menu bar — settings and usage are there.").font(.system(size: 12.5)).foregroundStyle(KColor.secondary)
             }
         }.padding(.top, 14)
     }
@@ -295,7 +295,7 @@ struct OnboardingView: View {
         }.padding(.horizontal, 20).frame(height: 60).background(KColor.canvasRaised).overlay(alignment: .top) { Rectangle().fill(KColor.line).frame(height: 1) }
     }
 
-    private var primaryTitle: String { model.step == 0 ? "Get started" : model.step == 4 ? "Start using Qwixit" : "Continue" }
+    private var primaryTitle: String { model.step == 0 ? "Get started" : model.step == 4 ? "Start using Tokiri" : "Continue" }
     private var footerFace: QwixitFace { model.phase == .done || model.step == 4 ? .ready : model.phase == .processing ? .scanning : .hello }
     private var practiceName: String { [2: "Fix", 3: "Actions"][model.step] ?? "" }
     private var practiceTitle: String { [2: "Fix it in place.", 3: "Choose what happens."][model.step] ?? "" }
@@ -314,9 +314,9 @@ struct OnboardingView: View {
     }
     private var guide: String {
         switch (model.step, model.phase) {
-        case (0, _): "Hi! Let's set up Qwixit — it takes about a minute."
+        case (0, _): "Hi! Let's set up Tokiri — it takes about a minute."
         case (1, _): model.isRequestingAccessibility
-            ? "Waiting for Qwixit to be enabled in System Settings."
+            ? "Waiting for Tokiri to be enabled in System Settings."
             : "Allow access now, or continue and do it later."
         case (2, .processing): "Fixing…"
         case (2, .typing): "Replacing the text…"
@@ -325,7 +325,7 @@ struct OnboardingView: View {
         case (3, .palette): "Pick an action — 1–4 or ↵."
         case (3, .done): "Chosen and replaced."
         case (3, _): "Press ⌥⌘A to open Actions."
-        default: "Qwixit is ready in every app."
+        default: "Tokiri is ready in every app."
         }
     }
 
@@ -365,7 +365,7 @@ private struct DemoKeyRow: View {
         HStack(spacing: 7) {
             key("⌥", "option", optionDown || activeKeys.contains(.option))
             key("⌘", "command", commandDown || activeKeys.contains(.command))
-            key(step == 3 ? "A" : "X", step == 3 ? "actions" : "qwixit", activeKeys.contains(.action))
+            key(step == 3 ? "A" : "X", step == 3 ? "actions" : "tokiri", activeKeys.contains(.action))
         }
     }
 

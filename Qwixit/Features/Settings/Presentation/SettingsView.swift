@@ -62,7 +62,7 @@ struct SettingsView: View {
             SettingRow(
                 icon: viewModel.appearance == .dark ? "moon.stars.fill" : "sun.max.fill",
                 title: "Theme",
-                detail: "Choose the look used by Qwixit windows and feedback."
+                detail: "Choose the look used by Tokiri windows and feedback."
             ) {
                 Picker("Theme", selection: $viewModel.appearance) {
                     ForEach(AppAppearance.allCases) { appearance in
@@ -127,7 +127,7 @@ struct SettingsView: View {
                 iconColor: viewModel.accessibilityGranted ? KColor.success : KColor.warning,
                 title: "Accessibility",
                 detail: viewModel.accessibilityGranted
-                    ? "Qwixit can read and replace only the text you select."
+                    ? "Tokiri can read and replace only the text you select."
                     : "Required for shortcuts to work in other apps."
             ) {
                 if viewModel.accessibilityGranted {
@@ -161,7 +161,7 @@ struct SettingsView: View {
             Label("Active", systemImage: "checkmark.circle.fill")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(KColor.success)
-                .accessibilityLabel("Qwixit Unlimited subscription active")
+                .accessibilityLabel("Tokiri Unlimited subscription active")
         } else {
             Button("Go unlimited") { viewModel.openStarterCheckout() }
                 .buttonStyle(PrimaryButtonStyle())
@@ -173,12 +173,12 @@ struct SettingsView: View {
     }
 
     private var billingTitle: String {
-        if viewModel.isUnlimited { return "Qwixit Unlimited" }
+        if viewModel.isUnlimited { return "Tokiri Unlimited" }
         return "30 free AI actions / month"
     }
 
     private var billingDetail: String {
-        if viewModel.isUnlimited { return "Active — every Qwixit action is unlocked." }
+        if viewModel.isUnlimited { return "Active — every Tokiri action is unlocked." }
         return "Go unlimited for $10/month. Sandbox test payments only."
     }
 
@@ -226,12 +226,12 @@ struct SettingsView: View {
 
     private var footer: some View {
         HStack {
-            Text("Qwixit 1.0")
+            Text("Tokiri 1.0")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .tracking(0.3)
                 .foregroundStyle(KColor.secondary)
             Spacer()
-            Button("Quit Qwixit") { onQuit() }
+            Button("Quit Tokiri") { onQuit() }
                 .buttonStyle(SubtleButtonStyle())
                 .foregroundStyle(KColor.danger)
         }

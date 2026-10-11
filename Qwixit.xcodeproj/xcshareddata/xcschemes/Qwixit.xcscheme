@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "E10000000000000000000001"
-               BuildableName = "Qwixit.app"
+               BuildableName = "Tokiri.app"
                ReferencedContainer = "container:Qwixit.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -57,7 +57,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E10000000000000000000001"
-            BuildableName = "Qwixit.app"
+            BuildableName = "Tokiri.app"
             ReferencedContainer = "container:Qwixit.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -73,7 +73,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E10000000000000000000001"
-            BuildableName = "Qwixit.app"
+            BuildableName = "Tokiri.app"
             ReferencedContainer = "container:Qwixit.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

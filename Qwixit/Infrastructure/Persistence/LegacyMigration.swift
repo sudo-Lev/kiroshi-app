@@ -4,7 +4,7 @@ import Foundation
 /// This is the only place allowed to reference the old identifiers.
 enum LegacyMigration {
     static let legacyBundleIdentifier = "com.kiroshi.mac"
-    static let renameNotice = "Qwixit is the new name of Kiroshi. macOS needs you to allow Accessibility once more."
+    static let renameNotice = "Tokiri is the new name of Kiroshi. macOS needs you to allow Accessibility once more."
 
     /// Runs once per install. Returns `true` when data from the old build was found and carried over.
     @discardableResult

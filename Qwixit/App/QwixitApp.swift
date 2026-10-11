@@ -10,17 +10,16 @@ struct QwixitApp: App {
     }
 }
 
-/// The full-color brand mark stays recognizable in the menu bar instead of
-/// being flattened into a monochrome macOS template glyph.
-private enum MenuBarQwixitGlyph {
-    static let image: NSImage = {
-        guard let source = NSImage(named: "QwixitMarkLight")?.copy() as? NSImage else {
+/// The supplied menu-bar asset is a monochrome template image, so AppKit
+/// handles the correct contrast for the current menu bar appearance.
+private enum MenuBarTokiriGlyph {
+    static func image() -> NSImage {
+        guard let source = NSImage(named: "QwixitMenuBar")?.copy() as? NSImage else {
             return NSImage()
         }
-        source.size = NSSize(width: 18, height: 18)
-        source.isTemplate = false
+        source.isTemplate = true
         return source
-    }()
+    }
 }
 
 @MainActor
@@ -66,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let container = AppContainer()
     private let singleInstanceCoordinator = SingleInstanceCoordinator()
     private let runningToast = RunningToastController()
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menuPopover = MenuBarPopoverController()
     private var onboardingWindowController: OnboardingWindowController?
     private lazy var settingsWindowController = SettingsWindowController(
@@ -88,6 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerPeekHotkey(key: container.settingsViewModel.peekShortcutKey)
         container.settingsViewModel.onPeekShortcutChanged = { [weak self] key in
             self?.registerPeekHotkey(key: key)
+        }
+        container.settingsViewModel.onAppearanceChanged = { [weak self] appearance in
+            self?.updateStatusItemAppearance(appearance)
         }
         registerFixHotkey()
         registerActionHotkey()
@@ -201,10 +203,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
-        button.image = MenuBarQwixitGlyph.image
-        button.image?.size = NSSize(width: 18, height: 18)
-        button.imagePosition = .imageOnly
-        button.toolTip = "Qwixit"
+        updateStatusItemAppearance(container.settingsViewModel.appearance)
+        button.toolTip = "Tokiri"
         button.target = self
         button.action = #selector(toggleMenuPopover(_:))
 
@@ -216,6 +216,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onShowRunningToast: { [weak self] in self?.menuPopover.close(); self?.showRunningToast() },
             onQuit: { NSApp.terminate(nil) }
         )))
+    }
+
+    private func updateStatusItemAppearance(_ appearance: AppAppearance) {
+        guard let button = statusItem.button else { return }
+        button.image = MenuBarTokiriGlyph.image()
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
     }
 
     @objc private func toggleMenuPopover(_ sender: Any?) {
@@ -419,7 +426,7 @@ final class SettingsWindowController {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Qwixit Settings"
+            window.title = "Tokiri Settings"
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.isMovableByWindowBackground = true
@@ -465,7 +472,7 @@ final class OnboardingWindowController {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Welcome to Qwixit"
+            window.title = "Welcome to Tokiri"
             window.isReleasedWhenClosed = false
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden

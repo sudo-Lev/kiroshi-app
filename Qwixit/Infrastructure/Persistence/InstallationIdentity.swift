@@ -11,7 +11,7 @@ enum InstallationIdentity {
         case unavailable(OSStatus)
 
         var errorDescription: String? {
-            "Qwixit could not access its secure device identity (Keychain error \(statusCode))."
+            "Tokiri could not access its secure device identity (Keychain error \(statusCode))."
         }
 
         private var statusCode: OSStatus {

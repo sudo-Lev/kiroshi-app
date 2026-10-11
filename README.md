@@ -1,8 +1,8 @@
-# Qwixit
+# Tokiri
 
-**Don't rewrite it. Qwixit.** You keep writing. Qwixit keeps up.
+**Your words. Sharper.** Select. Shortcut. Done.
 
-Qwixit is a native macOS menu-bar utility built with SwiftUI and AppKit. Select text in any application, press `⌥⌘X`, and Qwixit replaces the selection without taking focus away from the active app.
+Tokiri is a native macOS menu-bar utility built with SwiftUI and AppKit. Select text in any application, press `⌥⌘X`, and Tokiri replaces the selection without taking focus away from the active app.
 
 ## Run
 
@@ -11,7 +11,7 @@ Qwixit is a native macOS menu-bar utility built with SwiftUI and AppKit. Select 
 3. Run the app.
 4. Complete onboarding and grant Accessibility access when macOS asks.
 
-Use **Product → Run** (`⌘R`) each time you want to start the local build. Qwixit enforces one running process per bundle identifier: launching from Xcode automatically closes an older Qwixit instance before registering the global shortcut and showing feedback. You may need to quit an older pre-fix build manually once from its menu-bar window or Activity Monitor.
+Use **Product → Run** (`⌘R`) each time you want to start the local build. Tokiri enforces one running process per bundle identifier: launching from Xcode automatically closes an older Tokiri instance before registering the global shortcut and showing feedback. You may need to quit an older pre-fix build manually once from its menu-bar window or Activity Monitor.
 
 The project targets macOS 14 and has App Sandbox disabled because global Accessibility replacement and Carbon hotkeys require system-wide access. For distribution, sign and notarize the app with your Developer ID.
 
@@ -27,7 +27,7 @@ The project targets macOS 14 and has App Sandbox disabled because global Accessi
 - Focused settings for feedback and Accessibility access
 - Reduced-motion-compatible SwiftUI animations
 
-Qwixit includes 30 free AI actions per installation each calendar month. An active Unlimited subscription is $10/month and removes that limit. Every model request is counted server-side, including Quick Fix, palette actions, Peek translation/summary, and AI-generated refinement questions.
+Tokiri includes 30 free AI actions per installation each calendar month. An active Unlimited subscription is $10/month and removes that limit. Every model request is counted server-side, including Quick Fix, palette actions, Peek translation/summary, and AI-generated refinement questions.
 
 Requests go through the Cloudflare Worker at `qwixit-api.levmisiliuk.workers.dev`; users do not configure or receive an OpenAI API key. The app keeps a random installation identity in macOS Keychain. A Durable Object atomically enforces the monthly quota, while signed Paddle webhooks are the only way to activate Unlimited access. OpenAI requests use `store: false`.
 

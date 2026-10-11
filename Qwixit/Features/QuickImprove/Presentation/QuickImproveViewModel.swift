@@ -77,7 +77,7 @@ final class QuickImproveViewModel: ObservableObject {
             show(.offline, duration: nil)
         } catch {
             let message = (error as? LocalizedError)?.errorDescription
-                ?? "Qwixit couldn’t improve the text. Your text is unchanged."
+                ?? "Tokiri couldn’t improve the text. Your text is unchanged."
             show(.error(message), duration: 4)
         }
     }

@@ -70,7 +70,7 @@ struct MenuBarView: View {
             .buttonStyle(.plain)
             .help(
                 settingsViewModel.accessibilityGranted
-                    ? "Qwixit can read and replace selected text"
+                    ? "Tokiri can read and replace selected text"
                     : "Open Settings to allow Accessibility access"
             )
         }
@@ -126,7 +126,7 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .help("Open the Paddle sandbox checkout · $10/month")
-                .accessibilityLabel("Subscribe to Qwixit Unlimited for ten dollars per month")
+                .accessibilityLabel("Subscribe to Tokiri Unlimited for ten dollars per month")
             } else {
                 Text(billingDetail)
                     .font(.system(size: 9, design: .monospaced))
