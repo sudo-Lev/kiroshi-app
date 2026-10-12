@@ -64,14 +64,7 @@ struct SettingsView: View {
                 title: "Theme",
                 detail: "Choose the look used by Tokiri windows and feedback."
             ) {
-                Picker("Theme", selection: $viewModel.appearance) {
-                    ForEach(AppAppearance.allCases) { appearance in
-                        Text(appearance.title).tag(appearance)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 132)
+                QwixitThemePicker(selection: $viewModel.appearance)
             }
         }
     }
@@ -103,8 +96,8 @@ struct SettingsView: View {
                 detail: "Show the proposed fix before changing selected text."
             ) {
                 Toggle("Review before applying", isOn: $viewModel.reviewBeforeApplying)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
+                    .toggleStyle(QwixitToggleStyle(showsLabel: false))
+                    .accessibilityLabel("Review before applying")
             }
 
             rowDivider

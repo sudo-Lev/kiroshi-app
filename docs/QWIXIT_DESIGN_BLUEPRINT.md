@@ -728,6 +728,9 @@ Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have 
 - Shortcut badge: 25 pt high, radius 7, 7 pt horizontal padding, 10.5 Bold Mono.
 - Keycap: minimum 26 × 25, radius 6, bottom key edge line.
 - Access badge: capsule, 28 pt high or 24 pt compact, success/warning tone.
+- Toggle: use the custom angular `ON` / `OFF` control; its visible label is optional when the parent row already provides the setting name, but its accessibility label remains required.
+- Theme selector: use a custom angular segmented control for the explicit Light/Dark pair, with sun/moon icons and a violet selected segment. Do not replace it with a boolean toggle because the selected mode must remain visible.
+- Radio: use a 17 pt circular indicator with a violet center dot for the selected value, a line-only unselected state, and a full-row hit target. Use radio options for three or more mutually exclusive choices; keep two short equal-weight choices segmented.
 
 ---
 

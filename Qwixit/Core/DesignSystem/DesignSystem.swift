@@ -556,6 +556,280 @@ struct QwixitControlShape: Shape {
     }
 }
 
+struct QwixitToggleStyle: ToggleStyle {
+    var compact = false
+    /// Set to `false` when the surrounding row already provides the visible copy.
+    /// Add an explicit `.accessibilityLabel(...)` at the call site in this mode.
+    var showsLabel = true
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            guard isEnabled else { return }
+            configuration.isOn.toggle()
+        } label: {
+            Group {
+                if showsLabel {
+                    HStack(spacing: compact ? 8 : 10) {
+                        configuration.label
+                        Spacer(minLength: 6)
+                        track(isOn: configuration.isOn)
+                    }
+                } else {
+                    track(isOn: configuration.isOn)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.45)
+        .accessibilityValue(configuration.isOn ? "On" : "Off")
+        .accessibilityHint("Toggles this setting")
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.12),
+            value: configuration.isOn
+        )
+    }
+
+    private func track(isOn: Bool) -> some View {
+        let trackShape = QwixitControlShape(cut: compact ? 8 : 9)
+        let thumbShape = QwixitControlShape(cut: compact ? 5 : 6)
+        let trackWidth: CGFloat = compact ? 66 : 74
+        let trackHeight: CGFloat = compact ? 28 : 32
+        let thumbWidth: CGFloat = compact ? 23 : 27
+        let thumbHeight: CGFloat = compact ? 22 : 26
+
+        return ZStack {
+            if isOn {
+                trackShape.fill(KColor.primaryAction)
+            } else {
+                trackShape.fill(KColor.surfaceHover)
+            }
+
+            Text(isOn ? "ON" : "OFF")
+                .font(.system(size: compact ? 8.5 : 9.5, weight: .black, design: .monospaced))
+                .tracking(0.55)
+                .foregroundStyle(isOn ? KColor.success : KColor.secondary)
+                .frame(maxWidth: .infinity, alignment: isOn ? .leading : .trailing)
+                .padding(.horizontal, compact ? 8 : 9)
+
+            HStack(spacing: 0) {
+                if isOn { Spacer(minLength: 0) }
+                thumbShape
+                    .fill(KColor.surface)
+                    .overlay {
+                        thumbShape.stroke(
+                            isOn ? KColor.success.opacity(0.92) : KColor.line,
+                            lineWidth: 1
+                        )
+                    }
+                    .overlay {
+                        Image(systemName: isOn ? "checkmark" : "minus")
+                            .font(.system(size: compact ? 10 : 11, weight: .black))
+                            .foregroundStyle(isOn ? KColor.success : KColor.secondary)
+                    }
+                    .shadow(
+                        color: isOn ? KColor.success.opacity(0.34) : KColor.cardShadow,
+                        radius: isHovering ? 5 : 3,
+                        y: 1
+                    )
+                    .frame(width: thumbWidth, height: thumbHeight)
+                if !isOn { Spacer(minLength: 0) }
+            }
+            .padding(3)
+        }
+        .frame(width: trackWidth, height: trackHeight)
+        .clipShape(trackShape)
+        .overlay {
+            trackShape.stroke(
+                isOn
+                    ? KColor.success.opacity(isHovering ? 1 : 0.92)
+                    : isHovering ? KColor.secondary : KColor.line,
+                lineWidth: 1
+            )
+        }
+        .shadow(
+            color: isOn ? KColor.success.opacity(0.24) : .clear,
+            radius: isHovering ? 6 : 3,
+            y: 2
+        )
+        .onHover { isHovering = isEnabled && $0 }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Branded two-way selector for the app's explicit Light/Dark appearance.
+///
+/// This intentionally keeps segmented-control semantics instead of presenting
+/// a boolean switch: the current theme remains visible at a glance.
+struct QwixitThemePicker: View {
+    @Binding var selection: AppAppearance
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var focusedAppearance: AppAppearance?
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(AppAppearance.allCases) { appearance in
+                option(appearance)
+            }
+        }
+        .padding(3)
+        .frame(width: 164, height: 36)
+        .background(QwixitControlShape(cut: 9).fill(KColor.surfaceHover))
+        .overlay {
+            QwixitControlShape(cut: 9).stroke(KColor.line, lineWidth: 1)
+        }
+        .clipShape(QwixitControlShape(cut: 9))
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.14),
+            value: selection
+        )
+        .onMoveCommand { direction in
+            switch direction {
+            case .left:
+                choose(.light)
+            case .right:
+                choose(.dark)
+            default:
+                break
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func option(_ appearance: AppAppearance) -> some View {
+        let isSelected = selection == appearance
+        let isFocused = focusedAppearance == appearance
+
+        return Button {
+            choose(appearance)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: appearance == .light ? "sun.max.fill" : "moon.stars.fill")
+                    .font(.system(size: 10, weight: .bold))
+                    .accessibilityHidden(true)
+                Text(appearance.title)
+                    .font(.system(size: 10.5, weight: .bold))
+            }
+            .foregroundStyle(isSelected ? .white : KColor.ink)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                if isSelected {
+                    QwixitControlShape(cut: 5)
+                        .fill(KColor.violet)
+                        .shadow(color: KColor.violet.opacity(0.25), radius: 4, y: 2)
+                }
+            }
+            .overlay {
+                if isFocused {
+                    QwixitControlShape(cut: 5)
+                        .stroke(KColor.violet, lineWidth: 1.5)
+                }
+            }
+            .contentShape(QwixitControlShape(cut: 5))
+        }
+        .buttonStyle(.plain)
+        .focused($focusedAppearance, equals: appearance)
+        .accessibilityLabel(appearance.title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func choose(_ appearance: AppAppearance) {
+        guard selection != appearance else { return }
+        if reduceMotion {
+            selection = appearance
+        } else {
+            withAnimation(.snappy(duration: 0.14)) {
+                selection = appearance
+            }
+        }
+    }
+}
+
+/// A compact radio option for mutually exclusive settings.
+///
+/// Use a vertical group of options for three or more choices. For two short,
+/// equal-weight choices such as Light/Dark, prefer the segmented theme picker.
+struct QwixitRadioOption<Selection: Hashable>: View {
+    let title: String
+    let value: Selection
+    @Binding var selection: Selection
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
+    private var isSelected: Bool { selection == value }
+
+    var body: some View {
+        Button {
+            guard isEnabled, !isSelected else { return }
+            if reduceMotion {
+                selection = value
+            } else {
+                withAnimation(.snappy(duration: 0.12)) {
+                    selection = value
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                indicator
+                Text(title)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(KColor.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 8)
+            .frame(minHeight: 30)
+            .background(
+                isHovering ? KColor.surfaceHover : Color.clear,
+                in: QwixitControlShape(cut: 4)
+            )
+            .overlay {
+                if isHovering {
+                    QwixitControlShape(cut: 4)
+                        .stroke(KColor.line, lineWidth: 1)
+                }
+            }
+            .contentShape(QwixitControlShape(cut: 4))
+        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.45)
+        .onHover { isHovering = isEnabled && $0 }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var indicator: some View {
+        Circle()
+            .fill(KColor.surface)
+            .frame(width: 17, height: 17)
+            .overlay {
+                Circle()
+                    .stroke(isSelected ? KColor.violet : KColor.line, lineWidth: isSelected ? 1.5 : 1)
+            }
+            .overlay {
+                if isSelected {
+                    Circle()
+                        .fill(KColor.violet)
+                        .frame(width: 7, height: 7)
+                }
+            }
+            .shadow(
+                color: isSelected ? KColor.violet.opacity(0.2) : .clear,
+                radius: isHovering ? 4 : 2,
+                y: 1
+            )
+    }
+}
+
 struct PrimaryButtonStyle: ButtonStyle {
     var compact = false
 
