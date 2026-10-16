@@ -26,8 +26,10 @@ private enum MenuBarTokiriGlyph {
 final class AppContainer {
     let settingsViewModel: SettingsViewModel
     let quickImproveViewModel: QuickImproveViewModel
-    let feedback = FeedbackWindowController()
-    let review = ReviewPanelController()
+    let popupDismiss = PopupDismissCoordinator()
+    let feedback: FeedbackWindowController
+    let review: ReviewPanelController
+    let replacementRecovery: ReplacementRecoveryPanelController
     let peekHotkey = PeekHotkey()
     let fixHotkey = GlobalHotKey()
     let actionHotkey = ActionHotkey()
@@ -45,18 +47,24 @@ final class AppContainer {
         LegacyMigration.run(isAccessibilityTrusted: accessibility.isTrusted)
         let improver = TextImprovementService()
         let peekViewModel = PeekViewModel(client: PeekClient(), detector: LanguageDetector())
-        peekPanel = PeekPanelController(viewModel: peekViewModel)
+        feedback = FeedbackWindowController(popupDismiss: popupDismiss)
+        review = ReviewPanelController(popupDismiss: popupDismiss)
+        replacementRecovery = ReplacementRecoveryPanelController(popupDismiss: popupDismiss)
+        peekPanel = PeekPanelController(viewModel: peekViewModel, popupDismiss: popupDismiss)
         palettePanel = PalettePanelController(
             viewModel: PaletteViewModel(registry: ActionRegistry(), detector: LanguageDetector()),
             bridge: AXTextBridge(),
             improver: improver,
-            hud: ResultHUDController(feedback: feedback)
+            hud: ResultHUDController(feedback: feedback),
+            replacementRecovery: replacementRecovery,
+            popupDismiss: popupDismiss
         )
         settingsViewModel = SettingsViewModel(accessibility: accessibility)
         quickImproveViewModel = QuickImproveViewModel(
             accessibility: accessibility,
             improver: improver,
             feedback: feedback,
+            recovery: replacementRecovery,
             review: review,
             selectionSnapshots: accessibility
         )
@@ -67,9 +75,8 @@ final class AppContainer {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let container = AppContainer()
     private let singleInstanceCoordinator = SingleInstanceCoordinator()
-    private let runningToast = RunningToastController()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let menuPopover = MenuBarPopoverController()
+    private lazy var menuPopover = MenuBarPopoverController(popupDismiss: container.popupDismiss)
     private var onboardingWindowController: OnboardingWindowController?
     private lazy var settingsWindowController = SettingsWindowController(
         viewModel: container.settingsViewModel,
@@ -153,7 +160,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if onboardingWindowController?.isVisible == true {
             return
         }
-        runningToast.hotkeyPressed()
         if container.peekPanel.isVisible {
             container.peekPanel.close()
             return
@@ -170,6 +176,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func registerFixHotkey() {
         let settings = container.settingsViewModel
+        // Release the old Fix registration before the shared close binding is
+        // updated; either one may own ⌥⌘X while a popup is visible.
+        container.fixHotkey.unregister()
+        container.popupDismiss.setMainBinding(settings.mainHotkey)
         let registered = container.fixHotkey.register(
             keyCode: settings.mainHotkey.keyCode,
             modifiers: settings.mainHotkey.modifiers
@@ -191,7 +201,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             container.settingsViewModel.onboarding.handleMainHotkey()
             return
         }
-        runningToast.hotkeyPressed()
+        if container.settingsViewModel.mainHotkey == HotkeyCatalog.popupDismiss,
+           container.popupDismiss.dismissTop() {
+            return
+        }
         container.quickImproveViewModel.improveSelection()
     }
 
@@ -200,7 +213,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             container.settingsViewModel.onboarding.handleActionHotkey()
             return
         }
-        runningToast.hotkeyPressed()
         await container.palettePanel.toggle()
     }
 
@@ -216,8 +228,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quickImproveViewModel: container.quickImproveViewModel,
             onOpenSettings: { [weak self] in self?.menuPopover.close(); self?.showSettings() },
             onShowOnboarding: { [weak self] in self?.menuPopover.close(); self?.showOnboardingReplay() },
-            onShowRunningToast: { [weak self] in self?.menuPopover.close(); self?.showRunningToast() },
-            onQuit: { NSApp.terminate(nil) }
+            onQuit: { NSApp.terminate(nil) },
+            onClose: { [weak self] in self?.menuPopover.close() }
         )))
     }
 
@@ -229,7 +241,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleMenuPopover(_ sender: Any?) {
-        runningToast.statusItemClicked()
         if menuPopover.isShown {
             menuPopover.close()
         } else if let button = statusItem.button {
@@ -239,43 +250,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func finishOnboarding() {
         container.settingsViewModel.completeOnboarding()
-        Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(150))
-            guard !Task.isCancelled else { return }
-            self?.showRunningToast()
-        }
-    }
-
-    private func showRunningToast() {
-        let frame: () -> NSRect? = { [weak self] in
-            self?.statusItem.button?.window?.frame
-        }
-        let pulse: () -> Void = { [weak self] in
-            self?.pulseStatusItem()
-        }
-        runningToast.show(statusFrame: frame, pulse: pulse)
-    }
-
-    private func pulseStatusItem() {
-        guard let button = statusItem.button else { return }
-        button.wantsLayer = true
-        let animation = CAKeyframeAnimation(keyPath: "transform.scale")
-        animation.values = [1, 1.12, 1]
-        animation.keyTimes = [0, 0.5, 1]
-        animation.duration = 0.4
-        button.layer?.add(animation, forKey: "qwixit.runningPulse")
     }
 }
 
 @MainActor
 private final class MenuBarPopoverController: NSObject {
     private let panel: MenuBarPopoverPanel
+    private let popupDismiss: PopupDismissCoordinator
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
 
     var isShown: Bool { panel.isVisible }
 
-    override init() {
+    init(popupDismiss: PopupDismissCoordinator) {
+        self.popupDismiss = popupDismiss
         panel = MenuBarPopoverPanel(
             contentRect: NSRect(x: 0, y: 0, width: 318, height: 1),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -344,9 +332,11 @@ private final class MenuBarPopoverController: NSObject {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
         installMouseMonitorsIfNeeded()
         panel.orderFrontRegardless()
+        popupDismiss.show(panel) { [weak self] in self?.close() }
     }
 
     func close() {
+        popupDismiss.hide(panel)
         panel.orderOut(nil)
     }
 
@@ -462,6 +452,7 @@ final class OnboardingWindowController {
         if window == nil {
             let root = OnboardingView(
                 model: viewModel.onboarding,
+                fixShortcut: viewModel.mainHotkey,
                 onFinish: { [weak self] in
                     self?.close()
                     self?.onFinish()
@@ -506,7 +497,9 @@ final class OnboardingWindowController {
 
             if event.type == .flagsChanged {
                 viewModel.onboarding.updateModifiers(
+                    control: event.modifierFlags.contains(.control),
                     option: event.modifierFlags.contains(.option),
+                    shift: event.modifierFlags.contains(.shift),
                     command: event.modifierFlags.contains(.command)
                 )
                 return event

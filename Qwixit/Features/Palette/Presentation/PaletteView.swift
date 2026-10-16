@@ -36,6 +36,11 @@ struct PaletteView: View {
                 .tracking(1.5)
                 .foregroundStyle(muted)
                 .fixedSize(horizontal: true, vertical: false)
+            TokiriUI.PopupCloseButton(
+                shortcut: HotkeyCatalog.popupDismiss.presentation,
+                label: "Close Actions",
+                action: onClose
+            )
         }
         .padding(.horizontal, 16)
         .frame(height: 44)

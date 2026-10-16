@@ -97,7 +97,7 @@ final class SettingsViewModel: ObservableObject {
         peekSmartDefault = preferences.peekSmartDefault
         peekRememberMode = preferences.peekRememberMode
         peekPrefetch = preferences.peekPrefetch
-        peekShortcutKey = "Z"
+        peekShortcutKey = HotkeyCatalog.peek.keySymbol
         mainHotkey = preferences.mainHotkey
         needsRenamePermission = defaults.bool(forKey: AppPreferenceKey.needsRenamePermission)
             && !accessibility.isTrusted

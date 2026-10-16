@@ -40,7 +40,9 @@ Fix replaces selected text in place. For the current product stage it should:
 - avoid adding facts, changing claims, or turning the text into generic AI prose;
 - complete with minimal interruption and no trip to another app.
 
-The default Fix behavior remains immediate replacement. An optional **Review before applying** setting can keep the original selection unchanged, show the proposed correction with a local diff, and wait for an explicit Apply action.
+The default Fix behavior remains immediate replacement. An optional **Preview & Approve** setting can keep the original selection unchanged, show the proposed correction with a local diff, and wait for explicit approval before applying it. If preview cannot safely capture the selection, it leaves the text unchanged and explains why.
+
+When an interactive transient popup is open, **Option + Command + X** closes the frontmost popup through its normal dismissal path. With no such popup open, the shortcut runs Fix. Onboarding retains the Fix shortcut for its hands-on practice step.
 
 The long-term aspiration is a highly intelligent assistant that understands what the user meant. Until quality can be validated confidently, conservative correction is preferred over ambitious rewriting.
 
@@ -57,6 +59,8 @@ Actions is useful, but it must not make the core Fix path slower or more complic
 Shortcut: **Option + Command + Z**.
 
 Peek is for text the user is reading and does not understand. It shows a translation or explanation without replacing the source text. Peek is the fast alternative to opening a translator or AI chat while reading.
+
+If the selection exceeds what Peek can process, show a clear length error instead of presenting a result for an undisclosed excerpt.
 
 The durable boundary is simple:
 
@@ -84,7 +88,7 @@ Qwixit is built around speed and anonymity.
 
 ## Business model
 
-The current model is 30 free AI actions per installation per calendar month and $10/month for Unlimited. This is a working hypothesis with several purposes:
+The current model is 30 free AI actions per installation per calendar month and $10/month for Qwixit Advanced. Advanced removes the monthly action cap while keeping the same careful Fix quality bar. This is a working hypothesis with several purposes:
 
 - let the app remain installed and useful without immediate payment;
 - expose natural usage and limit behavior;
@@ -97,7 +101,7 @@ The exact allowance, price, and packaging may change. Do not treat them as the p
 
 Qwixit is preparing for its first public macOS distribution. The immediate priority is to harden the complete commercial flow:
 
-`install → onboard → use 30 actions → reach limit → subscribe → unlock Unlimited → restore state`
+`install → onboard → use 30 actions → reach limit → subscribe → unlock Advanced → restore state`
 
 The next release milestones are:
 

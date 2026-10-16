@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 @testable import Tokiri
 
 final class PaletteViewModelTests: XCTestCase {
@@ -52,31 +53,27 @@ final class PaletteViewModelTests: XCTestCase {
         XCTAssertEqual(AppPreferences(defaults: defaults).mainHotkey, custom)
     }
 
-    func testReplacementVerificationRejectsFalseSuccessWhenOriginalTextIsStillSelected() {
-        XCTAssertFalse(
-            ReplacementVerification.succeeded(
-                original: "a bit awkrad",
-                replacement: "a bit awkward",
-                selectedAfter: "a bit awkrad"
-            )
-        )
+    func testPasteIsSubmittedOnlyAfterClipboardAndCommandVEventComplete() {
+        XCTAssertTrue(ReplacementAttemptReport.submitted.isSubmitted)
+
+        var missingClipboard = ReplacementAttemptReport.submitted
+        missingClipboard.clipboardWrite = .failed
+        XCTAssertFalse(missingClipboard.isSubmitted)
+
+        var missingPaste = ReplacementAttemptReport.submitted
+        missingPaste.pasteEvent = .notAttempted
+        XCTAssertFalse(missingPaste.isSubmitted)
+
+        XCTAssertFalse(ReplacementAttemptReport.pasteFailed.isSubmitted)
     }
 
-    func testReplacementVerificationAcceptsCollapsedOrReplacedSelection() {
-        XCTAssertTrue(
-            ReplacementVerification.succeeded(
-                original: "a bit awkrad",
-                replacement: "a bit awkward",
-                selectedAfter: nil
-            )
-        )
-        XCTAssertTrue(
-            ReplacementVerification.succeeded(
-                original: "a bit awkrad",
-                replacement: "a bit awkward",
-                selectedAfter: "a bit awkward"
-            )
-        )
+    func testInsertIsSubmittedOnlyAfterCaretCollapseAndPasteEventsComplete() {
+        var report = ReplacementAttemptReport.submitted
+        report.caretMove = .failed
+        XCTAssertFalse(report.isSubmitted)
+
+        report.caretMove = .completed
+        XCTAssertTrue(report.isSubmitted)
     }
 
 #if DEBUG
@@ -205,14 +202,14 @@ final class PaletteViewModelTests: XCTestCase {
     @MainActor
     private func makePalette(sourceLanguage: String) -> PaletteViewModel {
         let viewModel = PaletteViewModel(registry: ActionRegistry(), detector: FixedLanguageDetector(code: sourceLanguage))
-        viewModel.open(capture: PaletteCapture(element: nil, text: "some selected text", range: nil, bounds: nil, fallbackPoint: .zero))
+        viewModel.open(capture: PaletteCapture(element: nil, text: "some selected text", range: nil, bounds: nil, fallbackPoint: .zero, processIdentifier: nil))
         return viewModel
     }
 
     @MainActor
     private func makeRefiningPalette() -> PaletteViewModel {
         let viewModel = PaletteViewModel(registry: RefineActionRegistry(), detector: FixedLanguageDetector(code: "en"))
-        viewModel.open(capture: PaletteCapture(element: nil, text: "some selected text", range: nil, bounds: nil, fallbackPoint: .zero))
+        viewModel.open(capture: PaletteCapture(element: nil, text: "some selected text", range: nil, bounds: nil, fallbackPoint: .zero, processIdentifier: nil))
         return viewModel
     }
 

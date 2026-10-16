@@ -5,6 +5,14 @@ enum PeekMode: String, CaseIterable, Codable, Sendable {
     case summary
 }
 
+enum PeekInputLimit {
+    static let maxUTF16Units = 8_000
+
+    static func accepts(_ text: String) -> Bool {
+        text.utf16.count <= maxUTF16Units
+    }
+}
+
 enum PeekSummaryLength: String, CaseIterable, Codable, Sendable {
     case tldr
     case points
@@ -52,15 +60,25 @@ actor PeekClient: PeekClientProtocol {
                         throw QwixitAPI.responseError(status: http.statusCode, data: body)
                     }
 
+                    var completed = false
                     for try await line in bytes.lines {
                         try Task.checkCancellation()
                         guard line.hasPrefix("data: ") else { continue }
                         let payload = String(line.dropFirst(6))
                         guard payload != "[DONE]", let data = payload.data(using: .utf8),
-                              let event = try? JSONDecoder().decode(StreamEvent.self, from: data),
-                              event.type == "response.output_text.delta", let delta = event.delta else { continue }
-                        continuation.yield(delta)
+                              let event = try? JSONDecoder().decode(StreamEvent.self, from: data) else { continue }
+                        switch event.type {
+                        case "response.output_text.delta":
+                            if let delta = event.delta { continuation.yield(delta) }
+                        case "response.completed":
+                            completed = true
+                        case "response.incomplete", "response.failed":
+                            throw PeekClientError.invalidResponse
+                        default:
+                            break
+                        }
                     }
+                    guard completed else { throw PeekClientError.invalidResponse }
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
@@ -71,6 +89,7 @@ actor PeekClient: PeekClientProtocol {
     }
 
     private nonisolated func makeBody(_ request: PeekRequest) throws -> Data {
+        guard PeekInputLimit.accepts(request.text) else { throw PeekClientError.inputTooLong }
         let schema: [String: Any]
         switch request.mode {
         case .translate:
@@ -105,7 +124,7 @@ actor PeekClient: PeekClientProtocol {
         let body: [String: Any] = [
             "model": OpenAIClient.defaultModel,
             "instructions": instructions,
-            "input": String(request.text.prefix(8_000)),
+            "input": request.text,
             "stream": true,
             "store": false,
             "text": ["format": ["type": "json_schema", "name": "qwixit_peek", "strict": true, "schema": schema]],
@@ -122,10 +141,12 @@ private struct StreamEvent: Decodable {
 
 enum PeekClientError: LocalizedError {
     case invalidResponse
+    case inputTooLong
 
     var errorDescription: String? {
         switch self {
         case .invalidResponse: "The server returned an unreadable response."
+        case .inputTooLong: "The selection is too long for Peek. Select a shorter passage."
         }
     }
 }

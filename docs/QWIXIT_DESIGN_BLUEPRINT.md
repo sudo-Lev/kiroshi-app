@@ -28,7 +28,7 @@ The visual character combines:
 
 1. **Selected text stays central.** Context panels sit beside the selection and avoid covering it.
 2. **Keyboard use is visible and complete.** Every quick action can be reached with arrows, Tab, Return, Escape, or a number.
-3. **Quick surfaces remain compact.** A toast confirms. A palette chooses. Peek reads. None becomes a dashboard.
+3. **Quick surfaces remain compact.** Feedback confirms. A palette chooses. Peek reads. None becomes a dashboard.
 4. **Faces guide instead of decorate.** Use one small contextual face, never a large mascot illustration.
 5. **Cyber effects carry meaning.** Scans mean processing, green means replacement succeeded, magenta and cyan distinguish modes.
 6. **No invented chrome.** Do not add explanatory labels, helper rows, floating badges, or persistent copy to quick actions.
@@ -37,7 +37,7 @@ The visual character combines:
 ### Nonnegotiable product rules
 
 - The main hotkey is **Option + Command + X**.
-- One press fixes and replaces selected text by default. An optional Review before applying mode can show the proposed result first and wait for explicit Apply.
+- One press fixes and replaces selected text by default. An optional Preview & Approve mode can show the proposed result first and wait for explicit approval.
 - **Option + Command + A** opens the action palette.
 - **Option + Command + Z** opens Peek.
 - The action palette and the focused translator are intentionally separate surfaces. Preserve their distinct behavior.
@@ -69,6 +69,8 @@ flowchart LR
 ---
 
 ## 2. Brand assets
+
+TokiriUI is the implementation catalog for shared controls and semantic icons; see `docs/TOKIRI_UI.md`. Feature code must not choose a visual icon merely because an SF Symbol is convenient. The primary Fix, Review, Actions, Peek, Theme, Access, and Plan icons use a curated local vector family with soft, readable contours. Small platform/utility actions may use the explicitly catalogued system-symbol fallback; report an icon gap when no suitable asset exists.
 
 Use the supplied assets. Do not redraw, typeset, trace, or approximate the logo.
 
@@ -150,7 +152,7 @@ The app has an explicit Light/Dark preference. It sets both the SwiftUI color sc
 | Label | 9 pt, Bold Mono, tracking `0.35` | Section labels and metadata |
 | Micro status | 8 pt, Bold Mono, tracking `0.8–1.1` | HUD badges and detail |
 
-Use uppercase only for operational signals such as `PROCESSING`, `READY`, `TEXT REPLACED`, `AI`, `OK`, or `ERR`. Use sentence case for normal settings and explanations.
+- Use uppercase only for operational signals such as PROCESSING, READY, PASTE SENT, PASTE NOT SENT, AI, SENT, or ERR. Use sentence case for normal settings and explanations.
 
 ---
 
@@ -189,7 +191,7 @@ Rounded rectangles use continuous corners where available.
 - Violet glow is allowed only on primary buttons and the logo mark, at most 16% light / 24% dark.
 - Processing HUD: `#16131F` at 10%, blur 14, y offset 6 (light); black at 45%, blur 16, y offset 6 (dark).
 - Use AppKit panel shadow for floating windows. Avoid stacking additional heavy shadows.
-- Exception: the status chip (processing, success, error) draws its own shadow, so its panel disables the native shadow and keeps a clear 36 pt margin so the dark-mode shadow fades out before the window edge. The chip panel ignores mouse events so the margin never blocks clicks near the selection. A native shadow would trace the transparent panel rectangle as a visible plate.
+- Exception: the status chip (processing, success, error, offline) draws its own shadow. Processing and success use a clear 36 pt margin, disable the native shadow, and ignore mouse events so the HUD never blocks the active app. Error and offline keep an interactive close control; they use the compact panel bounds without a click-through shadow margin. A native shadow would trace the transparent panel rectangle as a visible plate.
 
 ### Standard surface recipe
 
@@ -214,7 +216,8 @@ Faces are text, always monospaced, kept on one line, and usually bracketed. They
 | Pay | `[ ^o^ ]` | Usage limit and upgrade |
 | Broke | `[ $_00_$ ]` | Out of tokens |
 | Empty | `[ x_x ]` | 30/30 used |
-| Upsell | `[ ¬_¬ ]` | Unlimited plan |
+| Upsell | `[ ¬_¬ ]` | Advanced plan prompt |
+| Advanced | `[ $^_^$ ]` | Advanced plan active; more room to work |
 | Lost | `[ ?_? ]` | No network signal |
 | Retry | `[ @_@ ]` | Reconnecting or retrying |
 | Idle | `[ #_# ]` | Offline waiting |
@@ -303,6 +306,9 @@ Motion must explain state, input, or spatial continuity. Never animate the entir
 | Onboarding state change | 240 ms | snappy | Local opacity and 94% scale transitions |
 | Onboarding key response | 160 ms | snappy | Key press/tap state |
 | Onboarding typed result | 22 ms per 2 characters | linear | Begins after 900 ms processing |
+| TokiriUI primary button impulse | 200 ms | ease out | One cyan edge trace on press; never delays the action |
+| TokiriUI quiet control impulse | 160 ms | ease out | One short edge trace on toggle, newly selected radio/theme option, or other custom button press |
+| TokiriUI toggle thumb | 240 ms | ease out | Translate horizontally across a fixed track; never replace its layout position |
 | Face blink | 4030 + 170 ms | stepped | Open pause, brief shut frame |
 | Loading face | 320 ms/frame | stepped | Eight exact frames |
 
@@ -327,10 +333,13 @@ When macOS Reduce Motion is on, or when the app’s animation preference is off 
 - processing word becomes static;
 - progress trace and border sweep do not travel;
 - success pulse is removed;
+- control edge impulses are removed, as are pressed/hover scale and offset movement;
 - state transitions do not scale or move;
 - panel resize is immediate;
 - panel entrances may use a short 80 ms opacity fade only;
 - all controls, status changes, and completion messages remain available.
+
+macOS Dim Flashing Lights also suppresses TokiriUI control edge impulses without changing the control value.
 
 ---
 
@@ -355,6 +364,8 @@ Quick panels are borderless, nonactivating AppKit panels with transparent window
 - Quick panels do not become main application windows.
 - Click outside closes an unpinned palette or Peek panel.
 - Escape closes the current layer; where a nested step exists it goes back first.
+- Interactive transient panels use the same cut-corner close badge with `⌥⌘X`. Click and shortcut call the panel's existing dismissal path. The shortcut closes the frontmost visible popup before it can start Fix; with no popup open it remains the Fix shortcut. This includes pinned Peek, preview, result cards, limit cards, and the menu-bar panel.
+- Processing, retry, success, and short automatic notices remain click-through and do not show a close badge. Settings and Onboarding retain native macOS window closing; onboarding keeps its Fix practice shortcut.
 - Restore focus to the originating application before changing selected text.
 - Never repeatedly recreate/show a visible panel in response to its own state updates. Resize or replace content in place to prevent blinking.
 
@@ -362,7 +373,7 @@ Quick panels are borderless, nonactivating AppKit panels with transparent window
 
 ## 9. Primary feedback HUD
 
-The one press fix flow uses a compact processing/success/error HUD beside the selected text.
+The one press fix flow uses a compact processing/success/error HUD beside the selected text. Its position follows the captured selection (falling back to the pointer when bounds are unavailable) and is recomputed for each phase; review and other contextual panels remain beside selected text.
 
 ### Window and box
 
@@ -391,58 +402,58 @@ The one press fix flow uses a compact processing/success/error HUD beside the se
 - Progress track: 100 × 2, base `line`, 42 pt violet/magenta/cyan moving trace.
 - Border sweep runs while processing.
 
-### Success state
+### Paste sent state
 
-- Face: `[ ^_- ]`.
-- Headline: `READY` in `terminalGreen`, tracking 1.45.
-- Detail: 14 pt green rule + `TEXT REPLACED` in 8 pt mono.
-- Badge: `OK`.
-- Play one outline pulse and one visible border sweep treatment.
-- Default one press success duration: 1.25 seconds.
-- Success invoked from the action palette may remain for 2.8 seconds.
+- Face: [ ^_- ].
+- Headline: PASTE SENT in cyan.
+- Detail: CHECK YOUR TEXT in 8 pt mono.
+- Badge: SENT.
+- Use a neutral sent state; the event being posted does not prove the editor consumed it.
+- Default one press duration: 1.25 seconds.
+- State shown from the action palette may remain for 2.8 seconds.
 
-### Error state
+### Paste error state
 
-- Face: `[ @_@ ]`.
+- Face: [ @_@ ].
 - Tone: danger.
-- Badge: `ERR`.
-- Detail: `TEXT UNCHANGED`.
-- Choose the headline from the cause: `NOT REPLACED`, `EMPTY REPLY`, `BAD REPLY`, `SERVICE ERROR`, or `NOT COMPLETED`.
-- Typical duration: 4 seconds.
+- Badge: ERR.
+- Headline: PASTE NOT SENT.
+- Detail: explain that the fresh text is ready to copy and tell the user how to continue.
+- Include the shared Option Command X close badge. Typical duration: 4 seconds, or until explicitly dismissed when the error is shown by Actions.
 
 ### Other compact notices
 
-Permission, no selection, subscription sync, and offline states use a standard compact notice:
+Permission, no selection, and subscription sync use a standard compact notice:
 
 - HStack gap 11, horizontal padding 13, vertical padding 11;
 - panel radius 13 with contextual 2 × 24 accent;
 - icon tile 32 × 32, radius 9;
 - title 13 Semibold; detail 10.5 Regular;
-- window sizes: no selection 306 × 82, permission/subscription/offline 326 × 86.
+- window sizes: no selection 306 × 82, permission/subscription 326 × 86.
 
-No selection hides after 2.4 seconds. Permission and ordinary errors hide after 4 seconds. Offline and limit states may remain until explicitly dismissed or superseded in the one press flow.
+No selection hides after 2.4 seconds. Permission and ordinary errors hide after 4 seconds. Offline uses the cyber status chip with `CONNECTION LOST`, concise unchanged text, a `NET` badge, and the shared `⌥⌘X` close control. Limit states may remain until explicitly dismissed or superseded in the one press flow.
 
-## 9.1 Fix review panel
+## 9.1 Fix preview panel
 
-When Review before applying is enabled, the processing HUD transitions to an interactive review panel without changing the source selection.
+When Preview & Approve is enabled, the processing HUD transitions to an interactive preview panel without changing the source selection.
 
-- The panel is a non-activating keyboard-capable surface anchored beside the selection.
-- Show `FIX · REVIEW` and `TEXT UNCHANGED` in the header.
+- The panel is a non-activating keyboard-capable surface anchored beside the selection, with the shared `⌥⌘X` close badge.
+- Show `FIX · PREVIEW` and `TEXT UNCHANGED` in the header.
 - Present one selectable, scrollable suggested-text view with additions and removals inline; expose the untouched original through a small `Show original` toggle instead of showing two full blocks at once.
 - Highlight additions and removals with both color and text decoration; never rely on color alone.
-- `Return` applies the suggestion. `Esc`, Keep original, or clicking outside dismisses it without changing the source.
-- Apply restores the captured focus and runs the same Accessibility/clipboard replacement path as the default Fix flow; it reports an error only when that replacement operation fails.
+- `Return` approves the suggestion. `Esc`, Keep original, or clicking outside dismisses it without changing the source.
+- Approval restores the captured focus and runs the same Accessibility/clipboard replacement path as the default Fix flow; it reports an error only when that replacement operation fails.
 - The original and suggested text are transient and must never be persisted or logged.
 
 ### Limit card
 
-- Window: **374 × 158**.
-- Face: pay, 16 pt, violet.
-- Title: 16 Bold.
-- Body: 11 pt.
-- Content padding: 16.
-- Panel radius: 14 with violet left accent.
-- Primary upgrade button uses the standard violet button.
+- Window: **420 × 232**.
+- Header: 42 pt with the Tokiri lockup, feature name, and its shortcut badge.
+- Usage strip: 40 pt with `[ x_x ]`, `30 / 30 used`, and `0 free left`.
+- Body title: `30/30. You ran it dry.` at 20 pt Rounded Black.
+- Body copy explains that Advanced gives more room to work with the same quality bar.
+- Action row uses a full-width `Get Advanced · $10` primary button and a `Nah` subtle dismissal button.
+- Panel radius: 14 with the established violet/cyan/magenta edge treatment.
 - Copy communicates that 30 free actions are used. There is no 29/30 interruption.
 
 ---
@@ -579,6 +590,7 @@ The translation request returns logical semantic blocks rather than one item per
 - Loading reuses the standard compact cyber status chip with the scanning face, animated `PROCESSING` label, moving trace, and `AI` badge.
 - Completion changes the same chip to the green ready face, `READY`, `RESULT READY`, and `OK` for 520 ms before revealing the result.
 - The chip respects Reduce Motion; the state remains readable without its trace, sweep, or pulse.
+- No selection, offline, and request failures show the existing error/status chip inside Peek's body. The embedded chip fills the available width and relies on Peek's header close badge, so it does not add a second close control. No selection keeps the panel compact; recoverable failures retain Retry.
 - Limit uses `[ ^o^ ]` at 14 pt and a compact upgrade button.
 - Offline uses `[ ?_? ]` or `[ #_# ]` with concise unchanged text.
 
@@ -742,7 +754,8 @@ Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have 
 - AppKit host: borderless, nonactivating panel with a native shadow; do not expose the system popover bubble or chevron.
 - Utility bar: 28 pt, horizontal padding 12, version left and cyan `Cloud` right.
 - Brand header: 68 pt, horizontal padding 14, lockup 108 × 34.
-- Show the main shortcut badge and compact access badge.
+- Show the shared `⌥⌘X` close badge and compact access badge in the brand header. The close badge is a button, not a static shortcut hint.
+- Show a compact `Preview & Approve` switch below the brand header, bound to the same preference as Settings. Include a one-line status hint that nothing changes until approval.
 - Optional billing row: 34 pt; 44 pt when an upgrade button is visible.
 - Bottom action row: 43 pt with three equal actions: Settings, Onboarding, Quit.
 - Use 1 pt vertical dividers of height 24.
@@ -774,7 +787,7 @@ Actions configured for panel output use a larger result card.
 - Write short, direct, calm sentences.
 - Operational UI may be terse: `READY`, `AI`, `OK`, `ERR`, `Esc`, `Copy ⌘C`.
 - Explanations use normal sentence case.
-- State what happened to the user’s text: `TEXT REPLACED` or `TEXT UNCHANGED`.
+- Report the observable paste status: PASTE SENT means Tokiri posted Command V; it does not claim the target editor accepted the text.
 - Avoid generic AI language such as “magic,” “assistant is thinking,” or long model explanations.
 - Keep technical implementation details out of product copy.
 - Error titles explain the outcome; the detail explains the recovery action.
@@ -839,7 +852,7 @@ Actions configured for panel output use a larger result card.
 
 ### Usage
 
-- [ ] No interruptive 29/30 toast exists.
+- [ ] No interruptive 29/30 notification exists.
 - [ ] 30/30 displays the limit card and upgrade action.
 - [ ] Persistent plan status may report ordinary usage inside Settings or the menu bar.
 

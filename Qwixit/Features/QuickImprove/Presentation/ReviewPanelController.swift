@@ -4,10 +4,15 @@ import SwiftUI
 @MainActor
 final class ReviewPanelController: ReviewPresenting {
     private let state = ReviewPanelState()
+    private let popupDismiss: PopupDismissCoordinator
     private var panel: ReviewKeyboardPanel?
     private var outsideMonitor: Any?
     private var onApply: (() -> Void)?
-    private var onCancel: (() -> Void)?
+    private var onCancel: ((Bool) -> Void)?
+
+    init(popupDismiss: PopupDismissCoordinator) {
+        self.popupDismiss = popupDismiss
+    }
 
     func show(
         original: String,
@@ -15,13 +20,11 @@ final class ReviewPanelController: ReviewPresenting {
         anchor accessibilityBounds: CGRect?,
         fallbackPoint: CGPoint?,
         onApply: @escaping () -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping (Bool) -> Void
     ) {
         self.onApply = onApply
         self.onCancel = onCancel
-        state.original = original
-        state.proposed = proposed
-        state.showOriginal = false
+        state.prepare(original: original, proposed: proposed)
 
         let size = NSSize(width: 480, height: 324)
         if panel == nil {
@@ -59,6 +62,9 @@ final class ReviewPanelController: ReviewPresenting {
         panel?.alphaValue = 0
         panel?.orderFrontRegardless()
         panel?.makeKey()
+        if let panel {
+            popupDismiss.show(panel) { [weak self] in self?.cancel() }
+        }
         installMonitor()
 
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -70,7 +76,11 @@ final class ReviewPanelController: ReviewPresenting {
 
     func hide() {
         removeMonitor()
+        if let panel { popupDismiss.hide(panel) }
         panel?.orderOut(nil)
+        onApply = nil
+        onCancel = nil
+        state.clear()
     }
 
     private func apply() {
@@ -79,10 +89,10 @@ final class ReviewPanelController: ReviewPresenting {
         action?()
     }
 
-    private func cancel() {
+    private func cancel(restoreFocus: Bool = true) {
         let action = onCancel
         hide()
-        action?()
+        action?(restoreFocus)
     }
 
     private func handle(_ event: NSEvent) -> Bool {
@@ -97,7 +107,7 @@ final class ReviewPanelController: ReviewPresenting {
     private func installMonitor() {
         removeMonitor()
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
-            Task { @MainActor in self?.cancel() }
+            Task { @MainActor in self?.cancel(restoreFocus: false) }
         }
     }
 
@@ -109,12 +119,17 @@ final class ReviewPanelController: ReviewPresenting {
 
 @MainActor
 private final class ReviewPanelState: ObservableObject {
-    @Published var original = ""
-    @Published var proposed = ""
+    @Published private(set) var chunks: [ReviewDiffChunk] = []
     @Published var showOriginal = false
 
-    var chunks: [ReviewDiffChunk] {
-        ReviewDiffEngine.chunks(original: original, proposed: proposed)
+    func prepare(original: String, proposed: String) {
+        chunks = ReviewDiffEngine.chunks(original: original, proposed: proposed)
+        showOriginal = false
+    }
+
+    func clear() {
+        chunks = []
+        showOriginal = false
     }
 }
 
@@ -160,7 +175,7 @@ private struct ReviewPanelView: View {
                 color: KColor.terminalGreen
             )
 
-            Text("FIX · REVIEW")
+            Text("FIX · PREVIEW")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .tracking(0.8)
                 .foregroundStyle(KColor.terminalGreen)
@@ -172,9 +187,11 @@ private struct ReviewPanelView: View {
                 .tracking(0.7)
                 .foregroundStyle(KColor.secondary)
 
-            Button("Esc", action: onCancel)
-                .buttonStyle(CompactButtonStyle(accent: KColor.secondary))
-                .accessibilityLabel("Keep original text and close review")
+            TokiriUI.PopupCloseButton(
+                shortcut: HotkeyCatalog.popupDismiss.presentation,
+                label: "Keep original text and close preview",
+                action: onCancel
+            )
         }
         .padding(.horizontal, 16)
         .frame(height: 48)
@@ -233,9 +250,15 @@ private struct ReviewPanelView: View {
 
     private var diffLegend: some View {
         HStack(spacing: 12) {
-            Label("added", systemImage: "underline")
+            HStack(spacing: 4) {
+                TokiriUI.Icon(.added, size: 9)
+                Text("added")
+            }
                 .foregroundStyle(KColor.terminalGreen)
-            Label("removed", systemImage: "strikethrough")
+            HStack(spacing: 4) {
+                TokiriUI.Icon(.removed, size: 9)
+                Text("removed")
+            }
                 .foregroundStyle(KColor.danger)
         }
         .font(.system(size: 8, weight: .bold, design: .monospaced))
@@ -246,7 +269,7 @@ private struct ReviewPanelView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Text("Return applies · Esc keeps original")
+            Text("Return approves · Esc keeps original")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(KColor.secondary)
                 .lineLimit(1)
@@ -255,8 +278,9 @@ private struct ReviewPanelView: View {
 
             Button("Keep original", action: onCancel)
                 .buttonStyle(SubtleButtonStyle())
-            Button("Apply", action: onApply)
+            Button("Approve & apply", action: onApply)
                 .buttonStyle(PrimaryButtonStyle())
+                .accessibilityLabel("Approve suggested text and replace selection")
         }
         .padding(.horizontal, 14)
         .frame(height: 50)
@@ -307,6 +331,14 @@ enum ReviewDiffEngine {
         let target = tokenize(proposed)
         let sourceCount = source.count
         let targetCount = target.count
+        // A full LCS table is useful for short edits, but must not stall the main thread.
+        if sourceCount > 0, targetCount > 0,
+           sourceCount > 1_000_000 / targetCount {
+            return [
+                ReviewDiffChunk(kind: .removed, text: original),
+                ReviewDiffChunk(kind: .added, text: proposed)
+            ]
+        }
         var table = Array(
             repeating: Array(repeating: 0, count: targetCount + 1),
             count: sourceCount + 1

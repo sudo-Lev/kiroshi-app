@@ -25,13 +25,17 @@ Qwixit is a native macOS menu-bar utility that removes the trip to an AI chat an
 - Features must not depend on another feature's presentation layer. Move truly shared primitives to `Core/` or app-wide adapters to `Infrastructure/`.
 - Transient panels must not steal focus from the user's active app. Preserve the selection, restore the clipboard after fallbacks, and keep mouse and keyboard paths equivalent.
 - Prefer small changes within existing patterns. The current UI is close to the intended product; redesign it only when requested or when fixing a demonstrated usability/accessibility defect.
-- Billing details—30 free actions and $10/month Unlimited—are a tested hypothesis, not permanent product doctrine. Keep them internally consistent, but do not broaden or entrench them without a product decision.
+- **Use TokiriUI first for every new or changed UI surface.** Check `Qwixit/Core/DesignSystem/` and `docs/TOKIRI_UI.md` before introducing a control, visual token, or icon. Reuse an existing component when its meaning and behavior fit; keep one-off feature composition in its feature.
+- If TokiriUI lacks a suitable component, use the native SwiftUI/AppKit control for now, record the gap in `docs/TOKIRI_UI.md`, and explicitly tell the owner what is missing in the handoff. Do not silently invent a near-duplicate or force a custom control where macOS behavior matters.
+- Choose icons by semantic `TokiriUI.IconName`. Use the curated local vector assets for primary product actions; system symbols are allowed only as catalogued utility fallbacks. When an icon is missing, record and report the gap rather than scattering `Image(systemName:)` strings through feature views. Keep brand marks in supplied assets, not redrawn as icons.
+- Billing details—30 free actions and $10/month Advanced—are a tested hypothesis, not permanent product doctrine. Keep them internally consistent, but do not broaden or entrench them without a product decision.
 
 ## Read the relevant source, not every source
 
 - Product behavior, priorities, terminology, and non-goals: `docs/PRODUCT.md`
 - Code ownership and runtime boundaries: `ARCHITECTURE.md`
 - Visual, motion, and interaction specifications: `docs/QWIXIT_DESIGN_BLUEPRINT.md`
+- TokiriUI component catalog, icon policy, and open gaps: `docs/TOKIRI_UI.md`
 - Local setup, billing tests, deployment, and release readiness: `docs/OPERATIONS.md`
 - Durable product and engineering rationale: `docs/DECISIONS.md`
 

@@ -4,7 +4,13 @@ import SwiftUI
 @MainActor
 final class ResultCardController {
     private let state = ResultCardState()
+    private let popupDismiss: PopupDismissCoordinator
     private var panel: NSPanel?
+    var onHide: (() -> Void)?
+
+    init(popupDismiss: PopupDismissCoordinator) {
+        self.popupDismiss = popupDismiss
+    }
 
     func show(
         action: PaletteAction,
@@ -26,9 +32,10 @@ final class ResultCardController {
             panel.backgroundColor = .clear
             panel.hasShadow = true
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
-            panel.contentView = NSHostingView(rootView: ResultCard(state: state, onClose: { [weak self] in self?.panel?.orderOut(nil) }))
             self.panel = panel
         }
+        // Recreate view-local text-field state for each result, including drafts not submitted.
+        panel?.contentView = NSHostingView(rootView: ResultCard(state: state, onClose: { [weak self] in self?.hide() }))
         panel?.setContentSize(size)
         if let origin = ContextPanelPlacement.resolve(
             accessibilityBounds: capture.bounds,
@@ -39,10 +46,27 @@ final class ResultCardController {
         }
         panel?.orderFrontRegardless()
         panel?.makeKey()
+        if let panel {
+            popupDismiss.show(panel) { [weak self] in self?.hide() }
+        }
     }
 
-    func setLoading(_ value: Bool) { state.isLoading = value }
-    func update(result: String) { state.result = result; state.isLoading = false }
+    func setLoading(_ value: Bool) { if panel?.isVisible == true { state.isLoading = value } }
+    func update(result: String) {
+        guard panel?.isVisible == true else { return }
+        state.result = result
+        state.isLoading = false
+    }
+
+    func hide() {
+        onHide?()
+        if let panel { popupDismiss.hide(panel) }
+        panel?.orderOut(nil)
+        state.result = ""
+        state.onInsert = { }
+        state.onAsk = { _ in }
+        state.isLoading = false
+    }
 }
 
 @MainActor
@@ -65,8 +89,11 @@ private struct ResultCard: View {
                 Text("◆ \(state.action.name)").foregroundStyle(KColor.magenta)
                 Spacer()
                 Text("Text unchanged").foregroundStyle(KColor.secondary)
-                Button("Esc", action: onClose)
-                    .buttonStyle(CompactButtonStyle(accent: KColor.secondary))
+                TokiriUI.PopupCloseButton(
+                    shortcut: HotkeyCatalog.popupDismiss.presentation,
+                    label: "Close Actions result",
+                    action: onClose
+                )
             }
             .font(.system(size: 10, weight: .bold, design: .monospaced)).padding(16)
             Divider().overlay(KColor.line)

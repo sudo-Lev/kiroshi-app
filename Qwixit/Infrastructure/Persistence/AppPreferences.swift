@@ -52,7 +52,7 @@ enum DeveloperUsageScenario: String, CaseIterable, Identifiable {
         switch self {
         case .live: "Live"
         case .limitReached: "30 / 30"
-        case .unlimited: "Unlimited"
+        case .unlimited: "Advanced"
         }
     }
 
@@ -60,7 +60,7 @@ enum DeveloperUsageScenario: String, CaseIterable, Identifiable {
         switch self {
         case .live: "Use the real Worker response."
         case .limitReached: "Blocks AI requests to preview the paywall. Resets to Live on launch."
-        case .unlimited: "Preview Unlimited UI only. Resets to Live on launch."
+        case .unlimited: "Preview Advanced UI only. Resets to Live on launch."
         }
     }
 }

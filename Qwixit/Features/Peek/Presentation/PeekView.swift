@@ -17,13 +17,17 @@ struct PeekView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().overlay(PeekPalette.line)
-            if viewModel.isAwaitingChoice {
-                choiceContent
+            if viewModel.loadState == .limitReached {
+                paywallContent
             } else {
-                bodyContent
                 Divider().overlay(PeekPalette.line)
-                footer
+                if viewModel.isAwaitingChoice {
+                    choiceContent
+                } else {
+                    bodyContent
+                    Divider().overlay(PeekPalette.line)
+                    footer
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -38,7 +42,11 @@ struct PeekView: View {
         HStack(spacing: 7) {
             QwixitLockup()
                 .frame(width: 86, height: 34, alignment: .leading)
-            if viewModel.isAwaitingChoice {
+            if viewModel.loadState == .limitReached {
+                Text("Peek")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                Spacer()
+            } else if viewModel.isAwaitingChoice {
                 Text("Translate to…")
                     .font(.system(size: 12, weight: .semibold))
                 Spacer()
@@ -56,9 +64,11 @@ struct PeekView: View {
                 }
                 Spacer()
             }
-            Button(action: onClose) { Image(systemName: "xmark") }
-                .buttonStyle(IconButtonStyle())
-                .accessibilityLabel("Close")
+            TokiriUI.PopupCloseButton(
+                shortcut: HotkeyCatalog.popupDismiss.presentation,
+                label: "Close Peek",
+                action: onClose
+            )
         }
         .padding(.horizontal, 12)
         .frame(height: 42)
@@ -160,7 +170,7 @@ struct PeekView: View {
                         resultContent
                     }
                 case .limitReached:
-                    limitView
+                    EmptyView()
                 case .failed(let message):
                     errorView(message)
                 }
@@ -172,35 +182,50 @@ struct PeekView: View {
         .frame(maxHeight: viewModel.isPinned ? 500 : 250)
     }
 
-    private var limitView: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            HStack(spacing: 10) {
-                QwixitFaceView(face: .pay, size: 14, color: KColor.violet)
-                Text("Ready for more?")
-                    .font(.system(size: 16, weight: .bold))
-            }
-            Text("You’ve used 30 free actions this month.")
-                .contentFont()
-                .foregroundStyle(PeekPalette.muted)
-            Button {
-                _ = PaddleCheckoutOpener().openStarterCheckout()
-            } label: {
-                HStack(spacing: 7) {
-                    Text("Get Unlimited")
-                    Text("$10/mo")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .opacity(0.82)
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 10, weight: .bold))
-                }
-            }
-            .buttonStyle(PrimaryButtonStyle())
+    private var paywallContent: some View {
+        VStack(spacing: 0) {
+            QwixitPaywallUsageStrip(used: 30, remaining: 0, reduceMotion: reduceMotion)
+            limitView
         }
+    }
+
+    private var limitView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("30/30. You ran it dry.")
+                .font(.system(size: 20, weight: .black, design: .rounded))
+
+            Text("Free ride’s over. Advanced gives you more room to work. Same quality bar.")
+                .font(.system(size: 13.5))
+                .foregroundStyle(PeekPalette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 7)
+
+            Spacer(minLength: 10)
+
+            HStack(spacing: 9) {
+                Button {
+                    _ = PaddleCheckoutOpener().openStarterCheckout()
+                } label: {
+                    Text("Get Advanced · $10")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .accessibilityLabel("Get Tokiri Advanced for ten dollars per month")
+
+                Button("Nah", action: onClose)
+                    .buttonStyle(SubtleButtonStyle())
+                    .frame(width: 58)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 19)
+        .padding(.bottom, 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func statusChip(
         _ phase: AppPhase,
-        successDetail: String = "TEXT REPLACED"
+        successDetail: String = "RESULT READY"
     ) -> some View {
         FeedbackPill(
             phase: phase,
@@ -245,36 +270,14 @@ struct PeekView: View {
 
     private func errorView(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            if isOffline(message) {
-                HStack(spacing: 8) {
-                    QwixitFaceView(face: message == QwixitFace.idle.line ? .idle : .lost, size: 15)
-                    Text(message)
-                }
-                .font(.system(size: 13, weight: .black, design: .monospaced))
-                Text("Your text is unchanged. Try again when you’re back online.")
-                    .contentFont()
-                    .foregroundStyle(PeekPalette.muted)
-            } else {
-                HStack(spacing: 9) {
-                    Image(systemName: message == "Select some text first." ? "text.cursor" : "exclamationmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(message == "Select some text first." ? KColor.secondary : KColor.danger)
-                        .frame(width: 30, height: 30)
-                        .background((message == "Select some text first." ? KColor.secondary : KColor.danger).opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(message == "Select some text first."
-                             ? "Nothing selected yet"
-                             : QwixitErrorCopy.title(for: message))
-                            .font(.system(size: 13, weight: .semibold))
-                        Text(message == "Select some text first."
-                             ? "Highlight text in any app, then press the shortcut again."
-                             : message)
-                            .font(.system(size: 11))
-                            .foregroundStyle(PeekPalette.muted)
-                    }
-                }
-            }
+            FeedbackPill(
+                phase: message == "Select some text first."
+                    ? .noSelection
+                    : isOffline(message) ? .offline : .error(message),
+                reduceMotion: reduceMotion,
+                embedded: true,
+                onClose: onClose
+            )
             if message != "Select some text first." {
                 Button("Retry  ↵") { viewModel.retry() }
                     .buttonStyle(CompactButtonStyle(accent: accent))
@@ -300,13 +303,15 @@ struct PeekView: View {
                     accent: viewModel.isPinned ? KColor.magenta : PeekPalette.muted,
                     isSelected: viewModel.isPinned
                 ))
-            Button { viewModel.copyResult() } label: {
-                HStack(spacing: 4) {
-                    Text(viewModel.copied ? "Copied" : "Copy ⌘C")
-                    if viewModel.copied { Image(systemName: "checkmark") }
+            if viewModel.result != nil {
+                Button { viewModel.copyResult() } label: {
+                    HStack(spacing: 4) {
+                        Text(viewModel.copied ? "Copied" : "Copy ⌘C")
+                        if viewModel.copied { TokiriUI.Icon(.check, size: 11) }
+                    }
                 }
+                .buttonStyle(CompactButtonStyle(accent: KColor.violet, prominent: true))
             }
-            .buttonStyle(CompactButtonStyle(accent: KColor.violet, prominent: true))
         }
         .font(.system(size: 9, weight: .bold, design: .monospaced))
         .foregroundStyle(PeekPalette.muted)
@@ -315,12 +320,6 @@ struct PeekView: View {
         .background(PeekPalette.raised)
     }
 
-}
-
-private extension View {
-    func contentFont() -> some View {
-        font(.system(size: 14)).lineSpacing(6)
-    }
 }
 
 private struct PeekMarkdownText: View {

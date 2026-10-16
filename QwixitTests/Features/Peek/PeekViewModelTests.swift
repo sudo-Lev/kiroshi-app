@@ -72,10 +72,30 @@ final class PeekViewModelTests: XCTestCase {
         XCTAssertTrue(client.requests.isEmpty)
 
         viewModel.submit()
-        for _ in 0..<4 { await Task.yield() }
+        await waitUntil { !client.requests.isEmpty }
 
         XCTAssertEqual(client.requests.map(\.mode), [.summary])
         XCTAssertEqual(client.requests.map(\.targetLanguage), ["en"])
+    }
+
+    @MainActor
+    func testLongSelectionIsRejectedInsteadOfSilentlyTruncated() {
+        let client = PeekClientSpy()
+        let viewModel = PeekViewModel(client: client, detector: StubLanguageDetector(code: "en"))
+        viewModel.open(text: String(repeating: "x", count: PeekInputLimit.maxUTF16Units + 1))
+
+        XCTAssertTrue(viewModel.sourceText.isEmpty)
+        XCTAssertTrue(client.requests.isEmpty)
+        if case .failed = viewModel.loadState {} else { XCTFail("Expected visible length error") }
+    }
+
+    @MainActor
+    func testClosingPeekClearsSelectedText() {
+        let viewModel = PeekViewModel(client: PeekClientSpy(), detector: StubLanguageDetector(code: "en"))
+        viewModel.open(text: "Private selection")
+        viewModel.close()
+        XCTAssertEqual(viewModel.sourceText, "")
+        XCTAssertNil(viewModel.result)
     }
 
     @MainActor
@@ -86,7 +106,7 @@ final class PeekViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.languages.map(\.code), ["UA", "PL", "FR", "EN"])
         viewModel.chooseNumber(2)
-        for _ in 0..<4 { await Task.yield() }
+        await waitUntil { !client.requests.isEmpty }
 
         XCTAssertEqual(client.requests.map(\.mode), [.translate])
         XCTAssertEqual(client.requests.map(\.targetLanguage), ["pl"])
@@ -99,7 +119,7 @@ final class PeekViewModelTests: XCTestCase {
         viewModel.open(text: "A short selected sentence.")
 
         viewModel.chooseNumber(3)
-        for _ in 0..<4 { await Task.yield() }
+        await waitUntil { !client.requests.isEmpty }
 
         XCTAssertEqual(client.requests.map(\.mode), [.translate])
         XCTAssertEqual(client.requests.map(\.targetLanguage), ["fr"])
@@ -114,10 +134,18 @@ final class PeekViewModelTests: XCTestCase {
         viewModel.open(text: "A short selected sentence.")
 
         viewModel.chooseNumber(1)
-        for _ in 0..<4 { await Task.yield() }
+        await waitUntil { viewModel.loadState == .success }
 
         XCTAssertEqual(viewModel.loadState, .success)
         XCTAssertNotNil(viewModel.result)
+    }
+
+    @MainActor
+    private func waitUntil(_ condition: () -> Bool) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while !condition(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     func testTranslationDecodePreservesSentenceAlignment() throws {

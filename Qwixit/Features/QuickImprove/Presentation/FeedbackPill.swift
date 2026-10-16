@@ -4,17 +4,20 @@ struct FeedbackPill: View {
     let phase: AppPhase
     let reduceMotion: Bool
     let successDetail: String
+    let embedded: Bool
     let onClose: () -> Void
 
     init(
         phase: AppPhase,
         reduceMotion: Bool,
         successDetail: String = "TEXT REPLACED",
+        embedded: Bool = false,
         onClose: @escaping () -> Void
     ) {
         self.phase = phase
         self.reduceMotion = reduceMotion
         self.successDetail = successDetail
+        self.embedded = embedded
         self.onClose = onClose
     }
 
@@ -29,23 +32,23 @@ struct FeedbackPill: View {
                 upgradeCard
             } else if phase == .permissionDenied {
                 accessNotice
-            } else if phase == .processing || phase == .success || isError {
+            } else if usesCyberStatus {
                 cyberStatusBox
             } else {
                 compactNotice
             }
         }
         .foregroundStyle(KColor.ink)
-        .padding(phase == .processing || phase == .success || isError ? 5 : 6)
+        .padding(embedded || phase == .limitReached ? 0 : usesCyberStatus ? 5 : 6)
         .qwixitTheme()
         .onAppear {
-            if phase == .processing, !reduceMotion {
+            if isProcessingLike, !reduceMotion {
                 withAnimation(.linear(duration: 0.46).repeatForever(autoreverses: false)) { trace = true }
             }
-            if phase == .success, !reduceMotion {
+            if (phase == .success || phase == .pasteSent), !reduceMotion {
                 withAnimation(.easeOut(duration: 0.72)) { successPulse = true }
             }
-            if (phase == .processing || phase == .success), !reduceMotion {
+            if (isProcessingLike || phase == .success || phase == .pasteSent), !reduceMotion {
                 withAnimation(.linear(duration: 0.64).repeatForever(autoreverses: false)) { borderSweep = true }
             }
         }
@@ -57,8 +60,7 @@ struct FeedbackPill: View {
                 QwixitControlShape(cut: 5)
                     .fill(KColor.warning.opacity(0.16))
                     .frame(width: 35, height: 35)
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 13, weight: .bold))
+                TokiriUI.Icon(.lock, size: 13)
                     .foregroundStyle(KColor.warning)
             }
 
@@ -123,49 +125,72 @@ struct FeedbackPill: View {
     }
 
     private var cyberStatusBox: some View {
-        HStack(spacing: 8) {
-            statusGlyph
+        ZStack(alignment: .topTrailing) {
+            HStack(spacing: 8) {
+                statusGlyph
 
-            VStack(alignment: .leading, spacing: 4) {
-                if phase == .processing {
-                    HStack(spacing: 3) {
-                        Text(">").foregroundStyle(KColor.cyan)
-                        CyberRewriteLabel(text: "PROCESSING", reduceMotion: reduceMotion)
-                    }
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                } else {
-                    Text(statusHeadline)
+                VStack(alignment: .leading, spacing: 4) {
+                    if isProcessingLike {
+                        HStack(spacing: 3) {
+                            Text(">").foregroundStyle(KColor.cyan)
+                            CyberRewriteLabel(text: "PROCESSING", reduceMotion: reduceMotion)
+                        }
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .tracking(isError ? 0.65 : 1.1)
-                        .foregroundStyle(statusTone)
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                    } else {
+                        Text(statusHeadline)
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .tracking(isError ? 0.65 : 1.1)
+                            .foregroundStyle(statusTone)
+                            .transition(.opacity.combined(with: .move(edge: .leading)))
+                    }
+
+                    if phase == .processing {
+                        progressTrace
+                    } else if isRetrying {
+                        HStack(spacing: 5) {
+                            Rectangle().fill(KColor.hudTone).frame(width: 11, height: 1)
+                            Text(statusDetail)
+                                .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                                .tracking(0.6)
+                                .foregroundStyle(cyberSecondary)
+                                .lineLimit(1)
+                        }
+                        .frame(height: 2, alignment: .leading)
+                    } else {
+                        HStack(spacing: 5) {
+                            Rectangle().fill(statusTone).frame(width: 11, height: 1)
+                            Text(statusDetail)
+                                .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                                .tracking(isError ? 0.6 : 0.85)
+                                .foregroundStyle(cyberSecondary)
+                                .lineLimit(isError ? 2 : 1)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(height: isError ? 20 : 2, alignment: .leading)
+                    }
                 }
 
-                if phase == .processing {
-                    progressTrace
-                } else {
-                    HStack(spacing: 5) {
-                        Rectangle().fill(statusTone).frame(width: 11, height: 1)
-                        Text(statusDetail)
-                            .font(.system(size: 7.5, weight: .medium, design: .monospaced))
-                            .tracking(isError ? 0.6 : 0.85)
-                            .foregroundStyle(cyberSecondary)
-                    }
-                    .frame(height: 2)
+                Spacer(minLength: 2)
+
+                Text(statusBadge)
+                    .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                    .tracking(0.65)
+                    .foregroundStyle(statusTone)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                if isDismissible && !embedded {
+                    TokiriUI.PopupCloseButton(
+                        shortcut: HotkeyCatalog.popupDismiss.presentation,
+                        label: phase == .offline ? "Close offline status" : "Close error",
+                        action: onClose
+                    )
                 }
             }
-
-            Spacer(minLength: 2)
-
-            Text(statusBadge)
-                .font(.system(size: 7.5, weight: .bold, design: .monospaced))
-                .tracking(0.65)
-                .foregroundStyle(statusTone)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 10)
         }
-        .padding(.horizontal, 10)
-        .frame(width: 206, height: 40)
+        .frame(width: embedded ? nil : cyberStatusWidth, height: cyberStatusHeight)
+        .frame(maxWidth: embedded ? .infinity : nil)
         .background {
             ZStack {
                 QwixitControlShape(cut: 7)
@@ -292,24 +317,22 @@ struct FeedbackPill: View {
                 QwixitLockup()
                     .frame(width: 28, height: 12)
             case .success:
-                Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .bold))
+                TokiriUI.Icon(.check, size: 13)
+                    .foregroundStyle(tone)
+            case .pasteSent:
+                TokiriUI.Icon(.arrowRight, size: 13)
                     .foregroundStyle(tone)
             case .noSelection:
-                Image(systemName: "text.cursor")
-                    .font(.system(size: 14, weight: .semibold))
+                TokiriUI.Icon(.textCursor, size: 14)
                     .foregroundStyle(tone)
             case .permissionDenied:
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 12, weight: .semibold))
+                TokiriUI.Icon(.lock, size: 12)
                     .foregroundStyle(tone)
             case .offline:
-                Image(systemName: "wifi.slash")
-                    .font(.system(size: 12, weight: .semibold))
+                TokiriUI.Icon(.wifiOff, size: 12)
                     .foregroundStyle(tone)
             case .error:
-                Image(systemName: "exclamationmark")
-                    .font(.system(size: 13, weight: .bold))
+                TokiriUI.Icon(.warning, size: 13)
                     .foregroundStyle(tone)
             default:
                 QwixitLockup()
@@ -320,56 +343,60 @@ struct FeedbackPill: View {
     }
 
     private var upgradeCard: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .top, spacing: 11) {
-                QwixitFaceView(
-                    face: .pay,
-                    size: 16,
-                    bracketed: true,
-                    reduceMotion: reduceMotion,
-                    color: KColor.violet
+        VStack(spacing: 0) {
+            HStack(spacing: 7) {
+                QwixitLockup()
+                    .frame(width: 86, height: 34, alignment: .leading)
+                Text("Fix")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                Spacer()
+                TokiriUI.PopupCloseButton(
+                    shortcut: HotkeyCatalog.popupDismiss.presentation,
+                    label: "Close Fix limit notice",
+                    action: onClose
                 )
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Ready for more?")
-                        .font(.system(size: 16, weight: .bold))
-                    Text("You’ve used 30 free actions this month.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(KColor.secondary)
-                }
-
-                Spacer(minLength: 4)
-                dismissButton
             }
+            .padding(.horizontal, 12)
+            .frame(height: 42)
+            .background(KColor.canvasRaised)
+            .overlay(alignment: .bottom) { Rectangle().fill(KColor.line).frame(height: 1) }
 
-            Button {
-                _ = PaddleCheckoutOpener().openStarterCheckout()
-                onClose()
-            } label: {
-                HStack(spacing: 7) {
-                    Text("Get Unlimited")
-                    Text("$10/mo")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .opacity(0.82)
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 10, weight: .bold))
+            QwixitPaywallUsageStrip(used: 30, remaining: 0, reduceMotion: reduceMotion)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("30/30. You ran it dry.")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+
+                Text("Free ride’s over. Advanced gives you more room to work. Same quality bar.")
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(KColor.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 7)
+
+                Spacer(minLength: 10)
+
+                HStack(spacing: 9) {
+                    Button {
+                        _ = PaddleCheckoutOpener().openStarterCheckout()
+                        onClose()
+                    } label: {
+                        Text("Get Advanced · $10")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .accessibilityLabel("Get Tokiri Advanced for ten dollars per month")
+
+                    Button("Nah", action: onClose)
+                        .buttonStyle(SubtleButtonStyle())
+                        .frame(width: 58)
                 }
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(PrimaryButtonStyle())
+            .padding(.horizontal, 16)
+            .padding(.top, 19)
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .qwixitPanel(cornerRadius: 14, accent: KColor.violet)
-    }
-
-    private var dismissButton: some View {
-        Button(action: onClose) {
-            Image(systemName: "xmark")
-        }
-        .buttonStyle(IconButtonStyle())
-        .help("Close")
-        .accessibilityLabel("Close")
     }
 
     private var title: String {
@@ -377,9 +404,11 @@ struct FeedbackPill: View {
         case .ready: "Ready"
         case .processing: "Sharpening your text…"
         case .success: "Text replaced"
+        case .pasteSent: "Paste sent"
         case .noSelection: "Select some text first"
         case .permissionDenied: "Accessibility access needed"
         case .offline: "You’re offline"
+        case .retrying: "Retrying connection…"
         case .error(let message): QwixitErrorCopy.title(for: message)
         case .limitReached: ""
         }
@@ -390,7 +419,8 @@ struct FeedbackPill: View {
         case .noSelection: "Highlight text in any app, then try again."
         case .permissionDenied: "Allow Tokiri in System Settings to continue."
         case .offline: "Your text is unchanged. Try again when you’re back online."
-        case .error(let message): message
+        case .retrying(let attempt, let total): "Trying again · \(attempt)/\(total)"
+        case .error(let message): QwixitErrorCopy.detail(for: message)
         default: nil
         }
     }
@@ -398,8 +428,10 @@ struct FeedbackPill: View {
     private var tone: Color {
         switch phase {
         case .success: KColor.success
+        case .pasteSent: KColor.cyan
         case .permissionDenied: KColor.warning
         case .offline: KColor.cyan
+        case .retrying: KColor.cyan
         case .error: KColor.danger
         case .processing: KColor.violet
         default: KColor.secondary
@@ -429,32 +461,81 @@ struct FeedbackPill: View {
     }
 
     private var isError: Bool {
+        if embedded && phase == .noSelection { return true }
         if case .error = phase { return true }
         return false
     }
 
     private var statusTone: Color {
         if isError { return KColor.danger }
-        return phase == .success ? KColor.terminalGreen : KColor.hudTone
+        if phase == .offline { return KColor.cyan }
+        if phase == .success { return KColor.terminalGreen }
+        return phase == .pasteSent ? KColor.cyan : KColor.hudTone
     }
 
     private var statusFace: QwixitFace {
+        if embedded && phase == .noSelection { return .empty }
+        if isRetrying { return .retry }
         if isError { return .retry }
+        if phase == .offline { return .lost }
         return phase == .processing ? .scanning : .ready
     }
 
     private var statusHeadline: String {
+        if embedded && phase == .noSelection { return "NO TEXT CAPTURED" }
+        if phase == .pasteSent { return "PASTE SENT" }
+        if phase == .offline { return "CONNECTION LOST" }
         guard case .error(let message) = phase else { return "READY" }
         return QwixitErrorCopy.headline(for: message)
     }
 
     private var statusDetail: String {
-        isError ? "TEXT UNCHANGED" : successDetail
+        if embedded && phase == .noSelection { return "HIGHLIGHT TEXT · TRY PEEK AGAIN" }
+        if case .retrying(let attempt, let total) = phase {
+            return "RETRY \(attempt) OF \(total)"
+        }
+        if phase == .offline { return "TEXT UNCHANGED · TRY AGAIN" }
+        if phase == .pasteSent { return "CHECK YOUR TEXT" }
+        if isError, case .error(let message) = phase {
+            return QwixitErrorCopy.detail(for: message)
+        }
+        return successDetail
     }
 
     private var statusBadge: String {
         if isError { return "ERR" }
-        return phase == .success ? "OK" : "AI"
+        if phase == .offline { return "NET" }
+        if phase == .success { return "OK" }
+        return phase == .pasteSent ? "SENT" : "AI"
+    }
+
+    private var usesCyberStatus: Bool {
+        isProcessingLike || phase == .success || phase == .pasteSent || phase == .offline || isError
+    }
+
+    private var isDismissible: Bool {
+        phase == .offline || isError
+    }
+
+    private var cyberStatusWidth: CGFloat {
+        if isError { return 390 }
+        if phase == .offline { return 350 }
+        return 206
+    }
+
+    private var cyberStatusHeight: CGFloat {
+        if isError { return 62 }
+        if phase == .offline { return 46 }
+        return 40
+    }
+
+    private var isRetrying: Bool {
+        if case .retrying = phase { return true }
+        return false
+    }
+
+    private var isProcessingLike: Bool {
+        phase == .processing || isRetrying
     }
 }
 

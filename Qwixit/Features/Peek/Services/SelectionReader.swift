@@ -12,28 +12,6 @@ protocol SelectionReading: AnyObject {
 }
 
 final class SelectionReader: SelectionReading {
-    private struct PasteboardSnapshot {
-        let items: [[NSPasteboard.PasteboardType: Data]]
-
-        init(_ pasteboard: NSPasteboard) {
-            items = (pasteboard.pasteboardItems ?? []).map { item in
-                Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
-                    item.data(forType: type).map { (type, $0) }
-                })
-            }
-        }
-
-        func restore(to pasteboard: NSPasteboard) {
-            pasteboard.clearContents()
-            let objects = items.map { values -> NSPasteboardItem in
-                let item = NSPasteboardItem()
-                values.forEach { item.setData($0.value, forType: $0.key) }
-                return item
-            }
-            if !objects.isEmpty { pasteboard.writeObjects(objects) }
-        }
-    }
-
     func read() async -> PeekSelection? {
         let fallbackPoint = NSEvent.mouseLocation
         let elements = accessibilityCandidates()
@@ -110,25 +88,6 @@ final class SelectionReader: SelectionReading {
     }
 
     private func readUsingCopy() async -> String? {
-        let pasteboard = NSPasteboard.general
-        let snapshot = PasteboardSnapshot(pasteboard)
-        pasteboard.clearContents()
-        let changeCount = pasteboard.changeCount
-
-        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 8, keyDown: true),
-              let up = CGEvent(keyboardEventSource: nil, virtualKey: 8, keyDown: false) else {
-            snapshot.restore(to: pasteboard)
-            return nil
-        }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        try? await Task.sleep(for: .milliseconds(18))
-        up.post(tap: .cghidEventTap)
-        try? await Task.sleep(for: .milliseconds(125))
-
-        let text = pasteboard.changeCount == changeCount ? nil : pasteboard.string(forType: .string)
-        snapshot.restore(to: pasteboard)
-        return text
+        await ClipboardCoordinator.shared.copySelection()
     }
 }

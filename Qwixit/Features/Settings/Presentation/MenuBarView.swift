@@ -3,22 +3,38 @@ import AppKit
 
 struct MenuBarView: View {
     private let wrapperShape = QwixitControlShape(cut: 16)
+    @State private var isEnvironmentMenuPresented = false
 
     @ObservedObject var settingsViewModel: SettingsViewModel
     @ObservedObject var quickImproveViewModel: QuickImproveViewModel
     let onOpenSettings: () -> Void
     let onShowOnboarding: () -> Void
-    let onShowRunningToast: () -> Void
     let onQuit: () -> Void
+    let onClose: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            utilityBar
-            brandHeader
-            if showsBillingStatus {
-                billingStatusRow
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                utilityBar
+                brandHeader
+                reviewModeRow
+                if showsBillingStatus {
+                    billingStatusRow
+                }
+                actionArea
             }
-            actionArea
+
+            if isEnvironmentMenuPresented {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { isEnvironmentMenuPresented = false }
+                    .zIndex(1)
+
+                environmentDropdown
+                    .padding(.trailing, 10)
+                    .offset(y: 24)
+                    .zIndex(2)
+            }
         }
         .frame(width: 318)
         .background(KColor.canvas, in: wrapperShape)
@@ -38,21 +54,93 @@ struct MenuBarView: View {
 
     private var utilityBar: some View {
         HStack(spacing: 7) {
-            Image(systemName: "info.circle.fill")
-                .font(.system(size: 11))
+            TokiriUI.Icon(.info, size: 11)
             Text("v1.0")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
             Spacer()
-            Text("Cloud")
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .tracking(0.3)
-                .foregroundStyle(KColor.cyan)
+            environmentMenu
         }
-        .foregroundStyle(KColor.secondary)
+        .foregroundStyle(KColor.ink)
         .padding(.horizontal, 12)
-        .frame(height: 28)
+        .frame(height: 26)
         .background(KColor.canvasRaised)
         .overlay(alignment: .bottom) { Rectangle().fill(KColor.line).frame(height: 1) }
+    }
+
+    private var environmentMenu: some View {
+        Button {
+            isEnvironmentMenuPresented.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Text("Cloud")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .tracking(0.3)
+                    .foregroundStyle(KColor.cyan)
+                TokiriUI.Icon(.chevronDown, size: 9)
+                    .foregroundStyle(KColor.ink)
+            }
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel("Processing environment")
+        .accessibilityValue("Cloud")
+        .accessibilityHint("Show processing environment options")
+        .help("Choose Tokiri's processing environment")
+    }
+
+    private var environmentDropdown: some View {
+        VStack(spacing: 4) {
+            environmentOption(title: "Cloud", selected: true) {
+                isEnvironmentMenuPresented = false
+            }
+
+            Rectangle()
+                .fill(KColor.line)
+                .frame(height: 1)
+                .padding(.horizontal, 6)
+
+            environmentOption(title: "Local", detail: "<in development>", isEnabled: false) { }
+        }
+        .padding(6)
+        .frame(width: 188)
+        .background(KColor.surface, in: QwixitControlShape(cut: 8))
+        .overlay(QwixitControlShape(cut: 8).stroke(KColor.line))
+        .shadow(color: KColor.cardShadow, radius: 10, y: 4)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func environmentOption(
+        title: String,
+        detail: String? = nil,
+        selected: Bool = false,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Text(title)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(KColor.ink)
+                Spacer(minLength: 4)
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                        .foregroundStyle(KColor.secondary)
+                } else if selected {
+                    TokiriUI.Icon(.check, size: 12)
+                        .foregroundStyle(KColor.cyan)
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 27)
+            .background(selected ? KColor.cyan.opacity(0.08) : .clear, in: QwixitControlShape(cut: 4))
+            .contentShape(QwixitControlShape(cut: 4))
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.46)
+        .accessibilityLabel(detail == nil ? title : "Local, in development")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var brandHeader: some View {
@@ -60,7 +148,11 @@ struct MenuBarView: View {
             QwixitLockup()
                 .frame(width: 108, height: 34, alignment: .leading)
             Spacer(minLength: 2)
-            ShortcutKeys()
+            TokiriUI.PopupCloseButton(
+                shortcut: HotkeyCatalog.popupDismiss.presentation,
+                label: "Close Tokiri menu",
+                action: onClose
+            )
             Button(action: onOpenSettings) {
                 AccessStatusBadge(
                     granted: settingsViewModel.accessibilityGranted,
@@ -75,7 +167,7 @@ struct MenuBarView: View {
             )
         }
         .padding(.horizontal, 14)
-        .frame(height: 68)
+        .frame(height: 60)
         .background(KColor.canvasRaised)
         .overlay(alignment: .bottom) { Rectangle().fill(KColor.line).frame(height: 1) }
     }
@@ -83,8 +175,8 @@ struct MenuBarView: View {
     private var actionArea: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                CompactMenuAction(icon: "gearshape.fill", title: "Settings") { onOpenSettings() }
-                CompactMenuAction(icon: "power", title: "Quit", destructive: true) { onQuit() }
+                CompactMenuAction(icon: .settings, title: "Settings") { onOpenSettings() }
+                CompactMenuAction(icon: .quit, title: "Quit", destructive: true) { onQuit() }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
@@ -94,8 +186,7 @@ struct MenuBarView: View {
             // Testing-only controls. Keep this block DEBUG-gated so Release builds
             // expose only the user-facing Settings and Quit actions.
             HStack(spacing: 6) {
-                CompactMenuAction(icon: "sparkles", title: "Onboarding", compact: true) { onShowOnboarding() }
-                CompactMenuAction(icon: "bubble.left.fill", title: "Toast", compact: true) { onShowRunningToast() }
+                CompactMenuAction(icon: .onboarding, title: "Onboarding", compact: true) { onShowOnboarding() }
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 5)
@@ -110,6 +201,32 @@ struct MenuBarView: View {
         .overlay(alignment: .top) { Rectangle().fill(KColor.line).frame(height: 1) }
     }
 
+    private var reviewModeRow: some View {
+        Toggle(isOn: $settingsViewModel.reviewBeforeApplying) {
+            HStack(spacing: 9) {
+                TokiriUI.Icon(.review, size: 16)
+                    .foregroundStyle(KColor.violet)
+                    .frame(width: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Preview & Approve")
+                        .font(.system(size: 10.5, weight: .semibold))
+                    Text("Nothing changes until you approve")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .tracking(0.1)
+                        .foregroundStyle(KColor.secondary)
+                }
+            }
+        }
+        .toggleStyle(TokiriUI.Toggle(compact: true))
+        .help("Preview every Fix change before it replaces your selection")
+        .accessibilityLabel("Preview and approve Fix changes")
+        .accessibilityHint("Nothing changes until you approve the suggested fix.")
+        .padding(.horizontal, 14)
+        .frame(height: 46)
+        .background(KColor.canvasRaised)
+        .overlay(alignment: .bottom) { Rectangle().fill(KColor.line).frame(height: 1) }
+    }
+
     private var billingStatusRow: some View {
         HStack(spacing: 9) {
             QwixitFaceView(
@@ -121,12 +238,12 @@ struct MenuBarView: View {
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
             Spacer()
             if showsCheckoutAction {
-                Button("Go unlimited") {
+                Button("Get Advanced") {
                     settingsViewModel.openStarterCheckout()
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .help("Open the Paddle sandbox checkout · $10/month")
-                .accessibilityLabel("Subscribe to Tokiri Unlimited for ten dollars per month")
+                .help("Open the Paddle sandbox checkout for Advanced · $10/month")
+                .accessibilityLabel("Subscribe to Tokiri Advanced for ten dollars per month")
             } else {
                 Text(billingDetail)
                     .font(.system(size: 9, design: .monospaced))
@@ -150,16 +267,16 @@ struct MenuBarView: View {
     }
 
     private var billingFace: QwixitFace {
-        if settingsViewModel.isUnlimited { return .ready }
+        if settingsViewModel.isUnlimited { return .advanced }
         return usedActions == 30 ? .pay : .hello
     }
 
     private var billingTitle: String {
-        settingsViewModel.isUnlimited ? "Unlimited ready" : "\(usedActions) / 30 used"
+        settingsViewModel.isUnlimited ? "Advanced active" : "\(usedActions) / 30 used"
     }
 
     private var billingDetail: String {
-        if settingsViewModel.isUnlimited { return "all unlocked" }
+        if settingsViewModel.isUnlimited { return "no monthly cap" }
         return remainingActions == 0 ? "free plan complete" : "\(remainingActions) free left"
     }
 
@@ -176,7 +293,7 @@ struct MenuBarView: View {
 }
 
 private struct CompactMenuAction: View {
-    let icon: String
+    let icon: TokiriUI.IconName
     let title: String
     var destructive = false
     var compact = false
@@ -185,7 +302,7 @@ private struct CompactMenuAction: View {
     @ViewBuilder
     var body: some View {
         let label = HStack(spacing: 7) {
-            Image(systemName: icon)
+            TokiriUI.Icon(icon, size: 11)
             Text(title)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)

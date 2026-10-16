@@ -1,6 +1,6 @@
 # Qwixit architecture
 
-**Last reviewed:** 2026-10-07
+**Last reviewed:** 2026-10-12
 
 Qwixit is a native macOS 14+ menu-bar utility built with SwiftUI and AppKit. It uses feature-first MVVM inside a lightweight Clean Architecture shell: enough separation to make system integrations testable, without adding framework ceremony to a small application.
 
@@ -17,12 +17,12 @@ Cloudflare Worker
     └── Paddle checkout + signed webhooks
 ```
 
-The macOS client owns selection capture, UI, focus restoration, and replacement. The Worker owns model credentials, request policy, monthly authorization, and the subscription source of truth. Paddle webhooks—not client claims—activate Unlimited.
+The macOS client owns selection capture, UI, focus restoration, and replacement. The Worker owns model credentials, request policy, monthly authorization, and the subscription source of truth. Paddle webhooks—not client claims—activate Advanced.
 
 ## Repository layout
 
 - `Qwixit/App/` — composition root, application lifecycle, status item, global hotkey routing, and top-level window ownership.
-- `Qwixit/Core/` — reusable design-system and presentation primitives without feature-specific behavior.
+- `Qwixit/Core/DesignSystem/` — TokiriUI tokens, semantic icons, reusable controls, and presentation primitives without feature-specific behavior. The current implementation is app-local, not a separate CDN or package.
 - `Qwixit/Infrastructure/` — app-wide adapters for Accessibility, billing, hotkeys, networking, persistence, and migration.
 - `Qwixit/Features/<Feature>/Domain/` — feature language, pure models, and dependency contracts.
 - `Qwixit/Features/<Feature>/Data/` — concrete data access and external API implementations.
@@ -46,6 +46,7 @@ Presentation → Domain ← Data / Infrastructure
 - Data and infrastructure types implement those protocols.
 - `App` normally chooses concrete implementations and connects feature entry points.
 - A feature must not reach into another feature's presentation layer. Shared behavior moves to `Core` or an app-wide infrastructure contract.
+- Feature views use TokiriUI for matching controls and icons. A missing primitive is documented in `docs/TOKIRI_UI.md`; native SwiftUI/AppKit is the temporary fallback, with the gap called out to the owner. TokiriUI owns appearance and interaction primitives, not view-model state, business rules, or AppKit window lifecycles.
 
 ## Composition and lifecycle
 
@@ -55,6 +56,7 @@ Presentation → Domain ← Data / Infrastructure
 - menu-bar status item and popover;
 - onboarding and settings windows;
 - global Fix, Actions, and Peek hotkeys;
+- shared popup dismissal routing: a visible interactive popup consumes `⌥⌘X` before Fix, while each AppKit controller retains ownership of its close behavior;
 - launch/activation refreshes;
 - teardown of tasks and hotkey registrations.
 
@@ -68,10 +70,10 @@ AppKit objects owning windows or panels end in `WindowController` or `PanelContr
 2. `QuickImproveViewModel` verifies Accessibility access and captures the selected text and its screen bounds.
 3. `TextImprovementService` sends a conservative correction request through `OpenAIClient`.
 4. The Worker atomically authorizes usage before proxying the request with server-controlled model policy and `store: false`.
-5. In the default mode, Qwixit restores focus and replaces the selection through Accessibility, using the clipboard fallback only when necessary. With **Review before applying** enabled, it keeps a transient selection snapshot and proposed output in memory, shows an anchored review panel, and runs the same replacement path only after the user applies it.
-6. The feedback controller reports processing, success, limit, permission, connectivity, or unchanged-text failure. Esc, Keep original, or a failed replacement leaves the source text unchanged.
+5. In the default mode, Qwixit restores focus and sends the replacement through the shared clipboard paste path. With **Preview & Approve** enabled, it keeps a transient selection snapshot and proposed output in memory, shows an anchored review panel, and sends the paste only after the user approves it. If a reviewable snapshot cannot be captured, it reports an error instead of replacing immediately.
+6. The feedback controller reports processing, paste sent, limit, permission, connectivity, or failure. Esc or Keep original leaves the source text unchanged. A posted paste event is not proof that the destination editor accepted it.
 
-The original text must remain unchanged whenever capture, authorization, model output, or replacement fails.
+The original text must remain unchanged whenever capture, authorization, or model output fails. If the paste cannot be sent, the recovery panel offers the result for manual copying.
 
 ### Actions (`⌥⌘A`)
 
@@ -88,6 +90,7 @@ Actions is a replacing flow. It must stay independent from the Fix hotkey and mu
 2. `PeekPanelController` opens a non-activating reading surface.
 3. `PeekViewModel` chooses or executes translation/summary behavior through `PeekClient`.
 4. Results remain in the panel for reading or copying; Peek never automatically replaces source text.
+5. Selections exceeding the request limit receive a visible error; Peek never silently translates or summarizes only a prefix.
 
 ### Billing and quota
 
@@ -101,8 +104,8 @@ Actions is a replacing flow. It must stay independent from the Fix hotkey and mu
 ## Focus, selection, and clipboard invariants
 
 - Transient panels are non-activating and must not become the main application window.
-- Prefer Accessibility reads and writes. Browser-backed editors may require a copy/paste fallback.
-- Any clipboard fallback must snapshot and restore the complete previous pasteboard contents.
+- Prefer Accessibility reads for selection capture, with a clipboard copy fallback when needed. Fix and Actions replace through paste rather than Accessibility writes.
+- Clipboard operations share one transaction gate across features. Snapshot the complete previous pasteboard and restore it after the synthetic shortcut, unless another process changed the clipboard meanwhile; never overwrite that newer content.
 - Restore focus to the originating application before replacement.
 - Keep panels inside the visible screen and avoid covering the selected text when adjacent placement exists.
 - Do not recreate or repeatedly show a visible panel in response to its own state updates.

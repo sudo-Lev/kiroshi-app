@@ -116,7 +116,14 @@ final class PeekViewModel: ObservableObject {
 
     func open(text: String) {
         cancelAll()
-        sourceText = String(text.prefix(24_000))
+        guard PeekInputLimit.accepts(text) else {
+            sourceText = ""
+            sourceLanguage = nil
+            result = nil
+            loadState = .failed(PeekClientError.inputTooLong.localizedDescription)
+            return
+        }
+        sourceText = text
         sourceLanguage = detector.detect(sourceText)
         let rememberedTarget = AppPreferences(defaults: defaults).peekTargetLanguage
         let normalizedSource = sourceLanguage?.code
@@ -147,7 +154,12 @@ final class PeekViewModel: ObservableObject {
     func close() {
         cancelAll()
         isRetrying = false
-        if !isPinned { cache.removeAll() }
+        cache.removeAll()
+        sourceText = ""
+        sourceLanguage = nil
+        result = nil
+        receivedFirstToken = false
+        loadState = .idle
         copied = false
     }
 

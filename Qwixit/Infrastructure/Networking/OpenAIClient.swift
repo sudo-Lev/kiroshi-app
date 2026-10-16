@@ -3,6 +3,7 @@ import Foundation
 enum QwixitAPIError: LocalizedError {
     case invalidResponse
     case emptyOutput
+    case incompleteOutput
     case quotaExceeded(checkoutURL: URL?)
     case api(status: Int, message: String)
 
@@ -10,7 +11,8 @@ enum QwixitAPIError: LocalizedError {
         switch self {
         case .invalidResponse: "The AI service returned an unreadable response. Your text is unchanged."
         case .emptyOutput: "The AI service returned no text. Your text is unchanged."
-        case .quotaExceeded: "You’re out of tokens!"
+        case .incompleteOutput: "The AI service did not finish the result. Your text is unchanged."
+        case .quotaExceeded: "You’ve used your free actions this month."
         case .api(let status, let message): "Tokiri service error \(status): \(message)"
         }
     }
@@ -51,6 +53,49 @@ enum QwixitAPI {
         default:
             false
         }
+    }
+
+    static func isRetryableError(_ error: Error) -> Bool {
+        if isConnectivityError(error) { return true }
+
+        guard let error = error as? QwixitAPIError else { return false }
+        switch error {
+        case .invalidResponse, .emptyOutput, .incompleteOutput:
+            return true
+        case .api(let status, _):
+            return status == 408 || status == 425 || status == 429 || (500...599).contains(status)
+        case .quotaExceeded:
+            return false
+        }
+    }
+}
+
+enum NetworkRetry {
+    static let maximumAttempts = 3
+    static let retryDelay: Duration = .seconds(1)
+
+    static func perform<T>(
+        operation: () async throws -> T,
+        onRetry: (Int, Int) async -> Void = { _, _ in },
+        sleep: (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) async throws -> T {
+        for attempt in 1...maximumAttempts {
+            do {
+                return try await operation()
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard attempt < maximumAttempts, QwixitAPI.isRetryableError(error) else {
+                    throw error
+                }
+
+                let nextAttempt = attempt + 1
+                await onRetry(nextAttempt, maximumAttempts)
+                try await sleep(retryDelay)
+            }
+        }
+
+        throw CancellationError()
     }
 }
 
@@ -173,15 +218,7 @@ actor OpenAIClient {
             throw QwixitAPI.responseError(status: http.statusCode, data: data)
         }
 
-        guard let decoded = try? JSONDecoder().decode(ResponseEnvelope.self, from: data) else { throw QwixitAPIError.invalidResponse }
-        let output = decoded.output
-            .flatMap { $0.content ?? [] }
-            .filter { $0.type == "output_text" }
-            .compactMap(\.text)
-            .joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !output.isEmpty else { throw QwixitAPIError.emptyOutput }
-        return output
+        return try ResponseText.output(from: data)
     }
 
     func performAction(_ text: String, instruction: String, model: String = defaultModel) async throws -> String {
@@ -209,9 +246,26 @@ actor OpenAIClient {
         guard (200..<300).contains(http.statusCode) else {
             throw QwixitAPI.responseError(status: http.statusCode, data: data)
         }
-        guard let decoded = try? JSONDecoder().decode(ResponseEnvelope.self, from: data) else { throw QwixitAPIError.invalidResponse }
-        let output = decoded.output.flatMap { $0.content ?? [] }.filter { $0.type == "output_text" }.compactMap(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !output.isEmpty else { throw QwixitAPIError.emptyOutput }
+        return try ResponseText.output(from: data)
+    }
+}
+
+enum ResponseText {
+    static func output(from data: Data) throws -> String {
+        guard let decoded = try? JSONDecoder().decode(ResponseEnvelope.self, from: data) else {
+            throw QwixitAPIError.invalidResponse
+        }
+        if let status = decoded.status, status != "completed" {
+            throw QwixitAPIError.incompleteOutput
+        }
+        let output = decoded.output
+            .flatMap { $0.content ?? [] }
+            .filter { $0.type == "output_text" }
+            .compactMap(\.text)
+            .joined()
+        guard !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw QwixitAPIError.emptyOutput
+        }
         return output
     }
 }
@@ -286,6 +340,7 @@ private struct ResponseRequest: Encodable {
 }
 
 private struct ResponseEnvelope: Decodable {
+    let status: String?
     let output: [OutputItem]
     struct OutputItem: Decodable {
         let type: String

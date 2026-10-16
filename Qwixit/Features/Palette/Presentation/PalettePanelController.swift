@@ -7,19 +7,33 @@ final class PalettePanelController {
     private let bridge: AXTextBridge
     private let improver: ActionPerforming
     private let hud: ResultHUDController
-    private let resultCard = ResultCardController()
+    private let replacementRecovery: ReplacementRecoveryPresenting
+    private let popupDismiss: PopupDismissCoordinator
+    private let resultCard: ResultCardController
     private var panel: KeyboardPanel?
     private var outsideMonitor: Any?
     private var hostApplication: NSRunningApplication?
     private var actionTask: Task<Void, Never>?
     private var refineTask: Task<Void, Never>?
+    private var followUpTask: Task<Void, Never>?
 
-    init(viewModel: PaletteViewModel, bridge: AXTextBridge, improver: ActionPerforming, hud: ResultHUDController) {
+    init(
+        viewModel: PaletteViewModel,
+        bridge: AXTextBridge,
+        improver: ActionPerforming,
+        hud: ResultHUDController,
+        replacementRecovery: ReplacementRecoveryPresenting,
+        popupDismiss: PopupDismissCoordinator
+    ) {
         self.viewModel = viewModel
         self.bridge = bridge
         self.improver = improver
         self.hud = hud
+        self.replacementRecovery = replacementRecovery
+        self.popupDismiss = popupDismiss
+        resultCard = ResultCardController(popupDismiss: popupDismiss)
         self.hud.onUndo = { [weak self] in Task { @MainActor in await self?.bridge.undo() } }
+        resultCard.onHide = { [weak self] in self?.followUpTask?.cancel() }
         self.viewModel.onRun = { [weak self] action in self?.run(action) }
         self.viewModel.onRefine = { [weak self] action in self?.fetchQuestions(for: action) }
     }
@@ -28,6 +42,7 @@ final class PalettePanelController {
 
     func toggle() async {
         if isVisible { close(); return }
+        resultCard.hide()
         hostApplication = NSWorkspace.shared.frontmostApplication
         guard let capture = await bridge.capture() else {
             hud.showNeutral("Select some text first.", point: NSEvent.mouseLocation)
@@ -39,6 +54,7 @@ final class PalettePanelController {
 
     func close() {
         refineTask?.cancel()
+        if let panel { popupDismiss.hide(panel) }
         panel?.orderOut(nil)
         removeMonitors()
         if let capture = viewModel.capture { restoreHostFocus(capture) }
@@ -71,6 +87,9 @@ final class PalettePanelController {
         panel?.alphaValue = 0
         panel?.orderFrontRegardless()
         panel?.makeKey()
+        if let panel {
+            popupDismiss.show(panel) { [weak self] in self?.close() }
+        }
         installMonitors()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0.08 : 0.14
@@ -80,11 +99,19 @@ final class PalettePanelController {
 
     private func fetchQuestions(for action: PaletteAction) {
         guard let capture = viewModel.capture else { return }
+        let service = improver
         refineTask?.cancel()
         refineTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let questions = try await improver.clarifyingQuestions(capture.text, goal: action.prompt)
+                let questions = try await NetworkRetry.perform(
+                    operation: {
+                        try await service.clarifyingQuestions(capture.text, goal: action.prompt)
+                    },
+                    onRetry: { [weak self] attempt, total in
+                        self?.hud.showRetrying(attempt: attempt, total: total, capture: capture)
+                    }
+                )
                 guard !Task.isCancelled else { return }
                 viewModel.showQuestions(questions, for: action)
             } catch QwixitAPIError.quotaExceeded {
@@ -104,11 +131,13 @@ final class PalettePanelController {
     private func run(_ action: PaletteAction) {
         refineTask?.cancel()
         guard let capture = viewModel.capture else { return }
+        if let panel { popupDismiss.hide(panel) }
         panel?.orderOut(nil)
         removeMonitors()
         restoreHostFocus(capture)
         hud.showRunning(action: action, capture: capture)
         actionTask?.cancel()
+        let service = improver
         actionTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -117,15 +146,32 @@ final class PalettePanelController {
                     let language = action.language ?? "uk"
                     instruction += " Language: \(language)."
                 }
-                let output = try await improver.perform(capture.text, instruction: instruction)
+                let output = try await NetworkRetry.perform(
+                    operation: {
+                        try await service.perform(capture.text, instruction: instruction)
+                    },
+                    onRetry: { [weak self] attempt, total in
+                        self?.hud.showRetrying(attempt: attempt, total: total, capture: capture)
+                    }
+                )
                 try Task.checkCancellation()
                 switch action.mode {
                 case .replace:
-                    guard await bridge.replace(capture, with: output) else { throw PaletteError.writeFailed }
-                    hud.showDone(action: action, detail: action.id == "translate" ? "Text translated · text replaced" : "Text replaced", capture: capture)
+                    let report = await bridge.replace(capture, with: output)
+                    try Task.checkCancellation()
+                    if report.isSubmitted {
+                        hud.showDone(action: action, detail: "Paste sent", capture: capture)
+                    } else {
+                        showRecovery(freshText: output, report: report, capture: capture)
+                    }
                 case .insert:
-                    guard await bridge.insert(capture, text: output) else { throw PaletteError.writeFailed }
-                    hud.showDone(action: action, detail: "Text inserted · original kept", capture: capture)
+                    let report = await bridge.insert(capture, text: output)
+                    try Task.checkCancellation()
+                    if report.isSubmitted {
+                        hud.showDone(action: action, detail: "Paste sent", capture: capture)
+                    } else {
+                        showRecovery(freshText: "\n" + output, report: report, capture: capture)
+                    }
                 case .panel:
                     hud.hide()
                     resultCard.show(
@@ -133,19 +179,40 @@ final class PalettePanelController {
                         result: output,
                         capture: capture,
                         onInsert: { [weak self] in
-                            Task { @MainActor in _ = await self?.bridge.insert(capture, text: output) }
+                            guard let self else { return }
+                            resultCard.hide()
+                            Task { @MainActor in
+                                let report = await self.bridge.insert(capture, text: output)
+                                if report.isSubmitted {
+                                    self.hud.showDone(action: action, detail: "Paste sent", capture: capture)
+                                } else {
+                                    self.showRecovery(freshText: "\n" + output, report: report, capture: capture)
+                                }
+                            }
                         },
                         onAsk: { [weak self] question in
                             guard let self else { return }
                             resultCard.setLoading(true)
-                            Task {
+                            self.followUpTask?.cancel()
+                            self.followUpTask = Task {
                                 do {
-                                    let reply = try await self.improver.perform(
-                                        capture.text,
-                                        instruction: "Answer about the text: \(question)"
+                                    let reply = try await NetworkRetry.perform(
+                                        operation: {
+                                            try await self.improver.perform(
+                                                capture.text,
+                                                instruction: "Answer about the text: \(question)"
+                                            )
+                                        },
+                                        onRetry: { [weak self] attempt, total in
+                                            self?.hud.showRetrying(attempt: attempt, total: total, capture: capture)
+                                        }
                                     )
+                                    try Task.checkCancellation()
                                     self.resultCard.update(result: reply)
+                                } catch is CancellationError {
+                                    return
                                 } catch {
+                                    guard !Task.isCancelled else { return }
                                     self.resultCard.update(result: error.localizedDescription)
                                 }
                             }
@@ -163,6 +230,17 @@ final class PalettePanelController {
                 hud.showError((error as? LocalizedError)?.errorDescription ?? error.localizedDescription, capture: capture)
             }
         }
+    }
+
+    private func showRecovery(freshText: String, report: ReplacementAttemptReport, capture: PaletteCapture) {
+        hud.hide()
+        replacementRecovery.show(
+            freshText: freshText,
+            report: report,
+            anchor: capture.bounds,
+            fallbackPoint: capture.fallbackPoint,
+            onClose: { [weak self] in self?.bridge.restoreFocus(capture) }
+        )
     }
 
     private func handle(_ event: NSEvent) -> Bool {
@@ -236,7 +314,6 @@ final class PalettePanelController {
         panel.setFrameOrigin(origin)
     }
 }
-
 private final class KeyboardPanel: NSPanel {
     var keyHandler: ((NSEvent) -> Bool)?
     override var canBecomeKey: Bool { true }
@@ -246,9 +323,4 @@ private final class KeyboardPanel: NSPanel {
         if event.type == .keyDown, keyHandler?(event) == true { return }
         super.sendEvent(event)
     }
-}
-
-private enum PaletteError: LocalizedError {
-    case writeFailed
-    var errorDescription: String? { "The active app did not allow the text change. Your text is unchanged." }
 }

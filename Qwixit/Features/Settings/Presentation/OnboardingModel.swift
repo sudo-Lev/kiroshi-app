@@ -56,7 +56,9 @@ final class OnboardingModel: ObservableObject {
     @Published private(set) var typed = ""
     @Published private(set) var accessibilityGranted: Bool
     @Published private(set) var isRequestingAccessibility = false
+    @Published private(set) var controlDown = false
     @Published private(set) var optionDown = false
+    @Published private(set) var shiftDown = false
     @Published private(set) var commandDown = false
     @Published private(set) var selectionIndex = 0
     @Published private(set) var hasRealInput = false
@@ -135,8 +137,10 @@ final class OnboardingModel: ObservableObject {
         phase = .done
     }
 
-    func updateModifiers(option: Bool, command: Bool) {
+    func updateModifiers(control: Bool, option: Bool, shift: Bool, command: Bool) {
+        controlDown = control
         optionDown = option
+        shiftDown = shift
         commandDown = command
     }
 
@@ -215,7 +219,9 @@ final class OnboardingModel: ObservableObject {
         phase = .idle
         choice = nil
         typed = ""
+        controlDown = false
         optionDown = false
+        shiftDown = false
         commandDown = false
         selectionIndex = 0
         hasRealInput = false

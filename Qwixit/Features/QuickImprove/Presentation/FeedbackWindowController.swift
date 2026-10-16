@@ -4,7 +4,12 @@ import AppKit
 @MainActor
 final class FeedbackWindowController: FeedbackPresenting {
     private let state = FeedbackWindowState()
+    private let popupDismiss: PopupDismissCoordinator
     private var panel: NSPanel?
+
+    init(popupDismiss: PopupDismissCoordinator) {
+        self.popupDismiss = popupDismiss
+    }
 
     func show(
         phase: AppPhase,
@@ -12,12 +17,16 @@ final class FeedbackWindowController: FeedbackPresenting {
         anchor accessibilityBounds: CGRect? = nil,
         fallbackPoint: CGPoint? = nil
     ) {
-        var isStatusChip = phase == .processing || phase == .success
-        if case .error = phase { isStatusChip = true }
+        let isError: Bool = if case .error = phase { true } else { false }
+        let isRetrying: Bool = if case .retrying = phase { true } else { false }
+        let isCyberStatus = phase == .processing || phase == .success || phase == .pasteSent || phase == .offline || isRetrying || isError
+        let isInteractiveStatus = phase == .offline || isError || phase == .limitReached
         let size: NSSize
-        if phase == .limitReached { size = .init(width: 374, height: 158) }
-        else if isStatusChip { size = .init(width: 216, height: 50) }
-        else if phase == .permissionDenied || phase == .offline { size = .init(width: 326, height: 86) }
+        if phase == .limitReached { size = .init(width: 420, height: 232) }
+        else if isError { size = .init(width: 400, height: 72) }
+        else if phase == .offline { size = .init(width: 360, height: 56) }
+        else if isCyberStatus { size = .init(width: 216, height: 50) }
+        else if phase == .permissionDenied { size = .init(width: 326, height: 86) }
         else if phase == .noSelection { size = .init(width: 306, height: 82) }
         else { size = .init(width: 272, height: 66) }
         if panel == nil {
@@ -36,27 +45,41 @@ final class FeedbackWindowController: FeedbackPresenting {
             )
             self.panel = panel
         }
-        // The status chip draws its own shadow. A native shadow would trace the transparent
-        // panel rectangle, so the chip gets a clear margin wide enough for the shadow to fade
-        // out fully, and lets clicks pass through it since the chip has no controls.
-        // The margin is SwiftUI padding because NSHostingView sizes the panel to its content.
-        let shadowMargin: CGFloat = isStatusChip ? 36 : 0
+        // Status notices stay click-through so the HUD never interferes with
+        // the active app. Error/offline/limit states contain controls and remain
+        // interactive.
+        let shadowMargin: CGFloat = isCyberStatus && !isInteractiveStatus ? 36 : 0
         state.reduceMotion = reduceMotion
         state.shadowMargin = shadowMargin
         state.phase = phase
-        panel?.hasShadow = !isStatusChip
-        panel?.ignoresMouseEvents = isStatusChip
+        panel?.hasShadow = !isCyberStatus
+        panel?.ignoresMouseEvents = !isInteractiveStatus
         panel?.setContentSize(NSSize(width: size.width + shadowMargin * 2, height: size.height + shadowMargin * 2))
         position(anchor: accessibilityBounds, fallbackPoint: fallbackPoint, visibleSize: size, margin: shadowMargin)
-        panel?.alphaValue = 0
+        let shouldAnimateAppearance = panel?.isVisible != true
         panel?.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = reduceMotion ? 0 : 0.08
-            panel?.animator().alphaValue = 1
+        if let panel {
+            if isInteractiveStatus {
+                popupDismiss.show(panel) { [weak self] in self?.hide() }
+            } else {
+                popupDismiss.hide(panel)
+            }
+        }
+        if shouldAnimateAppearance {
+            panel?.alphaValue = 0
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = reduceMotion ? 0 : 0.08
+                panel?.animator().alphaValue = 1
+            }
+        } else {
+            panel?.alphaValue = 1
         }
     }
 
-    func hide() { panel?.orderOut(nil) }
+    func hide() {
+        if let panel { popupDismiss.hide(panel) }
+        panel?.orderOut(nil)
+    }
 
     private func position(anchor accessibilityBounds: CGRect?, fallbackPoint: CGPoint?, visibleSize: NSSize, margin: CGFloat) {
         guard let panel else { return }
@@ -104,9 +127,11 @@ private struct FeedbackHost: View {
         case .ready: "ready"
         case .processing: "processing"
         case .success: "success"
+        case .pasteSent: "paste-sent"
         case .noSelection: "no-selection"
         case .permissionDenied: "permission"
         case .limitReached: "limit-reached"
+        case .retrying(_, _): "processing"
         case .offline: "offline"
         case .error(let message): "error-\(message)"
         }

@@ -196,9 +196,11 @@ private struct QwixitPanelModifier: ViewModifier {
 
 enum QwixitErrorCopy {
     enum Kind {
+        case verification
         case replacement
         case emptyReply
         case unreadableReply
+        case incompleteReply
         case permission
         case service
         case unknown
@@ -206,6 +208,10 @@ enum QwixitErrorCopy {
 
     static func kind(for message: String) -> Kind {
         let normalized = message.lowercased()
+        if normalized.contains("confirm"),
+           (normalized.contains("replacement") || normalized.contains("text change")) {
+            return .verification
+        }
         if normalized.contains("replace") || normalized.contains("text change") {
             return .replacement
         }
@@ -214,6 +220,9 @@ enum QwixitErrorCopy {
         }
         if normalized.contains("unreadable") || normalized.contains("decode") {
             return .unreadableReply
+        }
+        if normalized.contains("incomplete") || normalized.contains("did not finish") || normalized.contains("stopped early") {
+            return .incompleteReply
         }
         if normalized.contains("permission") || normalized.contains("accessibility") {
             return .permission
@@ -226,12 +235,16 @@ enum QwixitErrorCopy {
 
     static func title(for message: String) -> String {
         switch kind(for: message) {
+        case .verification:
+            return "Couldn’t confirm the change"
         case .replacement:
             return "Couldn’t replace the text"
         case .emptyReply:
             return "No text came back"
         case .unreadableReply:
             return "The reply couldn’t be read"
+        case .incompleteReply:
+            return "The reply stopped early"
         case .permission:
             return "Tokiri needs access"
         case .service:
@@ -243,18 +256,33 @@ enum QwixitErrorCopy {
 
     static func headline(for message: String) -> String {
         switch kind(for: message) {
+        case .verification: "CHECK THE TEXT"
         case .replacement: "NOT REPLACED"
         case .emptyReply: "EMPTY REPLY"
         case .unreadableReply: "BAD REPLY"
+        case .incompleteReply: "INCOMPLETE REPLY"
         case .permission: "ACCESS NEEDED"
         case .service: "SERVICE ERROR"
         case .unknown: "NOT COMPLETED"
         }
     }
+
+    /// Error detail is transient UI copy. Keep provider context useful without
+    /// allowing a multiline or unbounded response to reshape the HUD.
+    static func detail(for message: String) -> String {
+        let singleLine = message
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        let limit = 180
+        guard singleLine.count > limit else { return singleLine }
+        return String(singleLine.prefix(limit - 1)) + "…"
+    }
 }
 
 enum QwixitFace: Int, CaseIterable {
-    case hello, boot, ready, pay, broke, empty, upsell, lost, retry, idle, scanning
+    case hello, boot, ready, pay, broke, empty, upsell, advanced, lost, retry, idle, scanning
 
     var open: String {
         switch self {
@@ -265,8 +293,9 @@ enum QwixitFace: Int, CaseIterable {
         case .broke: "$_00_$"
         case .empty: "x_x"
         case .upsell: "¬_¬"
+        case .advanced: "$^_^$"
         case .lost: "?_?"
-        case .retry: "@_@"
+        case .retry: ">_<"
         case .idle: "#_#"
         case .scanning: "¬_¬"
         }
@@ -281,17 +310,25 @@ enum QwixitFace: Int, CaseIterable {
 
     var line: String {
         switch self {
-        case .hello: "hi. select text, press ⌥⌘X."
+        case .hello: "hi. select text, press your shortcut."
         case .boot: "first launch. permissions?"
         case .ready: "ready. go fix something."
         case .pay: "wow — 30 actions already!\nlooks like we clicked."
         case .broke: "out of tokens."
         case .empty: "30 / 30 used."
-        case .upsell: "unlimited. $10/mo."
+        case .upsell: "advanced. $10/mo."
+        case .advanced: "more room to work."
         case .lost: "no signal."
         case .retry: "reconnecting…"
         case .idle: "offline. waiting for wi-fi."
         case .scanning: "scanning…"
+        }
+    }
+
+    func accessibilityLabel(bracketed: Bool) -> String {
+        switch self {
+        case .advanced: "Advanced plan active"
+        default: text(closed: false, bracketed: bracketed)
         }
     }
 
@@ -332,7 +369,7 @@ struct QwixitFaceView: View {
         }
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(face == .scanning ? "Scanning" : face.text(closed: false, bracketed: bracketed))
+        .accessibilityLabel(face == .scanning ? "Scanning" : face.accessibilityLabel(bracketed: bracketed))
         .task(id: AnimationID(face: face, reduceMotion: reduceMotion)) {
             closed = false
             scanningFrame = 0
@@ -379,6 +416,37 @@ struct QwixitFaceView: View {
     }
 
     private var split: CGFloat { 1.5 * size / 18 }
+}
+
+struct QwixitPaywallUsageStrip: View {
+    let used: Int
+    let remaining: Int
+    var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+
+    private var clampedUsed: Int { min(max(used, 0), 30) }
+    private var clampedRemaining: Int { min(max(remaining, 0), 30) }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            QwixitFaceView(face: .empty, size: 17, reduceMotion: reduceMotion)
+
+            Text("\(clampedUsed) / 30 used")
+                .font(.system(size: 15, weight: .black, design: .monospaced))
+
+            Spacer(minLength: 12)
+
+            Text("\(clampedRemaining) free left")
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundStyle(KColor.secondary)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 40)
+        .background(KColor.canvasRaised)
+        .overlay(alignment: .top) { Rectangle().fill(KColor.line).frame(height: 1) }
+        .overlay(alignment: .bottom) { Rectangle().fill(KColor.line).frame(height: 1) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(clampedUsed) of 30 free actions used, \(clampedRemaining) free left")
+    }
 }
 
 enum QwixitMarkStyle { case automatic, light, dark, mono }
@@ -489,12 +557,6 @@ struct Keycap: View {
     }
 }
 
-struct ShortcutKeys: View {
-    var body: some View {
-        ShortcutBadge(modifiers: ["⌥", "⌘"], key: "X")
-    }
-}
-
 struct ShortcutBadge: View {
     let modifiers: [String]
     let key: String
@@ -516,6 +578,74 @@ struct ShortcutBadge: View {
     }
 }
 
+/// Keeps the familiar hotkey badge visual while making it an explicit action.
+/// Used for compact panel dismissal where the badge already occupies the close
+/// affordance's natural position.
+struct ShortcutBadgeButton: View {
+    let modifiers: [String]
+    let key: String
+    let action: () -> Void
+    let label: String
+
+    init(
+        modifiers: [String],
+        key: String,
+        label: String,
+        action: @escaping () -> Void
+    ) {
+        self.modifiers = modifiers
+        self.key = key
+        self.label = label
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            ShortcutBadge(modifiers: modifiers, key: key)
+        }
+        .buttonStyle(ShortcutBadgeButtonStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityHint("Dismiss this panel")
+    }
+}
+
+struct ShortcutBadgeButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(QwixitControlShape(cut: 5))
+            .overlay {
+                QwixitControlShape(cut: 5)
+                    .stroke(isHovering ? KColor.violet.opacity(0.72) : .clear, lineWidth: 1)
+            }
+            .tokiriElectricTrace(
+                in: QwixitControlShape(cut: 5),
+                on: configuration.isPressed,
+                when: configuration.isPressed,
+                accent: KColor.violet
+            )
+            .shadow(
+                color: KColor.violet.opacity(isHovering ? 0.14 : 0),
+                radius: isHovering ? 5 : 0
+            )
+            .opacity(isEnabled ? (configuration.isPressed ? 0.82 : 1) : 0.45)
+            .scaleEffect(
+                reduceMotion
+                    ? 1
+                    : configuration.isPressed
+                        ? 0.96
+                        : isHovering ? 1.015 : 1
+            )
+            .animation(reduceMotion ? nil : .snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
+    }
+}
+
 struct AccessStatusBadge: View {
     let granted: Bool
     var compact = false
@@ -524,9 +654,8 @@ struct AccessStatusBadge: View {
 
     var body: some View {
         HStack(spacing: compact ? 4 : 6) {
-            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .font(.system(size: compact ? 9 : 10, weight: .bold))
-            Text(granted ? "Access" : "No access")
+            TokiriUI.Icon(granted ? .statusSuccess : .statusWarning, size: compact ? 9 : 10)
+            Text(granted ? "Access" : "Access needed")
                 .font(.system(size: compact ? 7.5 : 9, weight: .bold, design: .monospaced))
                 .tracking(compact ? 0 : 0.2)
         }
@@ -556,6 +685,89 @@ struct QwixitControlShape: Shape {
     }
 }
 
+/// A single, self-clearing edge impulse shared by TokiriUI controls. The
+/// trimmed strokes collapse to zero at the end, so no timer or looping effect
+/// survives an interaction.
+private struct TokiriElectricTrace<S: Shape>: View {
+    let shape: S
+    let accent: Color
+    let prominent: Bool
+
+    @State private var progress: CGFloat = 0
+
+    private var head: CGFloat { min(1, progress * 1.22) }
+    private var tail: CGFloat { max(0, min(1, (progress - 0.18) * 1.22)) }
+
+    var body: some View {
+        ZStack {
+            shape.trim(from: tail, to: head)
+                .stroke(
+                    accent.opacity(prominent ? 0.48 : 0.32),
+                    style: StrokeStyle(lineWidth: prominent ? 4 : 3, lineCap: .round)
+                )
+                .blur(radius: prominent ? 2 : 1.5)
+
+            shape.trim(from: tail, to: head)
+                .stroke(
+                    accent,
+                    style: StrokeStyle(lineWidth: prominent ? 1.8 : 1.35, lineCap: .round)
+                )
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear {
+            withAnimation(.easeOut(duration: prominent ? 0.20 : 0.16)) {
+                progress = 1
+            }
+        }
+    }
+}
+
+private struct TokiriElectricTraceModifier<Trigger: Equatable, S: Shape>: ViewModifier {
+    let shape: S
+    let trigger: Trigger
+    let shouldRun: Bool
+    let accent: Color
+    let prominent: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityDimFlashingLights) private var dimFlashingLights
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var impulse = 0
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if impulse > 0, !reduceMotion, !dimFlashingLights, isEnabled {
+                    TokiriElectricTrace(shape: shape, accent: accent, prominent: prominent)
+                        .id(impulse)
+                }
+            }
+            .onChange(of: trigger) { _, _ in
+                guard shouldRun, isEnabled, !reduceMotion, !dimFlashingLights else { return }
+                impulse &+= 1
+            }
+    }
+}
+
+private extension View {
+    func tokiriElectricTrace<Trigger: Equatable, S: Shape>(
+        in shape: S,
+        on trigger: Trigger,
+        when shouldRun: Bool = true,
+        accent: Color = KColor.cyan,
+        prominent: Bool = false
+    ) -> some View {
+        modifier(TokiriElectricTraceModifier(
+            shape: shape,
+            trigger: trigger,
+            shouldRun: shouldRun,
+            accent: accent,
+            prominent: prominent
+        ))
+    }
+}
+
 struct QwixitToggleStyle: ToggleStyle {
     var compact = false
     /// Set to `false` when the surrounding row already provides the visible copy.
@@ -569,7 +781,13 @@ struct QwixitToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button {
             guard isEnabled else { return }
-            configuration.isOn.toggle()
+            if reduceMotion {
+                configuration.isOn.toggle()
+            } else {
+                withAnimation(.easeOut(duration: 0.24)) {
+                    configuration.isOn.toggle()
+                }
+            }
         } label: {
             Group {
                 if showsLabel {
@@ -588,10 +806,6 @@ struct QwixitToggleStyle: ToggleStyle {
         .opacity(isEnabled ? 1 : 0.45)
         .accessibilityValue(configuration.isOn ? "On" : "Off")
         .accessibilityHint("Toggles this setting")
-        .animation(
-            reduceMotion ? nil : .snappy(duration: 0.12),
-            value: configuration.isOn
-        )
     }
 
     private func track(isOn: Bool) -> some View {
@@ -601,45 +815,58 @@ struct QwixitToggleStyle: ToggleStyle {
         let trackHeight: CGFloat = compact ? 28 : 32
         let thumbWidth: CGFloat = compact ? 23 : 27
         let thumbHeight: CGFloat = compact ? 22 : 26
+        let thumbTravel = trackWidth - thumbWidth - 6
 
         return ZStack {
-            if isOn {
-                trackShape.fill(KColor.primaryAction)
-            } else {
-                trackShape.fill(KColor.surfaceHover)
+            trackShape.fill(isOn ? KColor.primaryAction : KColor.surfaceHover)
+
+            ZStack {
+                Text("ON")
+                    .foregroundStyle(KColor.success)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(isOn ? 1 : 0)
+
+                Text("OFF")
+                    .foregroundStyle(KColor.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .opacity(isOn ? 0 : 1)
             }
+            .font(.system(size: compact ? 8.5 : 9.5, weight: .black, design: .monospaced))
+            .tracking(0.55)
+            .padding(.horizontal, compact ? 8 : 9)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.10), value: isOn)
 
-            Text(isOn ? "ON" : "OFF")
-                .font(.system(size: compact ? 8.5 : 9.5, weight: .black, design: .monospaced))
-                .tracking(0.55)
-                .foregroundStyle(isOn ? KColor.success : KColor.secondary)
-                .frame(maxWidth: .infinity, alignment: isOn ? .leading : .trailing)
-                .padding(.horizontal, compact ? 8 : 9)
-
-            HStack(spacing: 0) {
-                if isOn { Spacer(minLength: 0) }
-                thumbShape
-                    .fill(KColor.surface)
-                    .overlay {
-                        thumbShape.stroke(
-                            isOn ? KColor.success.opacity(0.92) : KColor.line,
-                            lineWidth: 1
-                        )
-                    }
-                    .overlay {
-                        Image(systemName: isOn ? "checkmark" : "minus")
-                            .font(.system(size: compact ? 10 : 11, weight: .black))
-                            .foregroundStyle(isOn ? KColor.success : KColor.secondary)
-                    }
-                    .shadow(
-                        color: isOn ? KColor.success.opacity(0.34) : KColor.cardShadow,
-                        radius: isHovering ? 5 : 3,
-                        y: 1
+            thumbShape
+                .fill(KColor.surface)
+                .overlay {
+                    thumbShape.stroke(
+                        isOn ? KColor.success.opacity(0.92) : KColor.line,
+                        lineWidth: 1
                     )
-                    .frame(width: thumbWidth, height: thumbHeight)
-                if !isOn { Spacer(minLength: 0) }
-            }
-            .padding(3)
+                }
+                .overlay {
+                    ZStack {
+                        TokiriUI.Icon(.check, size: compact ? 13 : 14)
+                            .foregroundStyle(KColor.success)
+                            .opacity(isOn ? 1 : 0)
+
+                        TokiriUI.Icon(.minus, size: compact ? 13 : 14)
+                            .foregroundStyle(KColor.secondary)
+                            .opacity(isOn ? 0 : 1)
+                    }
+                    .frame(width: compact ? 13 : 14, height: compact ? 13 : 14)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.10), value: isOn)
+                }
+                .shadow(
+                    color: isOn ? KColor.success.opacity(0.34) : KColor.cardShadow,
+                    radius: isHovering ? 5 : 3,
+                    y: 1
+                )
+                .frame(width: thumbWidth, height: thumbHeight)
+                .offset(x: isOn ? thumbTravel : 0)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.24), value: isOn)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(3)
         }
         .frame(width: trackWidth, height: trackHeight)
         .clipShape(trackShape)
@@ -656,6 +883,7 @@ struct QwixitToggleStyle: ToggleStyle {
             radius: isHovering ? 6 : 3,
             y: 2
         )
+        .tokiriElectricTrace(in: trackShape, on: isOn, accent: KColor.success)
         .onHover { isHovering = isEnabled && $0 }
         .accessibilityHidden(true)
     }
@@ -709,9 +937,7 @@ struct QwixitThemePicker: View {
             choose(appearance)
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: appearance == .light ? "sun.max.fill" : "moon.stars.fill")
-                    .font(.system(size: 10, weight: .bold))
-                    .accessibilityHidden(true)
+                TokiriUI.Icon(appearance == .light ? .themeLight : .themeDark, size: 13)
                 Text(appearance.title)
                     .font(.system(size: 10.5, weight: .bold))
             }
@@ -730,6 +956,12 @@ struct QwixitThemePicker: View {
                         .stroke(KColor.violet, lineWidth: 1.5)
                 }
             }
+            .tokiriElectricTrace(
+                in: QwixitControlShape(cut: 5),
+                on: isSelected,
+                when: isSelected,
+                accent: KColor.cyan
+            )
             .contentShape(QwixitControlShape(cut: 5))
         }
         .buttonStyle(.plain)
@@ -827,6 +1059,7 @@ struct QwixitRadioOption<Selection: Hashable>: View {
                 radius: isHovering ? 4 : 2,
                 y: 1
             )
+            .tokiriElectricTrace(in: Circle(), on: isSelected, when: isSelected, accent: KColor.violet)
     }
 }
 
@@ -835,6 +1068,7 @@ struct PrimaryButtonStyle: ButtonStyle {
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -852,18 +1086,26 @@ struct PrimaryButtonStyle: ButtonStyle {
             .overlay(alignment: .topLeading) {
                 Rectangle().fill(.white.opacity(0.72)).frame(width: compact ? 12 : 15, height: 1).offset(x: compact ? 7 : 9, y: compact ? 4 : 5)
             }
+            .tokiriElectricTrace(
+                in: QwixitControlShape(cut: compact ? 4 : 6),
+                on: configuration.isPressed,
+                when: configuration.isPressed,
+                accent: KColor.cyan,
+                prominent: true
+            )
             .shadow(color: KColor.violet.opacity(isHovering ? (colorScheme == .dark ? 0.24 : 0.16) : 0.12), radius: isHovering ? (compact ? 6 : 8) : (compact ? 4 : 5), y: compact ? 2 : 3)
-            .opacity(isEnabled ? 1 : 0.45)
-            .scaleEffect(configuration.isPressed ? (compact ? 0.97 : 0.96) : isHovering ? (compact ? 1.015 : 1.025) : 1)
-            .offset(y: configuration.isPressed ? (compact ? 1 : 2) : 0)
-            .animation(.snappy(duration: 0.14), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.16), value: isHovering)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.86 : 1) : 0.45)
+            .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? (compact ? 0.97 : 0.96) : isHovering ? (compact ? 1.015 : 1.025) : 1)
+            .offset(y: reduceMotion ? 0 : configuration.isPressed ? (compact ? 1 : 2) : 0)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.14), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isHovering)
             .onHover { isHovering = isEnabled && $0 }
     }
 }
 
 struct SubtleButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -872,16 +1114,17 @@ struct SubtleButtonStyle: ButtonStyle {
             .foregroundStyle(isHovering ? KColor.violet : KColor.ink)
             .padding(.horizontal, 10)
             .frame(minHeight: 28)
-            .background(isHovering ? KColor.violet.opacity(0.08) : KColor.surface, in: QwixitControlShape(cut: 5))
+            .background(configuration.isPressed ? KColor.violet.opacity(0.15) : isHovering ? KColor.violet.opacity(0.08) : KColor.surface, in: QwixitControlShape(cut: 5))
             .overlay {
                 QwixitControlShape(cut: 5)
                     .stroke(isHovering ? KColor.violet.opacity(0.7) : KColor.line, lineWidth: 1)
             }
+            .tokiriElectricTrace(in: QwixitControlShape(cut: 5), on: configuration.isPressed, when: configuration.isPressed, accent: KColor.violet)
             .opacity(isEnabled ? 1 : 0.45)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .offset(y: configuration.isPressed ? 1 : 0)
-            .animation(.snappy(duration: 0.14), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.16), value: isHovering)
+            .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.97 : 1)
+            .offset(y: reduceMotion ? 0 : configuration.isPressed ? 1 : 0)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.14), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isHovering)
             .onHover { isHovering = isEnabled && $0 }
     }
 }
@@ -892,6 +1135,7 @@ struct CompactButtonStyle: ButtonStyle {
     var prominent = false
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -903,18 +1147,19 @@ struct CompactButtonStyle: ButtonStyle {
             .background(
                 prominent
                     ? accent.opacity(configuration.isPressed ? 0.78 : 1)
-                    : accent.opacity(isSelected ? 0.17 : isHovering ? 0.10 : 0.05),
+                    : accent.opacity(configuration.isPressed ? 0.22 : isSelected ? 0.17 : isHovering ? 0.10 : 0.05),
                 in: QwixitControlShape(cut: 4)
             )
             .overlay {
                 QwixitControlShape(cut: 4)
                     .stroke(accent.opacity(isSelected || isHovering || prominent ? 0.82 : 0.52), lineWidth: 1)
             }
+            .tokiriElectricTrace(in: QwixitControlShape(cut: 4), on: configuration.isPressed, when: configuration.isPressed, accent: accent)
             .opacity(isEnabled ? 1 : 0.45)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .offset(y: configuration.isPressed ? 1 : 0)
-            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.96 : 1)
+            .offset(y: reduceMotion ? 0 : configuration.isPressed ? 1 : 0)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
             .onHover { isHovering = isEnabled && $0 }
     }
 }
@@ -925,12 +1170,13 @@ struct SelectionButtonStyle: ButtonStyle {
     var cut: CGFloat = 6
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
-                accent.opacity(isSelected ? 0.13 : isHovering ? 0.06 : 0),
+                accent.opacity(configuration.isPressed ? 0.18 : isSelected ? 0.13 : isHovering ? 0.06 : 0),
                 in: QwixitControlShape(cut: cut)
             )
             .overlay {
@@ -940,11 +1186,12 @@ struct SelectionButtonStyle: ButtonStyle {
                         lineWidth: 1
                     )
             }
+            .tokiriElectricTrace(in: QwixitControlShape(cut: cut), on: configuration.isPressed, when: configuration.isPressed, accent: accent)
             .contentShape(QwixitControlShape(cut: cut))
             .opacity(isEnabled ? 1 : 0.45)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.985 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
             .onHover { isHovering = isEnabled && $0 }
     }
 }
@@ -1001,6 +1248,7 @@ struct QwixitSemanticCardButtonStyle: ButtonStyle {
     var cut: CGFloat = 8
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     private var colors: [Color] { accent.colors }
@@ -1016,7 +1264,7 @@ struct QwixitSemanticCardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
-                primary.opacity(isSelected ? 0.10 : isHovering ? 0.045 : 0),
+                primary.opacity(configuration.isPressed ? 0.16 : isSelected ? 0.10 : isHovering ? 0.045 : 0),
                 in: QwixitControlShape(cut: cut)
             )
             .overlay {
@@ -1026,11 +1274,12 @@ struct QwixitSemanticCardButtonStyle: ButtonStyle {
                         lineWidth: 1
                     )
             }
+            .tokiriElectricTrace(in: QwixitControlShape(cut: cut), on: configuration.isPressed, when: configuration.isPressed, accent: primary)
             .contentShape(QwixitControlShape(cut: cut))
             .opacity(isEnabled ? 1 : 0.45)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.985 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
             .onHover { isHovering = isEnabled && $0 }
     }
 }
@@ -1040,6 +1289,7 @@ struct QwixitSemanticCompactButtonStyle: ButtonStyle {
     var isSelected = false
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     private var colors: [Color] { accent.colors }
@@ -1059,7 +1309,7 @@ struct QwixitSemanticCompactButtonStyle: ButtonStyle {
             .padding(.horizontal, 8)
             .frame(minHeight: 24)
             .background(
-                primary.opacity(isSelected ? 0.14 : isHovering ? 0.08 : 0.035),
+                primary.opacity(configuration.isPressed ? 0.20 : isSelected ? 0.14 : isHovering ? 0.08 : 0.035),
                 in: QwixitControlShape(cut: 4)
             )
             .overlay {
@@ -1069,18 +1319,21 @@ struct QwixitSemanticCompactButtonStyle: ButtonStyle {
                         lineWidth: 1
                     )
             }
+            .tokiriElectricTrace(in: QwixitControlShape(cut: 4), on: configuration.isPressed, when: configuration.isPressed, accent: primary)
             .contentShape(QwixitControlShape(cut: 4))
             .opacity(isEnabled ? 1 : 0.45)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .offset(y: configuration.isPressed ? 1 : 0)
-            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.96 : 1)
+            .offset(y: reduceMotion ? 0 : configuration.isPressed ? 1 : 0)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
             .onHover { isHovering = isEnabled && $0 }
     }
 }
 
 struct IconButtonStyle: ButtonStyle {
     var accent = KColor.secondary
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -1088,12 +1341,14 @@ struct IconButtonStyle: ButtonStyle {
             .font(.system(size: 9, weight: .bold))
             .foregroundStyle(isHovering ? KColor.ink : accent)
             .frame(width: 24, height: 24)
-            .background(isHovering ? accent.opacity(0.12) : KColor.surfaceHover, in: QwixitControlShape(cut: 5))
+            .background(configuration.isPressed ? accent.opacity(0.20) : isHovering ? accent.opacity(0.12) : KColor.surfaceHover, in: QwixitControlShape(cut: 5))
             .overlay { QwixitControlShape(cut: 5).stroke(isHovering ? accent.opacity(0.65) : KColor.line) }
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .animation(.snappy(duration: 0.13), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.14), value: isHovering)
-            .onHover { isHovering = $0 }
+            .tokiriElectricTrace(in: QwixitControlShape(cut: 5), on: configuration.isPressed, when: configuration.isPressed, accent: accent)
+            .opacity(isEnabled ? 1 : 0.45)
+            .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.92 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.13), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
     }
 }
 

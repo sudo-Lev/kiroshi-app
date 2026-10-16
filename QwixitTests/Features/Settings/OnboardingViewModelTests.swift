@@ -106,7 +106,6 @@ private final class OnboardingAccessibilityStub: AccessibilityServicing {
     func selectedText() async -> String? { nil }
     func selectionBounds() -> CGRect? { nil }
     func fallbackPoint() -> CGPoint { .zero }
-    func replaceSelection(_ originalText: String, with replacement: String) async -> Bool { true }
 }
 
 final class QwixitUsageTests: XCTestCase {

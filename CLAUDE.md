@@ -37,7 +37,7 @@ Folder names don't match the product terms used in docs:
 ## Big picture
 
 - `Qwixit/App/QwixitApp.swift` is the composition root: `AppContainer` builds services, view models, and panel controllers; `AppDelegate` owns the status item, hotkey routing, windows, and teardown.
-- All model calls go through `cloudflare-worker/worker.js` (a single-file Worker). It holds the OpenAI key, enforces model policy and `store: false`, and meters every request through a Durable Object ledger keyed by the `X-Qwixit-Installation-ID` header. Paddle signed webhooks are the only path to Unlimited. Changes to request shape usually touch both the Swift networking layer and the Worker.
+- All model calls go through `cloudflare-worker/worker.js` (a single-file Worker). It holds the OpenAI key, enforces model policy and `store: false`, and meters every request through a Durable Object ledger keyed by the `X-Qwixit-Installation-ID` header. Paddle signed webhooks are the only path to Advanced. Changes to request shape usually touch both the Swift networking layer and the Worker.
 - Naming conventions: presentation models end in `ViewModel` (never `Store`); window owners end in `WindowController`, transient non-activating panels in `PanelController`.
 - On any failure (capture, quota, model, replacement) the user's original selection must stay unchanged; clipboard fallbacks must snapshot and fully restore the pasteboard.
 

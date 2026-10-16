@@ -4,9 +4,11 @@ enum AppPhase: Equatable {
     case ready
     case processing
     case success
+    case pasteSent
     case noSelection
     case permissionDenied
     case limitReached
+    case retrying(attempt: Int, total: Int)
     case offline
     case error(String)
 }
@@ -19,14 +21,14 @@ protocol ReviewPresenting: AnyObject {
         anchor accessibilityBounds: CGRect?,
         fallbackPoint: CGPoint?,
         onApply: @escaping () -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping (_ restoreFocus: Bool) -> Void
     )
     func hide()
 }
 
 protocol SelectionSnapshotProviding: AnyObject {
     func captureSelection() async -> TextSelectionSnapshot?
-    func replaceSelection(_ snapshot: TextSelectionSnapshot, with replacement: String) async -> Bool
+    func replaceSelection(_ snapshot: TextSelectionSnapshot, with replacement: String) async -> ReplacementAttemptReport
     func restoreFocus(_ snapshot: TextSelectionSnapshot)
 }
 
@@ -36,21 +38,10 @@ protocol AccessibilityServicing: AnyObject {
     func selectedText() async -> String?
     func selectionBounds() -> CGRect?
     func fallbackPoint() -> CGPoint
-    func replaceSelection(_ originalText: String, with replacement: String) async -> Bool
 }
 
 protocol TextImproving: AnyObject {
     func improve(_ text: String, instruction: String?) async throws -> String
-}
-
-enum ReplacementVerification {
-    /// A successful replacement usually collapses the selection. Some editors
-    /// keep the inserted text selected, so that exact value is also accepted.
-    static func succeeded(original: String, replacement: String, selectedAfter: String?) -> Bool {
-        if original == replacement { return true }
-        guard let selectedAfter, !selectedAfter.isEmpty else { return true }
-        return selectedAfter == replacement
-    }
 }
 
 @MainActor

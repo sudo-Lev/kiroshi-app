@@ -16,7 +16,7 @@ final class ResultHUDController {
     }
 
     func showDone(action: PaletteAction, detail: String, capture: PaletteCapture) {
-        present(.success, capture: capture)
+        present(.pasteSent, capture: capture)
         scheduleDismiss(after: 2.8)
     }
 
@@ -52,7 +52,10 @@ final class ResultHUDController {
             anchor: capture?.bounds,
             fallbackPoint: capture?.fallbackPoint ?? NSEvent.mouseLocation
         )
-        scheduleDismiss(after: 4)
+    }
+
+    func showRetrying(attempt: Int, total: Int, capture: PaletteCapture) {
+        present(.retrying(attempt: attempt, total: total), capture: capture)
     }
 
     func showNeutral(_ message: String, point: CGPoint) {

@@ -5,13 +5,15 @@ import SwiftUI
 @MainActor
 final class PeekPanelController {
     private let viewModel: PeekViewModel
+    private let popupDismiss: PopupDismissCoordinator
     private var panel: PeekPanel?
     private var outsideMonitor: Any?
     private var activeSelection: PeekSelection?
     private var stateObserver: AnyCancellable?
 
-    init(viewModel: PeekViewModel) {
+    init(viewModel: PeekViewModel, popupDismiss: PopupDismissCoordinator) {
         self.viewModel = viewModel
+        self.popupDismiss = popupDismiss
         // @Published emits before the value changes; hop a run-loop turn so SwiftUI swaps
         // the content first and the panel then grows around the new layout.
         stateObserver = viewModel.$loadState
@@ -33,8 +35,10 @@ final class PeekPanelController {
     }
 
     func close() {
+        if let panel { popupDismiss.hide(panel) }
         panel?.orderOut(nil)
         removeOutsideMonitor()
+        activeSelection = nil
         viewModel.close()
     }
 
@@ -67,6 +71,9 @@ final class PeekPanelController {
         panel?.alphaValue = 0
         panel?.orderFrontRegardless()
         panel?.makeKey()
+        if let panel {
+            popupDismiss.show(panel) { [weak self] in self?.close() }
+        }
         installOutsideMonitorIfNeeded()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0.08 : 0.15
@@ -152,8 +159,8 @@ final class PeekPanelController {
         case .idle: NSSize(width: 360, height: 185)
         case .loading, .success: NSSize(width: 400, height: 150)
         case .loaded: NSSize(width: 400, height: 340)
-        case .limitReached: NSSize(width: 380, height: 200)
-        case .failed: NSSize(width: 380, height: 200)
+        case .limitReached: NSSize(width: 420, height: 232)
+        case .failed(let message): NSSize(width: 380, height: message == "Select some text first." ? 165 : 200)
         }
     }
 

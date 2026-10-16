@@ -1,6 +1,6 @@
 # Qwixit durable decisions
 
-**Last reviewed:** 2026-10-07
+**Last reviewed:** 2026-10-12
 
 This is a lightweight decision log. Add an entry when a choice changes product behavior, privacy, architecture, distribution, or the meaning of a core workflow. Temporary implementation details do not need an entry.
 
@@ -48,7 +48,7 @@ Qwixit remains a native SwiftUI/AppKit macOS menu-bar application while demand i
 
 **Status:** provisional
 
-The app currently offers 30 free AI actions per installation per calendar month and $10/month Unlimited.
+The app currently offers 30 free AI actions per installation per calendar month and $10/month Qwixit Advanced. Advanced removes the monthly action cap; it keeps the same careful Fix quality bar.
 
 **Why:** this supports repeated usage, exposes limit behavior, and tests willingness to pay for speed. The numbers may change with evidence.
 
@@ -75,3 +75,27 @@ Anonymous operational telemetry may be considered only when it excludes user tex
 Use feature-first MVVM in a lightweight Clean Architecture shell. AppKit controllers own windows, view models own presentation state and task lifetime, and protocols isolate system or network effects where testing matters.
 
 **Why:** Qwixit needs explicit ownership for macOS integration without infrastructure disproportionate to a small native utility.
+
+## D010 — Preview fails closed; Peek never silently truncates
+
+**Status:** accepted
+
+When Preview & Approve is enabled, an unavailable selection snapshot leaves the text unchanged rather than falling back to immediate replacement. Peek rejects selections longer than its request limit with a visible explanation instead of sending only a prefix.
+
+**Why:** both behaviors make the apparent user action match what actually happens to the selected text.
+
+## D011 — One close shortcut for interactive popups
+
+**Status:** accepted
+
+Interactive transient panels show the same TokiriUI close badge and close with `⌥⌘X`. Dismissal takes priority over Fix only while such a popup is visible. The binding is central and remains `⌥⌘X` when the user changes the Fix shortcut. Closing a preview cancels it without replacing text; click-through status notices and standard macOS windows keep their current behavior.
+
+**Why:** one visible gesture makes every popup predictable while preserving the normal Fix shortcut when the user returns to their work.
+
+## D012 — Use one paste path across apps
+
+**Status:** accepted
+
+Fix and Actions capture selected text and source focus, restore that focus, and replace through the clipboard plus ⌘V. Accessibility may capture selection and restore focus, but it does not write replacement text or gate success on editor readback. Status reports whether Tokiri posted the paste event; the UI calls it “Paste sent”.
+
+**Why:** editor Accessibility behavior varies and can be delayed or report success without updating the real input. One keyboard-based path avoids app-specific replacement branches and makes status claims match what Tokiri can observe reliably.

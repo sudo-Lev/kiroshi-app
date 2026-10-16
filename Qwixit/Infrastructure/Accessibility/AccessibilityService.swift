@@ -5,25 +5,25 @@ final class TextSelectionSnapshot {
     let text: String
     let bounds: CGRect?
     let fallbackPoint: CGPoint
+    let processIdentifier: pid_t?
 
     fileprivate let element: AXUIElement?
     fileprivate let focusElement: AXUIElement?
-    fileprivate let range: CFRange?
 
     fileprivate init(
         text: String,
         bounds: CGRect?,
         fallbackPoint: CGPoint,
+        processIdentifier: pid_t?,
         element: AXUIElement?,
-        focusElement: AXUIElement?,
-        range: CFRange?
+        focusElement: AXUIElement?
     ) {
         self.text = text
         self.bounds = bounds
         self.fallbackPoint = fallbackPoint
+        self.processIdentifier = processIdentifier
         self.element = element
         self.focusElement = focusElement
-        self.range = range
     }
 
     convenience init(text: String, bounds: CGRect? = nil, fallbackPoint: CGPoint = .zero) {
@@ -31,36 +31,14 @@ final class TextSelectionSnapshot {
             text: text,
             bounds: bounds,
             fallbackPoint: fallbackPoint,
+            processIdentifier: nil,
             element: nil,
-            focusElement: nil,
-            range: nil
+            focusElement: nil
         )
     }
 }
 
 final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProviding {
-    private struct PasteboardSnapshot {
-        let items: [[NSPasteboard.PasteboardType: Data]]
-
-        init(_ pasteboard: NSPasteboard) {
-            items = (pasteboard.pasteboardItems ?? []).map { item in
-                Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
-                    item.data(forType: type).map { (type, $0) }
-                })
-            }
-        }
-
-        func restore(to pasteboard: NSPasteboard) {
-            pasteboard.clearContents()
-            let restored = items.map { values -> NSPasteboardItem in
-                let item = NSPasteboardItem()
-                values.forEach { item.setData($0.value, forType: $0.key) }
-                return item
-            }
-            if !restored.isEmpty { pasteboard.writeObjects(restored) }
-        }
-    }
-
     static var isTrusted: Bool { AXIsProcessTrusted() }
     var isTrusted: Bool { Self.isTrusted }
 
@@ -86,6 +64,7 @@ final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProvi
 
     func captureSelection() async -> TextSelectionSnapshot? {
         let fallbackPoint = NSEvent.mouseLocation
+        let processIdentifier = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let focusElement = focusedElement()
 
         for element in accessibilityCandidates() {
@@ -97,9 +76,9 @@ final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProvi
                     text: text,
                     bounds: bounds,
                     fallbackPoint: fallbackPoint,
+                    processIdentifier: processIdentifier,
                     element: element,
-                    focusElement: focusElement,
-                    range: range
+                    focusElement: focusElement
                 )
             }
         }
@@ -111,38 +90,22 @@ final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProvi
             text: text,
             bounds: nil,
             fallbackPoint: fallbackPoint,
+            processIdentifier: processIdentifier,
             element: element,
-            focusElement: focusElement ?? element,
-            range: element.flatMap(selectedRange(of:))
+            focusElement: focusElement ?? element
         )
     }
 
-    func replaceSelection(_ snapshot: TextSelectionSnapshot, with replacement: String) async -> Bool {
+    func replaceSelection(_ snapshot: TextSelectionSnapshot, with replacement: String) async -> ReplacementAttemptReport {
         restoreFocus(snapshot)
-        if let element = snapshot.element, isInsideWebArea(element) {
-            return await replaceUsingPasteboard(replacement)
-        }
-
-        if let element = snapshot.element,
-           var range = snapshot.range,
-           let rangeValue = AXValueCreate(.cfRange, &range) {
-            _ = AXUIElementSetAttributeValue(
-                element,
-                kAXSelectedTextRangeAttribute as CFString,
-                rangeValue
-            )
-        }
-
-        if let element = snapshot.element,
-           AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, replacement as CFTypeRef) == .success {
-            return true
-        }
-        return await replaceUsingPasteboard(replacement)
+        return await ClipboardCoordinator.shared.paste(replacement)
     }
 
     func restoreFocus(_ snapshot: TextSelectionSnapshot) {
-        guard let focusElement = snapshot.focusElement ?? snapshot.element else { return }
-        AXUIElementSetAttributeValue(focusElement, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        ApplicationFocusRestorer.restore(
+            processIdentifier: snapshot.processIdentifier,
+            element: snapshot.focusElement ?? snapshot.element
+        )
     }
 
     func selectionBounds() -> CGRect? {
@@ -187,36 +150,6 @@ final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProvi
         )
     }
 
-    @discardableResult
-    func replaceSelection(_: String, with replacement: String) async -> Bool {
-        if let element = focusedElement(), isInsideWebArea(element) {
-            return await replaceUsingPasteboard(replacement)
-        }
-
-        if let element = focusedElement() {
-            let result = AXUIElementSetAttributeValue(
-                element,
-                kAXSelectedTextAttribute as CFString,
-                replacement as CFTypeRef
-            )
-            if result == .success { return true }
-        }
-
-        return await replaceUsingPasteboard(replacement)
-    }
-
-    private func replaceUsingPasteboard(_ text: String) async -> Bool {
-        let pasteboard = NSPasteboard.general
-        let snapshot = PasteboardSnapshot(pasteboard)
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        try? await Task.sleep(for: .milliseconds(45))
-        let posted = await postCommandKey(virtualKey: 9)
-        try? await Task.sleep(for: .milliseconds(350))
-        snapshot.restore(to: pasteboard)
-        return posted
-    }
-
     private func focusedElement() -> AXUIElement? {
         let system = AXUIElementCreateSystemWide()
         var focused: CFTypeRef?
@@ -235,23 +168,6 @@ final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProvi
             elements.append(current)
         }
         return elements
-    }
-
-    private func isInsideWebArea(_ element: AXUIElement) -> Bool {
-        var current = element
-        for _ in 0..<12 {
-            var roleValue: CFTypeRef?
-            if AXUIElementCopyAttributeValue(current, kAXRoleAttribute as CFString, &roleValue) == .success,
-               roleValue as? String == "AXWebArea" {
-                return true
-            }
-
-            var parentValue: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parentValue) == .success,
-                  let parentValue else { break }
-            current = parentValue as! AXUIElement
-        }
-        return false
     }
 
     private func selectedTextBounds(for element: AXUIElement) -> CGRect? {
@@ -305,32 +221,7 @@ final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProvi
     }
 
     private func selectedTextUsingCopy() async -> String? {
-        let pasteboard = NSPasteboard.general
-        let snapshot = PasteboardSnapshot(pasteboard)
-        pasteboard.clearContents()
-        let clearedChangeCount = pasteboard.changeCount
-
-        try? await Task.sleep(for: .milliseconds(55))
-        guard await postCommandKey(virtualKey: 8) else {
-            snapshot.restore(to: pasteboard)
-            return nil
-        }
-        try? await Task.sleep(for: .milliseconds(140))
-
-        let copied = pasteboard.changeCount != clearedChangeCount ? pasteboard.string(forType: .string) : nil
-        snapshot.restore(to: pasteboard)
-        return copied
+        await ClipboardCoordinator.shared.copySelection()
     }
 
-    @discardableResult
-    private func postCommandKey(virtualKey: CGKeyCode) async -> Bool {
-        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: virtualKey, keyDown: true),
-              let up = CGEvent(keyboardEventSource: nil, virtualKey: virtualKey, keyDown: false) else { return false }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        try? await Task.sleep(for: .milliseconds(18))
-        up.post(tap: .cghidEventTap)
-        return true
-    }
 }

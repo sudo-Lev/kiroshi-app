@@ -3,18 +3,24 @@ import SwiftUI
 private struct DemoKeys: OptionSet {
     let rawValue: Int
 
-    static let option = DemoKeys(rawValue: 1 << 0)
-    static let command = DemoKeys(rawValue: 1 << 1)
-    static let action = DemoKeys(rawValue: 1 << 2)
+    static let modifiers = DemoKeys(rawValue: 1 << 0)
+    static let action = DemoKeys(rawValue: 1 << 1)
 }
 
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingModel
+    let fixShortcut: HotkeyBinding
     let onFinish: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var demoKeys: DemoKeys = []
     @State private var accessPulse = false
     private let labels = ["Welcome", "Access", "Fix", "Actions", "Done"]
+
+    init(model: OnboardingModel, fixShortcut: HotkeyBinding = .defaultMain, onFinish: @escaping () -> Void) {
+        self.model = model
+        self.fixShortcut = fixShortcut
+        self.onFinish = onFinish
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -72,7 +78,7 @@ struct OnboardingView: View {
             Text("Your words. Sharper.").onboardingTitle(32)
             Text("Select text anywhere, then press a shortcut to sharpen it in place.")
                 .onboardingBody().frame(maxWidth: 570).multilineTextAlignment(.center)
-            welcomeCard("Fix", "⌥⌘X", "Select. Shortcut. Done. Fix typos, grammar, and awkward wording without leaving the app.", KColor.violet)
+            welcomeCard("Fix", fixShortcut.displayString, "Select. Shortcut. Done. Fix typos, grammar, and awkward wording without leaving the app.", KColor.violet)
                 .frame(width: 430)
         }.padding(.top, 20)
     }
@@ -105,14 +111,14 @@ struct OnboardingView: View {
 
     private var noAccess: some View {
         VStack(spacing: 18) {
-            accessIcon(systemName: "lock.fill", active: false)
+            accessIcon(.accessNeeded, active: false)
             Text("Tokiri needs Accessibility access.").onboardingTitle(30)
             Text("This lets Tokiri read and replace selected text only when you use a shortcut.")
                 .onboardingBody().multilineTextAlignment(.center).frame(maxWidth: 500)
             Button { model.requestAccessibility() } label: {
                 HStack(spacing: 9) {
                     Text("Allow access")
-                    Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .black))
+                    TokiriUI.Icon(.externalLink, size: 10)
                 }
             }
                 .buttonStyle(PrimaryButtonStyle())
@@ -123,17 +129,17 @@ struct OnboardingView: View {
 
     private var gettingAccess: some View {
         VStack(spacing: 18) {
-            accessIcon(systemName: "lock.open.fill", active: true)
+            accessIcon(.accessGranted, active: true)
             Text("Finish in System Settings.").onboardingTitle(30)
             Text("Turn on Tokiri under Accessibility. We’ll continue automatically when access is ready.")
                 .onboardingBody().multilineTextAlignment(.center).frame(maxWidth: 520)
 
             HStack(spacing: 13) {
-                accessPathItem("gearshape.fill", "Privacy & Security")
-                Image(systemName: "chevron.right")
-                accessPathItem("accessibility", "Accessibility")
-                Image(systemName: "chevron.right")
-                accessPathItem("switch.2", "Tokiri on")
+                accessPathItem(.settings, "Privacy & Security")
+                TokiriUI.Icon(.chevronRight, size: 10)
+                accessPathItem(.accessibility, "Accessibility")
+                TokiriUI.Icon(.chevronRight, size: 10)
+                accessPathItem(.switchControl, "Tokiri on")
             }
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(KColor.secondary)
@@ -151,7 +157,7 @@ struct OnboardingView: View {
                 Button { model.requestAccessibility() } label: {
                     HStack(spacing: 7) {
                         Text("Open System Settings again")
-                        Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .bold))
+                        TokiriUI.Icon(.externalLink, size: 9)
                     }
                 }
                     .buttonStyle(SubtleButtonStyle())
@@ -160,7 +166,7 @@ struct OnboardingView: View {
         .padding(.top, 38)
     }
 
-    private func accessIcon(systemName: String, active: Bool) -> some View {
+    private func accessIcon(_ name: TokiriUI.IconName, active: Bool) -> some View {
         ZStack {
             if active {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -171,8 +177,7 @@ struct OnboardingView: View {
             }
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(KColor.violet.opacity(active ? 0.14 : 0.09))
-            Image(systemName: systemName)
-                .font(.system(size: 24, weight: .semibold))
+            TokiriUI.Icon(name, size: 28)
                 .foregroundStyle(KColor.violet)
         }
         .frame(width: 64, height: 64)
@@ -185,9 +190,9 @@ struct OnboardingView: View {
         }
     }
 
-    private func accessPathItem(_ systemName: String, _ title: String) -> some View {
+    private func accessPathItem(_ icon: TokiriUI.IconName, _ title: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: systemName).foregroundStyle(KColor.violet)
+            TokiriUI.Icon(icon, size: 12).foregroundStyle(KColor.violet)
             Text(title)
         }
         .fixedSize()
@@ -202,7 +207,15 @@ struct OnboardingView: View {
                 }
                 Text(practiceTitle).onboardingTitle(27).multilineTextAlignment(.leading)
                 Text(practiceSubtitle).onboardingBody()
-                DemoKeyRow(step: model.step, accent: stepAccent, activeKeys: demoKeys, optionDown: model.optionDown, commandDown: model.commandDown)
+                DemoKeyRow(
+                    binding: model.step == 3 ? HotkeyCatalog.actions : fixShortcut,
+                    accent: stepAccent,
+                    activeKeys: demoKeys,
+                    controlDown: model.controlDown,
+                    optionDown: model.optionDown,
+                    shiftDown: model.shiftDown,
+                    commandDown: model.commandDown
+                )
                     .opacity([.idle, .palette].contains(model.phase) ? 1 : 0.4)
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(checklist.indices, id: \.self) { checklistRow($0, checklist[$0]) }
@@ -261,11 +274,11 @@ struct OnboardingView: View {
             Text("You're all set.").onboardingTitle(32)
             Text("Two ways to use Tokiri in any app.").onboardingBody()
             VStack(spacing: 0) {
-                cheatRow("⌥⌘X", "Fix", "Correct selected text in place."); Divider().padding(.leading, 150)
-                cheatRow("⌥⌘A", "Actions", "Rewrite, translate, or change tone.")
+                cheatRow(fixShortcut.displayString, "Fix", "Correct selected text in place."); Divider().padding(.leading, 150)
+                cheatRow(HotkeyCatalog.actions.displayString, "Actions", "Rewrite, translate, or change tone.")
             }.frame(width: 520).qwixitPanel()
             HStack(spacing: 12) {
-                HStack(spacing: 8) { Image(systemName: "wifi"); QwixitMenuBarLogo().frame(width: 38, height: 15); Text("9:41") }.font(.system(size: 11, weight: .medium)).foregroundStyle(.white).padding(.horizontal, 12).frame(height: 30).background(KColor.ink).clipShape(Capsule())
+                HStack(spacing: 8) { TokiriUI.Icon(.wifi, size: 11); QwixitMenuBarLogo().frame(width: 38, height: 15); Text("9:41") }.font(.system(size: 11, weight: .medium)).foregroundStyle(.white).padding(.horizontal, 12).frame(height: 30).background(KColor.ink).clipShape(Capsule())
                 Text("Tokiri lives in your menu bar — settings and usage are there.").font(.system(size: 12.5)).foregroundStyle(KColor.secondary)
             }
         }.padding(.top, 14)
@@ -286,7 +299,7 @@ struct OnboardingView: View {
                 Button { model.step == 4 ? onFinish() : model.advance() } label: {
                     HStack(spacing: 9) {
                         Text(primaryTitle)
-                        Image(systemName: "arrow.right").font(.system(size: 10, weight: .black))
+                        TokiriUI.Icon(.arrowRight, size: 10)
                     }
                 }
                     .buttonStyle(PrimaryButtonStyle())
@@ -303,7 +316,7 @@ struct OnboardingView: View {
     private var stepAccent: Color { model.step == 3 ? KColor.magenta : KColor.violet }
     private var mockWindowTitle: String { [2: "Draft — Notes", 3: "Message — Slack"][model.step] ?? "" }
     private var displayedPracticeText: String { model.phase == .typing || model.phase == .done ? model.typed : model.originalText }
-    private var checklist: [String] { model.step == 2 ? ["Text is selected", "Press ⌥⌘X", "Fixed text replaces it"] : ["Text is selected", "Press ⌥⌘A", "Pick an action — 1–4 or ↵", "Result replaces the text"] }
+    private var checklist: [String] { model.step == 2 ? ["Text is selected", "Press \(fixShortcut.displayString)", "Fixed text replaces it"] : ["Text is selected", "Press \(HotkeyCatalog.actions.displayString)", "Pick an action — 1–4 or ↵", "Result replaces the text"] }
     private var completedChecklistRows: Int { model.phase == .done ? checklist.count : model.phase == .processing || model.phase == .typing ? max(2, checklist.count - 1) : model.phase == .palette ? 2 : 1 }
     private var feedbackPhase: AppPhase? {
         switch model.phase {
@@ -321,10 +334,10 @@ struct OnboardingView: View {
         case (2, .processing): "Fixing…"
         case (2, .typing): "Replacing the text…"
         case (2, .done): "Fixed. That's the main move."
-        case (2, _): "Press ⌥⌘X once."
+        case (2, _): "Press \(fixShortcut.displayString) once."
         case (3, .palette): "Pick an action — 1–4 or ↵."
         case (3, .done): "Chosen and replaced."
-        case (3, _): "Press ⌥⌘A to open Actions."
+        case (3, _): "Press \(HotkeyCatalog.actions.displayString) to open Actions."
         default: "Tokiri is ready in every app."
         }
     }
@@ -334,11 +347,11 @@ struct OnboardingView: View {
         guard (2...3).contains(model.step), !reduceMotion else { return }
         while !Task.isCancelled, !model.hasRealInput, model.phase == .idle {
             do { try await Task.sleep(for: .milliseconds(900)) } catch { return }
-            demoKeys = [.option, .command]
+            demoKeys = [.modifiers]
             do { try await Task.sleep(for: .milliseconds(220)) } catch { return }
-            demoKeys = [.option, .command, .action]
+            demoKeys = [.modifiers, .action]
             do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
-            demoKeys = [.option, .command]
+            demoKeys = [.modifiers]
             do { try await Task.sleep(for: .milliseconds(140)) } catch { return }
             demoKeys = []
         }
@@ -360,12 +373,38 @@ private struct SmallKeycap: View {
 }
 
 private struct DemoKeyRow: View {
-    let step: Int; let accent: Color; let activeKeys: DemoKeys; let optionDown: Bool; let commandDown: Bool
+    let binding: HotkeyBinding
+    let accent: Color
+    let activeKeys: DemoKeys
+    let controlDown: Bool
+    let optionDown: Bool
+    let shiftDown: Bool
+    let commandDown: Bool
+
     var body: some View {
         HStack(spacing: 7) {
-            key("⌥", "option", optionDown || activeKeys.contains(.option))
-            key("⌘", "command", commandDown || activeKeys.contains(.command))
-            key(step == 3 ? "A" : "X", step == 3 ? "actions" : "tokiri", activeKeys.contains(.action))
+            ForEach(binding.modifierSymbols, id: \.self) { symbol in
+                key(symbol, modifierName(symbol), modifierIsDown(symbol) || activeKeys.contains(.modifiers))
+            }
+            key(binding.keySymbol, "shortcut", activeKeys.contains(.action))
+        }
+    }
+
+    private func modifierName(_ symbol: String) -> String {
+        switch symbol {
+        case "⌃": "control"
+        case "⌥": "option"
+        case "⇧": "shift"
+        default: "command"
+        }
+    }
+
+    private func modifierIsDown(_ symbol: String) -> Bool {
+        switch symbol {
+        case "⌃": controlDown
+        case "⌥": optionDown
+        case "⇧": shiftDown
+        default: commandDown
         }
     }
 
@@ -414,7 +453,8 @@ private struct OnboardingPaletteSurface: View {
                     text: model.originalText,
                     range: nil,
                     bounds: nil,
-                    fallbackPoint: .zero
+                    fallbackPoint: .zero,
+                    processIdentifier: nil
                 ))
                 viewModel.onRun = { action in
                     let choice: OnboardingChoice
@@ -457,5 +497,4 @@ private final class PreviewAccessibility: AccessibilityServicing {
     func selectedText() async -> String? { nil }
     func selectionBounds() -> CGRect? { nil }
     func fallbackPoint() -> CGPoint { .zero }
-    func replaceSelection(_ originalText: String, with replacement: String) async -> Bool { true }
 }

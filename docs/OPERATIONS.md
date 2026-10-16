@@ -40,11 +40,20 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
   -scheme Qwixit \
   -destination 'platform=macOS' \
   -derivedDataPath /tmp/QwixitDerivedData \
+  -parallel-testing-enabled NO \
   CODE_SIGNING_ALLOWED=NO \
   test
 ```
 
 Do not launch an additional app process casually during automated verification: single-instance coordination can terminate the instance the owner is actively testing.
+
+### Replacement reliability check
+
+Fix and Actions use one replacement path in every app: capture the selected text and source focus, restore the source app and focused element, put the fresh text on the clipboard, then post ⌘V. AX is used to read the selection and restore focus; it never writes the replacement or decides whether a paste succeeded. Actions' insert mode sends Right Arrow first to collapse the selection at its end, then uses the same paste path.
+
+ReplacementAttemptReport contains only three transient steps: clipboard write, optional caret move, and ⌘V event. isSubmitted means the clipboard write completed and the required keyboard events were posted. The UI says “Paste sent”; this is an honest report of the action Tokiri took, not proof that another app consumed the event. If Tokiri cannot prepare the clipboard or post the required event, it offers the fresh text and a manual copy button. The clipboard is restored after the paste when it still contains Tokiri's temporary value. No selected or generated text is logged or persisted.
+
+Unit tests cover the clipboard, paste-event, and caret-move requirements for a submitted status, plus recovery when a paste event cannot be posted. Clipboard archive tests verify rich clipboard restoration and preserve newer clipboard content. These tests do not measure delivery to real editors. Before claiming a replacement success rate, use controlled, unsent drafts in a native text control and browser editors such as Slack and GitHub, plus representative spreadsheet and messaging apps. Exercise single-line, multiline, and repeated selections; Fix, Actions replace, and Actions insert; and confirm the clipboard is restored after each attempt. Record only pass/fail and editor category. A 99.5% delivery claim requires a sufficiently large real-editor trial; unit tests alone cannot support it.
 
 ## Worker checks
 
@@ -125,7 +134,7 @@ Before a public build, verify this sequence from a clean installation:
 5. Confirm `⌥⌘Z` shows a read-only result and does not replace the source.
 6. Consume all 30 free actions and verify that each server-authorized request decrements exactly once.
 7. Verify the limit state does not alter selected text and offers the correct upgrade path.
-8. Complete Paddle checkout and verify signed webhook activation unlocks Unlimited.
+8. Complete Paddle checkout and verify signed webhook activation unlocks Advanced.
 9. Relaunch the app and verify subscription restoration from server state.
 10. Verify cancellation and non-active subscription states return to the intended free behavior.
 11. Verify offline, timeout, empty-response, permission, no-selection, and hotkey-conflict recovery.

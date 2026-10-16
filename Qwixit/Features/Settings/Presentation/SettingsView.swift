@@ -60,11 +60,11 @@ struct SettingsView: View {
     private var appearanceSection: some View {
         SettingsSection(title: "Appearance") {
             SettingRow(
-                icon: viewModel.appearance == .dark ? "moon.stars.fill" : "sun.max.fill",
+                icon: viewModel.appearance == .dark ? .themeDark : .themeLight,
                 title: "Theme",
                 detail: "Choose the look used by Tokiri windows and feedback."
             ) {
-                QwixitThemePicker(selection: $viewModel.appearance)
+                TokiriUI.ThemePicker(selection: $viewModel.appearance)
             }
         }
     }
@@ -72,7 +72,7 @@ struct SettingsView: View {
     private var shortcutsSection: some View {
         SettingsSection(title: "Hot keys") {
             SettingRow(
-                icon: "wand.and.stars",
+                icon: .fix,
                 title: "Fix selected text",
                 detail: viewModel.mainHotkeyConflict
                     ? "\(viewModel.mainHotkey.displayString) is taken by another app. Choose another combo."
@@ -91,36 +91,37 @@ struct SettingsView: View {
             rowDivider
 
             SettingRow(
-                icon: "eye.fill",
-                title: "Review before applying",
-                detail: "Show the proposed fix before changing selected text."
+                icon: .review,
+                title: "Preview & Approve",
+                detail: "See every edit first. Nothing changes until you approve it."
             ) {
-                Toggle("Review before applying", isOn: $viewModel.reviewBeforeApplying)
-                    .toggleStyle(QwixitToggleStyle(showsLabel: false))
-                    .accessibilityLabel("Review before applying")
+                Toggle("Preview & Approve", isOn: $viewModel.reviewBeforeApplying)
+                    .toggleStyle(TokiriUI.Toggle(showsLabel: false))
+                    .accessibilityLabel("Preview and approve Fix changes")
+                    .accessibilityHint("Nothing changes until you approve the suggested fix.")
             }
 
             rowDivider
 
             SettingRow(
-                icon: "command.square.fill",
+                icon: .actions,
                 title: "Open actions",
                 detail: viewModel.actionHotkeyConflict
-                    ? "⌥⌘A is taken by another app."
+                    ? "\(HotkeyCatalog.actions.displayString) is taken by another app."
                     : "Translate, rewrite for Slack, or make text formal."
             ) {
-                ShortcutKeycaps(binding: .actions)
+                ShortcutKeycaps(binding: HotkeyCatalog.actions)
                     .opacity(viewModel.actionHotkeyConflict ? 0.45 : 1)
             }
 
             rowDivider
 
             SettingRow(
-                icon: "text.magnifyingglass",
+                icon: .peek,
                 title: "Peek",
                 detail: "Read selected text without replacing it."
             ) {
-                ShortcutKeycaps(modifiers: ["⌥", "⌘"], key: viewModel.peekShortcutKey)
+                ShortcutKeycaps(binding: HotkeyCatalog.peekBinding(for: viewModel.peekShortcutKey))
             }
         }
     }
@@ -128,7 +129,7 @@ struct SettingsView: View {
     private var accessSection: some View {
         SettingsSection(title: "Access") {
             SettingRow(
-                icon: viewModel.accessibilityGranted ? "checkmark.shield.fill" : "lock.shield.fill",
+                icon: viewModel.accessibilityGranted ? .accessGranted : .accessNeeded,
                 iconColor: viewModel.accessibilityGranted ? KColor.success : KColor.warning,
                 title: "Accessibility",
                 detail: viewModel.accessibilityGranted
@@ -150,7 +151,7 @@ struct SettingsView: View {
     private var billingSection: some View {
         SettingsSection(title: "Plan · Sandbox") {
             SettingRow(
-                icon: "creditcard.fill",
+                icon: .plan,
                 iconColor: billingIconColor,
                 title: billingTitle,
                 detail: billingDetail
@@ -163,12 +164,15 @@ struct SettingsView: View {
     @ViewBuilder
     private var billingControl: some View {
         if viewModel.isUnlimited {
-            Label("Active", systemImage: "checkmark.circle.fill")
+            HStack(spacing: 4) {
+                TokiriUI.Icon(.statusSuccess, size: 10)
+                Text("Active")
+            }
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(KColor.success)
-                .accessibilityLabel("Tokiri Unlimited subscription active")
+                .accessibilityLabel("Tokiri Advanced subscription active")
         } else {
-            Button("Go unlimited") { viewModel.openStarterCheckout() }
+            Button("Get Advanced") { viewModel.openStarterCheckout() }
                 .buttonStyle(PrimaryButtonStyle())
         }
     }
@@ -178,13 +182,13 @@ struct SettingsView: View {
     }
 
     private var billingTitle: String {
-        if viewModel.isUnlimited { return "Tokiri Unlimited" }
+        if viewModel.isUnlimited { return "Tokiri Advanced" }
         return "30 free AI actions / month"
     }
 
     private var billingDetail: String {
-        if viewModel.isUnlimited { return "Active — every Tokiri action is unlocked." }
-        return "Go unlimited for $10/month. Sandbox test payments only."
+        if viewModel.isUnlimited { return "Active — no monthly action cap. The same careful Fix quality applies." }
+        return "Get Advanced for $10/month. More room to work, same quality bar. Sandbox test payments only."
     }
 
 #if DEBUG
@@ -210,7 +214,10 @@ struct SettingsView: View {
                     .foregroundStyle(KColor.secondary)
 
                 if viewModel.developerUsageScenario == .limitReached {
-                    Label("This simulation intentionally disables AI actions.", systemImage: "exclamationmark.triangle.fill")
+                    HStack(spacing: 4) {
+                        TokiriUI.Icon(.statusWarning, size: 10)
+                        Text("This simulation intentionally disables AI actions.")
+                    }
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(KColor.warning)
                 }
@@ -269,7 +276,7 @@ private struct SettingsSection<Content: View>: View {
 }
 
 private struct SettingRow<Control: View>: View {
-    let icon: String
+    let icon: TokiriUI.IconName
     var iconColor: Color = KColor.violet
     let title: String
     let detail: String
@@ -277,8 +284,7 @@ private struct SettingRow<Control: View>: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
+            TokiriUI.Icon(icon, size: 20)
                 .foregroundStyle(iconColor)
                 .frame(width: 30, height: 30)
                 .background(iconColor.opacity(0.09))
