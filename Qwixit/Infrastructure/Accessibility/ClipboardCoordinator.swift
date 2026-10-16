@@ -10,6 +10,11 @@ enum ClipboardCopyReadback {
     }
 }
 
+enum ClipboardAfterPaste {
+    case restorePrevious
+    case keepReplacement
+}
+
 /// Serializes clipboard capture and the shared paste path used by Fix and Actions.
 @MainActor
 final class ClipboardCoordinator {
@@ -64,7 +69,11 @@ final class ClipboardCoordinator {
         return ClipboardCopyReadback.text(from: pasteboard, after: clearedCount)
     }
 
-    func paste(_ text: String, collapseSelectionToEnd: Bool = false) async -> ReplacementAttemptReport {
+    func paste(
+        _ text: String,
+        collapseSelectionToEnd: Bool = false,
+        clipboardAfterPaste: ClipboardAfterPaste = .restorePrevious
+    ) async -> ReplacementAttemptReport {
         await enter()
         defer { leave() }
         guard !Task.isCancelled else { return .notSubmitted }
@@ -72,7 +81,15 @@ final class ClipboardCoordinator {
         let pasteboard = NSPasteboard.general
         let archive = PasteboardArchive(pasteboard)
         var restoreCount = pasteboard.changeCount
-        defer { archive.restore(to: pasteboard, ifChangeCountAtMost: restoreCount) }
+        var replacementWritten = false
+        defer {
+            archive.finishPaste(
+                to: pasteboard,
+                ifChangeCountAtMost: restoreCount,
+                clipboardAfterPaste: clipboardAfterPaste,
+                replacementWritten: replacementWritten
+            )
+        }
 
         pasteboard.clearContents()
         restoreCount = pasteboard.changeCount
@@ -86,6 +103,7 @@ final class ClipboardCoordinator {
 
         let ownedChangeCount = pasteboard.changeCount
         restoreCount = ownedChangeCount
+        replacementWritten = true
         var report = ReplacementAttemptReport()
         report.clipboardWrite = .completed
 
@@ -179,5 +197,15 @@ struct PasteboardArchive {
             return item
         }
         if !values.isEmpty { pasteboard.writeObjects(values) }
+    }
+
+    func finishPaste(
+        to pasteboard: NSPasteboard,
+        ifChangeCountAtMost expected: Int,
+        clipboardAfterPaste: ClipboardAfterPaste,
+        replacementWritten: Bool
+    ) {
+        if case .keepReplacement = clipboardAfterPaste, replacementWritten { return }
+        restore(to: pasteboard, ifChangeCountAtMost: expected)
     }
 }

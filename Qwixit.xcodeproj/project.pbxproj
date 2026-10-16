@@ -26,6 +26,7 @@
 		A10000000000000000000043 /* InstallationIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000043 /* InstallationIdentity.swift */; };
 		A1000000000000000000000D /* OpenAIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* OpenAIClient.swift */; };
 		A10000000000000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* Assets.xcassets */; };
+		A10000000000000000000050 /* OFL-JetBrainsMono.txt in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000050 /* OFL-JetBrainsMono.txt */; };
 		A10000000000000000000013 /* PeekHotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* PeekHotkey.swift */; };
 		A10000000000000000000014 /* SelectionReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* SelectionReader.swift */; };
 		A10000000000000000000015 /* PeekPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* PeekPanel.swift */; };
@@ -82,6 +83,7 @@
 		B10000000000000000000043 /* InstallationIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InstallationIdentity.swift; path = Infrastructure/Persistence/InstallationIdentity.swift; sourceTree = "<group>"; };
 		B10000000000000000000010 /* OpenAIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OpenAIClient.swift; path = Infrastructure/Networking/OpenAIClient.swift; sourceTree = "<group>"; };
 		B10000000000000000000015 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B10000000000000000000050 /* OFL-JetBrainsMono.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-JetBrainsMono.txt"; sourceTree = "<group>"; };
 		B10000000000000000000016 /* PeekHotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PeekHotkey.swift; path = Features/Peek/Services/PeekHotkey.swift; sourceTree = "<group>"; };
 		B10000000000000000000017 /* SelectionReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SelectionReader.swift; path = Features/Peek/Services/SelectionReader.swift; sourceTree = "<group>"; };
 		B10000000000000000000018 /* PeekPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PeekPanelController.swift; path = Features/Peek/Presentation/PeekPanelController.swift; sourceTree = "<group>"; };
@@ -118,7 +120,7 @@
 
 /* Begin PBXGroup section */
 		D10000000000000000000001 = {isa = PBXGroup; children = (D10000000000000000000002 /* Qwixit */, D10000000000000000000004 /* QwixitTests */, D10000000000000000000003 /* Products */); sourceTree = "<group>"; };
-		D10000000000000000000002 /* Qwixit */ = {isa = PBXGroup; path = Qwixit; sourceTree = "<group>"; children = (D20000000000000000000001 /* App */, D20000000000000000000002 /* Core */, D20000000000000000000003 /* Infrastructure */, D20000000000000000000004 /* Features */, B10000000000000000000015 /* Assets.xcassets */, B1000000000000000000000C /* Info.plist */); };
+		D10000000000000000000002 /* Qwixit */ = {isa = PBXGroup; path = Qwixit; sourceTree = "<group>"; children = (D20000000000000000000001 /* App */, D20000000000000000000002 /* Core */, D20000000000000000000003 /* Infrastructure */, D20000000000000000000004 /* Features */, B10000000000000000000015 /* Assets.xcassets */, B10000000000000000000050 /* OFL-JetBrainsMono.txt */, B1000000000000000000000C /* Info.plist */); };
 		D20000000000000000000001 /* App */ = {isa = PBXGroup; name = App; sourceTree = "<group>"; children = (B10000000000000000000001 /* QwixitApp.swift */); };
 		D20000000000000000000002 /* Core */ = {isa = PBXGroup; name = Core; sourceTree = "<group>"; children = (B10000000000000000000003 /* DesignSystem.swift */, B10000000000000000000046 /* TokiriUI.swift */, B10000000000000000000049 /* ReplacementAttempt.swift */); };
 		D20000000000000000000003 /* Infrastructure */ = {isa = PBXGroup; name = Infrastructure; sourceTree = "<group>"; children = (B10000000000000000000004 /* GlobalHotKey.swift */, B10000000000000000000005 /* AccessibilityService.swift */, B10000000000000000000047 /* ClipboardCoordinator.swift */, B10000000000000000000029 /* AppPreferences.swift */, B10000000000000000000043 /* InstallationIdentity.swift */, B10000000000000000000040 /* LegacyMigration.swift */, B10000000000000000000010 /* OpenAIClient.swift */, B10000000000000000000041 /* HouseStyle.swift */, B10000000000000000000042 /* PaddleCheckoutOpener.swift */); };
@@ -141,7 +143,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		C10000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000012 /* Assets.xcassets in Resources */); runOnlyForDeploymentPostprocessing = 0; };
+		C10000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000012 /* Assets.xcassets in Resources */, A10000000000000000000050 /* OFL-JetBrainsMono.txt in Resources */); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */

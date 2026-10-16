@@ -19,8 +19,8 @@ The project targets macOS 14 and has App Sandbox disabled because global Accessi
 
 - Native menu-bar app lifecycle (`LSUIElement`)
 - Global shortcuts: `⌥⌘X` fixes selected text, `⌥⌘A` opens Actions, and `⌥⌘Z` opens Peek
-- Accessibility-based selection reading and in-place replacement
-- Copy/paste fallbacks for web-backed editors, with full clipboard restoration
+- Accessibility-based selection reading and clipboard-based in-place replacement
+- Fix leaves its result on the clipboard for manual ⌘V; selection-copy fallbacks and Actions restore the prior clipboard
 - Non-activating feedback near the selected text
 - Processing, success, no-selection, permission, and error states
 - Three playable onboarding levels plus an Accessibility unlock step

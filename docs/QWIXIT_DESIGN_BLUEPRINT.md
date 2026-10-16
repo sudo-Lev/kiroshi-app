@@ -107,7 +107,7 @@ All semantic colors have explicit light and dark variants. Use sRGB values exact
 | `magenta` | `#FF2D9B` | `#FF4FAD` | Panel output and chromatic split |
 | `cyan` | `#00ABC7` | `#26C9E3` | Translation, cloud state, chromatic split |
 | `success` | `#149145` | `#45C770` | Allowed and completed states |
-| `terminalGreen` | `#149E4A` | `#47E67D` | Compact replacement success HUD |
+| `terminalGreen` | `#0C7332` | `#47E67D` | Compact replacement success HUD; light value keeps microcopy legible |
 | `warning` | `#D17308` | `#FAA629` | Missing access and caution |
 | `danger` | `#E6293D` | `#FF5E6E` | Failure and destructive actions |
 | `receipt` | `#F3F1F7` | `#1F1A27` | Quiet receipt or transcript surface |
@@ -117,7 +117,7 @@ All semantic colors have explicit light and dark variants. Use sRGB values exact
 - Violet is the default interactive accent.
 - Cyan owns translation and network/cloud cues.
 - Magenta owns summary and panel style output.
-- Green is reserved for completed, allowed, or replaced states.
+- Green is reserved for completed or allowed states. In the Fix HUD, the green chip marks the completed request and posted paste; the note above it explains the clipboard backup.
 - Warning and danger appear only when the user needs to act or an action failed.
 - Cyan and magenta may appear together only for the chromatic face split, scan line, or processing sweep.
 - Strong accent backgrounds use white foreground text.
@@ -377,12 +377,11 @@ The one press fix flow uses a compact processing/success/error HUD beside the se
 
 ### Window and box
 
-- Window: **236 × 58**.
-- Internal status box: **224 × 46** with 6 pt outer inset.
-- Corner radius: 11.
-- Horizontal padding: 12.
-- Main HStack gap: 10.
-- Face slot: 59 × 29; outline: 57 × 27, radius 8.
+- Processing window: **216 × 50**. Fix completion window: **216 × 67** to fit the note tab on the box's top edge.
+- Internal status box: **206 × 40** with 5 pt outer inset.
+- Status box uses a 7 pt cut corner and 10 pt horizontal padding.
+- Main HStack gap: 8.
+- Face slot: 49 × 25; outline: 47 × 23 with a 5 pt cut corner.
 - Left accent: 2 × 24 with 5 pt glow.
 
 ### Surface
@@ -402,15 +401,15 @@ The one press fix flow uses a compact processing/success/error HUD beside the se
 - Progress track: 100 × 2, base `line`, 42 pt violet/magenta/cyan moving trace.
 - Border sweep runs while processing.
 
-### Paste sent state
+### Fix completion state
 
 - Face: [ ^_- ].
-- Headline: PASTE SENT in cyan.
-- Detail: CHECK YOUR TEXT in 8 pt mono.
-- Badge: SENT.
-- Use a neutral sent state; the event being posted does not prove the editor consumed it.
+- Headline: SUCCESS in `terminalGreen`.
+- Detail: RESULT READY in 8 pt mono.
+- Badge: OK.
+- Behind the box, place a 17 pt tall neutral note tab reading **NOT HERE?** with a compact `⌘V` keycap. Its right edge extends 5 pt past the box, and its top sits 14 pt above the box so the box overlaps it by 3 pt. Its 5 pt top-left cut and open bottom border join it visually to the box. Use the exact light/dark tab colors and JetBrains Mono ExtraBold sizes (7 pt label, 8 pt keycap) from the paste-chip specification. The Fix result stays on the system clipboard after the automatic paste attempt.
+- Success marks a completed Fix request and posted paste event; it does not prove that the editor accepted the paste. If the result is missing, the user can press ⌘V.
 - Default one press duration: 1.25 seconds.
-- State shown from the action palette may remain for 2.8 seconds.
 
 ### Paste error state
 
@@ -787,7 +786,7 @@ Actions configured for panel output use a larger result card.
 - Write short, direct, calm sentences.
 - Operational UI may be terse: `READY`, `AI`, `OK`, `ERR`, `Esc`, `Copy ⌘C`.
 - Explanations use normal sentence case.
-- Report the observable paste status: PASTE SENT means Tokiri posted Command V; it does not claim the target editor accepted the text.
+- Fix may show SUCCESS after Tokiri prepares the result and posts Command V; it does not claim the target editor accepted the text. The `NOT HERE? ⌘V` note points to the clipboard backup.
 - Avoid generic AI language such as “magic,” “assistant is thinking,” or long model explanations.
 - Keep technical implementation details out of product copy.
 - Error titles explain the outcome; the detail explains the recovery action.

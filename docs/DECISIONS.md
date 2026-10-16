@@ -1,6 +1,6 @@
 # Qwixit durable decisions
 
-**Last reviewed:** 2026-10-12
+**Last reviewed:** 2026-10-16
 
 This is a lightweight decision log. Add an entry when a choice changes product behavior, privacy, architecture, distribution, or the meaning of a core workflow. Temporary implementation details do not need an entry.
 
@@ -32,7 +32,7 @@ Fix changes typos, grammar, punctuation, and clearly awkward wording using the s
 
 **Status:** accepted
 
-Qwixit must not persist or log selected text or generated output. Model requests use `store: false`. A random installation ID exists only for quota and subscription state.
+Qwixit must not persist or log selected text or generated output in app-controlled storage. Fix's system clipboard backup is specified in D013. Model requests use `store: false`. A random installation ID exists only for quota and subscription state.
 
 **Why:** anonymity and low friction are part of the product value, not merely implementation details.
 
@@ -96,6 +96,14 @@ Interactive transient panels show the same TokiriUI close badge and close with `
 
 **Status:** accepted
 
-Fix and Actions capture selected text and source focus, restore that focus, and replace through the clipboard plus ⌘V. Accessibility may capture selection and restore focus, but it does not write replacement text or gate success on editor readback. Status reports whether Tokiri posted the paste event; the UI calls it “Paste sent”.
+Fix and Actions capture selected text and source focus, restore that focus, and replace through the clipboard plus ⌘V. Accessibility may capture selection and restore focus, but it does not write replacement text or gate success on editor readback. D013 updates Fix's completion label and clipboard behavior.
 
 **Why:** editor Accessibility behavior varies and can be delayed or report success without updating the real input. One keyboard-based path avoids app-specific replacement branches and makes status claims match what Tokiri can observe reliably.
+
+## D013 — Keep a manual paste backup after Fix
+
+**Status:** accepted
+
+After Fix posts ⌘V, leave the generated replacement on the system clipboard. Show the green success chip for the completed Fix request, with a small `NOT HERE? ⌘V` note above it. Success does not assert that the destination editor consumed the paste. Selection-copy fallbacks and Actions continue restoring the previous clipboard, and a newer clipboard change is never overwritten.
+
+**Why:** some editors miss a synthetic paste event. The user can press ⌘V immediately without reopening Tokiri or losing the generated correction.

@@ -1,6 +1,6 @@
 # Qwixit architecture
 
-**Last reviewed:** 2026-10-12
+**Last reviewed:** 2026-10-16
 
 Qwixit is a native macOS 14+ menu-bar utility built with SwiftUI and AppKit. It uses feature-first MVVM inside a lightweight Clean Architecture shell: enough separation to make system integrations testable, without adding framework ceremony to a small application.
 
@@ -70,8 +70,8 @@ AppKit objects owning windows or panels end in `WindowController` or `PanelContr
 2. `QuickImproveViewModel` verifies Accessibility access and captures the selected text and its screen bounds.
 3. `TextImprovementService` sends a conservative correction request through `OpenAIClient`.
 4. The Worker atomically authorizes usage before proxying the request with server-controlled model policy and `store: false`.
-5. In the default mode, Qwixit restores focus and sends the replacement through the shared clipboard paste path. With **Preview & Approve** enabled, it keeps a transient selection snapshot and proposed output in memory, shows an anchored review panel, and sends the paste only after the user approves it. If a reviewable snapshot cannot be captured, it reports an error instead of replacing immediately.
-6. The feedback controller reports processing, paste sent, limit, permission, connectivity, or failure. Esc or Keep original leaves the source text unchanged. A posted paste event is not proof that the destination editor accepted it.
+5. In the default mode, Qwixit restores focus and sends the replacement through the shared clipboard paste path. With **Preview & Approve** enabled, it keeps a transient selection snapshot and proposed output in memory, shows an anchored review panel, and sends the paste only after the user approves it. If a reviewable snapshot cannot be captured, it reports an error instead of replacing immediately. After a Fix paste attempt, the replacement remains on the system clipboard for manual ⌘V.
+6. The feedback controller reports processing, success, limit, permission, connectivity, or failure. Success means the result was prepared and the paste event was posted; the note above it offers ⌘V if the text is missing. Esc or Keep original leaves the source text unchanged. A posted paste event is not proof that the destination editor accepted it.
 
 The original text must remain unchanged whenever capture, authorization, or model output fails. If the paste cannot be sent, the recovery panel offers the result for manual copying.
 
@@ -105,7 +105,7 @@ Actions is a replacing flow. It must stay independent from the Fix hotkey and mu
 
 - Transient panels are non-activating and must not become the main application window.
 - Prefer Accessibility reads for selection capture, with a clipboard copy fallback when needed. Fix and Actions replace through paste rather than Accessibility writes.
-- Clipboard operations share one transaction gate across features. Snapshot the complete previous pasteboard and restore it after the synthetic shortcut, unless another process changed the clipboard meanwhile; never overwrite that newer content.
+- Clipboard operations share one transaction gate across features. Snapshot the complete previous pasteboard. Restore it after selection-copy fallbacks and Actions unless another process changed the clipboard meanwhile. Fix leaves its replacement for manual ⌘V after a successful clipboard write; never overwrite newer content from another process.
 - Restore focus to the originating application before replacement.
 - Keep panels inside the visible screen and avoid covering the selected text when adjacent placement exists.
 - Do not recreate or repeatedly show a visible panel in response to its own state updates.
@@ -114,7 +114,7 @@ These invariants are core behavior, not cosmetic implementation details.
 
 ## Privacy and security boundaries
 
-- Selected text and model output are transient. Do not persist or log them.
+- Do not persist or log selected text or model output in app-controlled storage. Fix intentionally leaves its generated replacement on the system clipboard for manual ⌘V.
 - The app uses ephemeral URL sessions without a URL cache.
 - The client and Worker both force OpenAI `store: false`.
 - Selected text is wrapped as data and explicitly treated as untrusted instructions.
@@ -144,7 +144,7 @@ These invariants are core behavior, not cosmetic implementation details.
 - Infrastructure tests cover serialization, hotkey registration behavior, language targeting, quota, webhook security, and boundary failures.
 - Worker tests cover server-enforced request policy, atomic allowance behavior, Paddle signature verification, subscription transitions, and safe reset semantics.
 - App composition receives a build smoke test so missing wiring is caught.
-- Manual validation covers Accessibility, focus, browser-backed editors, clipboard restoration, keyboard/mouse parity, themes, Reduce Motion, VoiceOver, and multiple displays.
+- Manual validation covers Accessibility, focus, browser-backed editors, Fix's clipboard backup, Actions' clipboard restoration, keyboard/mouse parity, themes, Reduce Motion, VoiceOver, and multiple displays.
 
 ## Review checklist
 
@@ -154,7 +154,7 @@ Before adding code, verify:
 - dependencies still point inward;
 - cross-boundary effects are injectable where testing matters;
 - no selected text or output can reach logs or durable storage;
-- the change preserves focus, clipboard, and unchanged-on-failure guarantees;
+- the change preserves focus, the appropriate clipboard behavior for each feature, and unchanged-on-failure guarantees;
 - UI changes preserve the product hierarchy and do not add generic AI-chat patterns;
 - billing changes preserve server authority and signed webhook activation;
 - relevant documentation and tests change with behavior.

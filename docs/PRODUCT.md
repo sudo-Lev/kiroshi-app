@@ -1,7 +1,7 @@
 # Qwixit product knowledge
 
 **Status:** product source of truth
-**Last reviewed:** 2026-10-07
+**Last reviewed:** 2026-10-16
 
 ## Product promise
 
@@ -72,7 +72,7 @@ The durable boundary is simple:
 1. **Speed comes first.** Every unnecessary window, confirmation, click, and focus change weakens the product.
 2. **Clean output earns trust.** Fast nonsense is not useful. Ambitious transformations require an explicit user action.
 3. **Stay out of the way.** Qwixit should live quietly on the computer and appear only when invoked or when a real recovery action is necessary.
-4. **Selected text remains central.** Preserve the user's place, selection, clipboard, and active application whenever technically possible.
+4. **Selected text remains central.** Preserve the user's place, selection, and active application. Restore the clipboard after capture fallbacks and Actions; Fix leaves its result there as a manual paste backup.
 5. **Keyboard first, never keyboard only.** Core workflows must be fast from the keyboard, while every visible action remains genuinely clickable and accessible.
 6. **Confident personality, restrained footprint.** The product may feel stylish, punk, and bold without becoming loud, decorative, or attention-seeking.
 7. **No generic AI theater.** Avoid chat chrome, verbose model narration, magical claims, and unnecessary assistant personality.
@@ -81,7 +81,7 @@ The durable boundary is simple:
 
 Qwixit is built around speed and anonymity.
 
-- Selected text and generated output are processed transiently and must not be persisted or logged by Qwixit.
+- Selected text and generated output must not be persisted or logged in Qwixit storage. Fix intentionally leaves the generated replacement on the system clipboard so the user can press ⌘V if the automatic paste is missing.
 - OpenAI requests use `store: false`.
 - Qwixit currently has no user account. A random device-local installation ID exists only to enforce quota and associate subscription state.
 - Technical telemetry may be considered only if it contains no user text, requires no additional macOS permissions, and creates no unexpected consent burden. Adding any telemetry still requires an explicit product decision.

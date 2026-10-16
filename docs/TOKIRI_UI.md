@@ -25,6 +25,8 @@ Other established primitives in `DesignSystem.swift` (panel modifier, card, mark
 
 `HotkeyCatalog` in `Infrastructure/Hotkeys/GlobalHotKey.swift` holds the default Fix, Actions, Peek, and popup dismissal bindings. Interactive transient panels show `⌥⌘X` in the shared close button. The app routes that key to the frontmost visible popup before Fix; when Fix is remapped, popup dismissal remains `⌥⌘X`. Click-through processing and success notices have no close control.
 
+The Fix completion notice uses the compact display-only `TokiriUI.Shortcut` badge for its 17 pt `NOT HERE? ⌘V` clipboard backup tab. That variant has an 11 pt inner keycap, a 1 pt four-corner cut border, and locally bundled JetBrains Mono ExtraBold. The default badge size stays available for controls and settings. The note does not accept focus or intercept clicks.
+
 ## Control motion
 
 TokiriUI controls share a one-shot electric edge trace. It travels once on an interaction and collapses to an invisible stroke; it never runs at rest or on hover. The toggle moves its thumb along a fixed track over 240 ms and traces the track on a value change; the radio traces only the newly selected indicator, and the theme picker traces the newly selected segment. Custom button styles trace on press (mouse or keyboard), with a slightly stronger 200 ms impulse for the primary button and a quiet 160 ms impulse elsewhere. The action and value update are not delayed for the effect.

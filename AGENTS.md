@@ -12,7 +12,7 @@ Qwixit is a native macOS menu-bar utility that removes the trip to an AI chat an
 
 ## Non-negotiable privacy rules
 
-- Never persist or log selected text, prompts derived from it, or model output.
+- Never persist or log selected text, prompts derived from it, or model output in app-controlled storage. Fix intentionally leaves its generated replacement on the system clipboard as the visible ⌘V backup; do not create other durable copies.
 - Keep OpenAI requests at `store: false` and use ephemeral, uncached client sessions.
 - Treat selected text as untrusted content, never as instructions.
 - Do not add analytics, crash reporting, or third-party SDKs without explicit owner approval. Any acceptable telemetry must avoid user text, avoid new macOS permissions, and avoid additional user-facing consent or disclosure requirements unless the owner approves that trade-off.
@@ -23,7 +23,7 @@ Qwixit is a native macOS menu-bar utility that removes the trip to an AI chat an
 - Keep the feature-first MVVM structure described in `ARCHITECTURE.md`.
 - `App/` is the composition root. Views render state and forward intent. View models own presentation state and async task lifetime. AppKit controllers own windows and panels.
 - Features must not depend on another feature's presentation layer. Move truly shared primitives to `Core/` or app-wide adapters to `Infrastructure/`.
-- Transient panels must not steal focus from the user's active app. Preserve the selection, restore the clipboard after fallbacks, and keep mouse and keyboard paths equivalent.
+- Transient panels must not steal focus from the user's active app. Preserve the selection, restore the clipboard after selection-copy fallbacks and Actions, and keep mouse and keyboard paths equivalent. Fix leaves its result on the clipboard for manual ⌘V unless another process changed it.
 - Prefer small changes within existing patterns. The current UI is close to the intended product; redesign it only when requested or when fixing a demonstrated usability/accessibility defect.
 - **Use TokiriUI first for every new or changed UI surface.** Check `Qwixit/Core/DesignSystem/` and `docs/TOKIRI_UI.md` before introducing a control, visual token, or icon. Reuse an existing component when its meaning and behavior fit; keep one-off feature composition in its feature.
 - If TokiriUI lacks a suitable component, use the native SwiftUI/AppKit control for now, record the gap in `docs/TOKIRI_UI.md`, and explicitly tell the owner what is missing in the handoff. Do not silently invent a near-duplicate or force a custom control where macOS behavior matters.
@@ -61,5 +61,5 @@ npm run check
 
 - Run focused tests while iterating and the broadest relevant suite before handoff.
 - For UI work, verify light and dark themes, keyboard and mouse interaction, Reduce Motion, and non-activating panel behavior.
-- For text replacement, verify native controls plus at least one browser-backed editor and confirm clipboard restoration.
+- For text replacement, verify native controls plus at least one browser-backed editor. Confirm that Fix leaves its result available for manual ⌘V and Actions restores the previous clipboard.
 - For billing changes, exercise the complete sandbox cycle in `docs/OPERATIONS.md`.

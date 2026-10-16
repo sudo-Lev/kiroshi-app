@@ -25,6 +25,7 @@ final class FeedbackWindowController: FeedbackPresenting {
         if phase == .limitReached { size = .init(width: 420, height: 232) }
         else if isError { size = .init(width: 400, height: 72) }
         else if phase == .offline { size = .init(width: 360, height: 56) }
+        else if phase == .pasteSent { size = .init(width: 216, height: 67) }
         else if isCyberStatus { size = .init(width: 216, height: 50) }
         else if phase == .permissionDenied { size = .init(width: 326, height: 86) }
         else if phase == .noSelection { size = .init(width: 306, height: 82) }

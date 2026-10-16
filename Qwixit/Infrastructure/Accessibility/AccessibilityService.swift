@@ -98,7 +98,10 @@ final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProvi
 
     func replaceSelection(_ snapshot: TextSelectionSnapshot, with replacement: String) async -> ReplacementAttemptReport {
         restoreFocus(snapshot)
-        return await ClipboardCoordinator.shared.paste(replacement)
+        return await ClipboardCoordinator.shared.paste(
+            replacement,
+            clipboardAfterPaste: .keepReplacement
+        )
     }
 
     func restoreFocus(_ snapshot: TextSelectionSnapshot) {

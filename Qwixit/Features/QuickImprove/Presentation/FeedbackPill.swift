@@ -32,6 +32,8 @@ struct FeedbackPill: View {
                 upgradeCard
             } else if phase == .permissionDenied {
                 accessNotice
+            } else if phase == .pasteSent && !embedded {
+                completionWithBackupNote
             } else if usesCyberStatus {
                 cyberStatusBox
             } else {
@@ -243,6 +245,46 @@ struct FeedbackPill: View {
         )
     }
 
+    private var completionWithBackupNote: some View {
+        ZStack(alignment: .topTrailing) {
+            backupNote
+                .offset(x: 5, y: -14)
+
+            cyberStatusBox
+        }
+        .padding(.top, 17)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Pasted. If it's not there, press Command V.")
+    }
+
+    private var backupNote: some View {
+        HStack(spacing: 4) {
+            Text("NOT HERE?")
+                .font(PasteNoteFont.font(size: 7))
+                .tracking(1)
+                .foregroundStyle(pasteNoteColor(light: 0x6E6B7D, dark: 0xB0ABBF))
+                .lineLimit(1)
+
+            TokiriUI.Shortcut(modifiers: ["⌘"], key: "V", compact: true)
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 2)
+        .frame(height: 16)
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.top, 1)
+        .background(PasteNoteTabShape().fill(pasteNoteColor(light: 0xFDFCFF, dark: 0x120F19)))
+        .overlay {
+            PasteNoteTabBorder()
+                .stroke(pasteNoteColor(light: 0xDCDBE2, dark: 0x34323C), lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func pasteNoteColor(light: UInt32, dark: UInt32) -> Color {
+        Color(nsColor: KColor.hex(colorScheme == .dark ? dark : light))
+    }
+
     private var statusGlyph: some View {
         ZStack {
             QwixitControlShape(cut: 5)
@@ -404,7 +446,7 @@ struct FeedbackPill: View {
         case .ready: "Ready"
         case .processing: "Sharpening your text…"
         case .success: "Text replaced"
-        case .pasteSent: "Paste sent"
+        case .pasteSent: "Success"
         case .noSelection: "Select some text first"
         case .permissionDenied: "Accessibility access needed"
         case .offline: "You’re offline"
@@ -428,7 +470,7 @@ struct FeedbackPill: View {
     private var tone: Color {
         switch phase {
         case .success: KColor.success
-        case .pasteSent: KColor.cyan
+        case .pasteSent: KColor.success
         case .permissionDenied: KColor.warning
         case .offline: KColor.cyan
         case .retrying: KColor.cyan
@@ -470,7 +512,7 @@ struct FeedbackPill: View {
         if isError { return KColor.danger }
         if phase == .offline { return KColor.cyan }
         if phase == .success { return KColor.terminalGreen }
-        return phase == .pasteSent ? KColor.cyan : KColor.hudTone
+        return phase == .pasteSent ? KColor.terminalGreen : KColor.hudTone
     }
 
     private var statusFace: QwixitFace {
@@ -483,7 +525,7 @@ struct FeedbackPill: View {
 
     private var statusHeadline: String {
         if embedded && phase == .noSelection { return "NO TEXT CAPTURED" }
-        if phase == .pasteSent { return "PASTE SENT" }
+        if phase == .pasteSent { return "SUCCESS" }
         if phase == .offline { return "CONNECTION LOST" }
         guard case .error(let message) = phase else { return "READY" }
         return QwixitErrorCopy.headline(for: message)
@@ -495,7 +537,7 @@ struct FeedbackPill: View {
             return "RETRY \(attempt) OF \(total)"
         }
         if phase == .offline { return "TEXT UNCHANGED · TRY AGAIN" }
-        if phase == .pasteSent { return "CHECK YOUR TEXT" }
+        if phase == .pasteSent { return "RESULT READY" }
         if isError, case .error(let message) = phase {
             return QwixitErrorCopy.detail(for: message)
         }
@@ -506,7 +548,7 @@ struct FeedbackPill: View {
         if isError { return "ERR" }
         if phase == .offline { return "NET" }
         if phase == .success { return "OK" }
-        return phase == .pasteSent ? "SENT" : "AI"
+        return phase == .pasteSent ? "OK" : "AI"
     }
 
     private var usesCyberStatus: Bool {
@@ -536,6 +578,31 @@ struct FeedbackPill: View {
 
     private var isProcessingLike: Bool {
         phase == .processing || isRetrying
+    }
+}
+
+private struct PasteNoteTabShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX + 5, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + 5))
+            path.closeSubpath()
+        }
+    }
+}
+
+private struct PasteNoteTabBorder: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX + 0.5, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX + 0.5, y: rect.minY + 5))
+            path.addLine(to: CGPoint(x: rect.minX + 5, y: rect.minY + 0.5))
+            path.addLine(to: CGPoint(x: rect.maxX - 0.5, y: rect.minY + 0.5))
+            path.addLine(to: CGPoint(x: rect.maxX - 0.5, y: rect.maxY))
+        }
     }
 }
 

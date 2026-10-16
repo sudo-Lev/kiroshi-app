@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreText
 
 enum ContextPanelPlacement {
     static let edgeInset: CGFloat = 12
@@ -111,7 +112,7 @@ enum KColor {
     static let magenta = adaptive(light: rgb(1, 0.176, 0.608), dark: rgb(1, 0.31, 0.68))
     static let cyan = adaptive(light: rgb(0, 0.67, 0.78), dark: rgb(0.15, 0.79, 0.89))
     static let success = adaptive(light: rgb(0.08, 0.57, 0.27), dark: rgb(0.27, 0.78, 0.44))
-    static let terminalGreen = adaptive(light: rgb(0.08, 0.62, 0.29), dark: rgb(0.28, 0.9, 0.49))
+    static let terminalGreen = adaptive(light: hex(0x0C7332), dark: rgb(0.28, 0.9, 0.49))
     static let warning = adaptive(light: rgb(0.82, 0.45, 0.03), dark: rgb(0.98, 0.65, 0.16))
     static let danger = adaptive(light: rgb(0.9, 0.16, 0.24), dark: rgb(1, 0.37, 0.43))
     static let receipt = adaptive(light: rgb(0.953, 0.945, 0.969), dark: rgb(0.12, 0.101, 0.151))
@@ -560,8 +561,19 @@ struct Keycap: View {
 struct ShortcutBadge: View {
     let modifiers: [String]
     let key: String
+    var compact = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        Group {
+            if compact { pasteNoteKeycap }
+            else { standardKeycap }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel((modifiers + [key]).joined(separator: " "))
+    }
+
+    private var standardKeycap: some View {
         HStack(spacing: 4) {
             Text(modifiers.joined())
                 .foregroundStyle(KColor.secondary)
@@ -573,8 +585,65 @@ struct ShortcutBadge: View {
         .frame(height: 25)
         .background(KColor.surfaceHover, in: QwixitControlShape(cut: 5))
         .overlay(QwixitControlShape(cut: 5).stroke(KColor.line))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel((modifiers + [key]).joined(separator: " "))
+    }
+
+    private var pasteNoteKeycap: some View {
+        HStack(spacing: 2) {
+            Text(modifiers.joined())
+                .foregroundStyle(pasteNoteColor(light: 0x6E6B7D, dark: 0xB0ABBF))
+            Text(key.uppercased())
+                .foregroundStyle(pasteNoteColor(light: 0x6D28FF, dark: 0x9661FF))
+        }
+        .font(PasteNoteFont.font(size: 8))
+        .padding(.horizontal, 3)
+        .frame(height: 11)
+        .padding(1)
+        .background {
+            ZStack {
+                FourCornerCutShape(cut: 3)
+                    .fill(pasteNoteColor(light: 0xC9C4DA, dark: 0x4A4556))
+                FourCornerCutShape(cut: 2.6)
+                    .fill(pasteNoteColor(light: 0xF2F0FA, dark: 0x251F30))
+                    .padding(1)
+            }
+        }
+    }
+
+    private func pasteNoteColor(light: UInt32, dark: UInt32) -> Color {
+        Color(nsColor: KColor.hex(colorScheme == .dark ? dark : light))
+    }
+}
+
+enum PasteNoteFont {
+    private static let graphicsFont: CGFont? = {
+        guard let data = NSDataAsset(name: "JetBrainsMonoExtraBold")?.data,
+              let provider = CGDataProvider(data: data as CFData) else { return nil }
+        return CGFont(provider)
+    }()
+
+    static func font(size: CGFloat) -> Font {
+        guard let graphicsFont else {
+            return .system(size: size, weight: .heavy, design: .monospaced)
+        }
+        return Font(CTFontCreateWithGraphicsFont(graphicsFont, size, nil, nil))
+    }
+}
+
+private struct FourCornerCutShape: Shape {
+    let cut: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX + cut, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + cut))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cut))
+            path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX + cut, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - cut))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + cut))
+            path.closeSubpath()
+        }
     }
 }
 
