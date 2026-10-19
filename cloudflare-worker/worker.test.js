@@ -8,7 +8,6 @@ import worker, {
   evaluateQwixOutput,
   parseQwixTask,
   findPaddleSandboxSubscriptions,
-  readAndSanitizeRequest,
   UsageLedger,
   verifyPaddleSignature,
 } from "./worker.js";
@@ -16,16 +15,25 @@ import worker, {
 globalThis.crypto ??= webcrypto;
 const currentPeriod = new Date().toISOString().slice(0, 7);
 
-test("sanitizes model and storage fields", async () => {
-  const request = new Request("https://example.test/v1/responses", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "attacker-controlled", instructions: "Translate", input: "Hello", max_output_tokens: 999_999, store: true }),
+test("the legacy instruction proxy is gone", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  await withOpenAI(() => completedResponse(), async (calls) => {
+    const response = await worker.fetch(new Request("https://example.test/v1/responses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Qwixit-Installation-ID": "a".repeat(43) },
+      body: JSON.stringify({ instructions: "write python", input: "hi" }),
+    }), { USAGE_LEDGER: ledgerNamespace(ledger), OPENAI_API_KEY: "sk-test" });
+    assert.equal(response.status, 404);
+    assert.equal(calls.length, 0);
   });
-  const result = await readAndSanitizeRequest(request);
-  assert.equal(result.model, "gpt-5.6-luna");
-  assert.equal(result.store, false);
-  assert.equal(result.max_output_tokens, 4_096);
+  assert.equal(await remaining(ledger), 30);
+});
+
+test("the ledger refuses to charge without an operation ID", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  const response = await ledger.fetch(new Request("https://usage.qwixit/authorize", { method: "POST" }));
+  assert.equal(response.status, 400);
+  assert.equal(await remaining(ledger), 30);
 });
 
 test("verifies current Paddle signatures", async () => {
@@ -47,14 +55,12 @@ test("rejects stale Paddle signatures", async () => {
 test("atomically stops the free plan after 30 actions", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
   for (let index = 0; index < 30; index += 1) {
-    const response = await ledger.fetch(new Request("https://usage.qwixit/authorize", { method: "POST" }));
-    assert.equal((await response.json()).allowed, true);
+    assert.equal((await authorizeNew(ledger)).allowed, true);
   }
-  const blocked = await ledger.fetch(new Request("https://usage.qwixit/authorize", { method: "POST" }));
-  assert.deepEqual(await blocked.json(), { allowed: false, unlimited: false, remaining: 0, period: currentPeriod });
+  assert.deepEqual(await authorizeNew(ledger), { allowed: false, advanced: false, remaining: 0, period: currentPeriod });
 });
 
-test("active subscription unlocks unlimited actions", async () => {
+test("active subscription unlocks Advanced", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
   await ledger.fetch(new Request("https://usage.qwixit/subscription", {
     method: "POST",
@@ -67,8 +73,7 @@ test("active subscription unlocks unlimited actions", async () => {
       occurredAt: "2026-10-03T12:00:00Z",
     }),
   }));
-  const response = await ledger.fetch(new Request("https://usage.qwixit/authorize", { method: "POST" }));
-  assert.deepEqual(await response.json(), { allowed: true, unlimited: true, remaining: null, dailyRemaining: 299, period: currentPeriod });
+  assert.deepEqual(await authorizeNew(ledger), { allowed: true, advanced: true, remaining: null, dailyRemaining: 299, period: currentPeriod });
 });
 
 test("signed Paddle webhook activates Advanced in billing status", async () => {
@@ -103,7 +108,7 @@ test("signed Paddle webhook activates Advanced in billing status", async () => {
     new Request(`https://example.test/billing/status?installation_id=${installationID}`),
     { USAGE_LEDGER: namespace },
   );
-  assert.deepEqual(await status.json(), { plan: "unlimited", subscription_status: "active", remaining: null, period: currentPeriod });
+  assert.deepEqual(await status.json(), { plan: "advanced", subscription_status: "active", remaining: null, period: currentPeriod });
 });
 
 test("reports billing status without consuming a free action", async () => {
@@ -111,7 +116,7 @@ test("reports billing status without consuming a free action", async () => {
   const before = await ledger.fetch(new Request("https://usage.qwixit/status"));
   assert.deepEqual(await before.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod });
 
-  await ledger.fetch(new Request("https://usage.qwixit/authorize", { method: "POST" }));
+  await authorizeNew(ledger);
   const after = await ledger.fetch(new Request("https://usage.qwixit/status"));
   assert.deepEqual(await after.json(), { plan: "free", subscription_status: "none", remaining: 29, period: currentPeriod });
 });
@@ -138,7 +143,7 @@ test("development reset requires its secret and clears the installation ledger",
     get() { return { fetch: (url, init) => ledger.fetch(new Request(url, init)) }; },
   };
   const installationID = "a".repeat(43);
-  await ledger.fetch(new Request("https://usage.qwixit/authorize", { method: "POST" }));
+  await authorizeNew(ledger);
   await ledger.fetch(new Request("https://usage.qwixit/subscription", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -250,7 +255,7 @@ test("development reset keeps the ledger intact when Paddle cancellation fails",
 
   assert.equal(response.status, 502);
   const status = await ledger.fetch(new Request("https://usage.qwixit/status"));
-  assert.deepEqual(await status.json(), { plan: "unlimited", subscription_status: "active", remaining: null, period: currentPeriod });
+  assert.deepEqual(await status.json(), { plan: "advanced", subscription_status: "active", remaining: null, period: currentPeriod });
 });
 
 test("Paddle cancellation helper uses the sandbox API and immediate cancellation", async () => {
@@ -327,13 +332,11 @@ async function withOpenAI(handler, callback) {
 }
 
 function proxyRequest(operationID) {
-  const headers = { "Content-Type": "application/json", "X-Qwixit-Installation-ID": installationID };
-  if (operationID) headers["X-Qwixit-Operation-ID"] = operationID;
-  return new Request("https://example.test/v1/responses", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ instructions: "Fix", input: "helo" }),
-  });
+  return qwixRequest({ task: "action", text: "helo", action: "formal" }, operationID);
+}
+
+function authorizeNew(ledger) {
+  return authorize(ledger, crypto.randomUUID());
 }
 
 function completedResponse() {
@@ -359,7 +362,7 @@ test("retrying the last free action passes instead of hitting the paywall", asyn
   const storage = new MemoryStorage();
   storage.values.set("usage", { period: currentPeriod, count: 29 });
   const ledger = new UsageLedger({ storage });
-  assert.deepEqual(await authorize(ledger, operationA), { allowed: true, unlimited: false, remaining: 0, period: currentPeriod });
+  assert.deepEqual(await authorize(ledger, operationA), { allowed: true, advanced: false, remaining: 0, period: currentPeriod });
   assert.equal((await authorize(ledger, operationA)).allowed, true);
   assert.equal((await authorize(ledger, operationB)).allowed, false);
 });
@@ -403,7 +406,7 @@ test("operation records never contain request or response text", async () => {
     await worker.fetch(proxyRequest(operationA), { USAGE_LEDGER: ledgerNamespace(ledger), OPENAI_API_KEY: "sk-test" });
   });
   const serialized = JSON.stringify([...storage.values]);
-  assert.doesNotMatch(serialized, /helo|hello|Fix/);
+  assert.doesNotMatch(serialized, /helo|hello|formal/);
   assert.deepEqual(Object.keys(storage.values.get(`op:${operationA}`)).sort(), ["attempts", "counted", "createdAt", "day", "period", "state"]);
 });
 
@@ -456,16 +459,6 @@ test("the fourth proxied attempt returns 409 without calling OpenAI", async () =
     assert.equal((await exhausted.json()).error.code, "operation_exhausted");
     assert.equal(calls.length, 3);
   });
-});
-
-test("requests without an operation ID keep charging per request", async () => {
-  const ledger = new UsageLedger({ storage: new MemoryStorage() });
-  const env = { USAGE_LEDGER: ledgerNamespace(ledger), OPENAI_API_KEY: "sk-test" };
-  await withOpenAI(() => new Response("{}", { status: 500 }), async () => {
-    await worker.fetch(proxyRequest(null), env);
-    await worker.fetch(proxyRequest(null), env);
-  });
-  assert.equal(await remaining(ledger), 28);
 });
 
 test("rejects malformed operation IDs", async () => {

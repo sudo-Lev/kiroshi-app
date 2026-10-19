@@ -443,9 +443,9 @@ final class ReviewModeTests: XCTestCase {
         )
     }
 
-    func testBothPlanSpellingsMeanAdvanced() {
+    func testOnlyTheAdvancedPlanValueMeansAdvanced() {
         XCTAssertTrue(QwixitUsage.isAdvancedPlan("advanced"))
-        XCTAssertTrue(QwixitUsage.isAdvancedPlan("unlimited"))
+        XCTAssertFalse(QwixitUsage.isAdvancedPlan("unlimited"))
         XCTAssertFalse(QwixitUsage.isAdvancedPlan("free"))
         XCTAssertFalse(QwixitUsage.isAdvancedPlan(nil))
     }

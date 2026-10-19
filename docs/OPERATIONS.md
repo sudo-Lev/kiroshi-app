@@ -103,11 +103,7 @@ Set a monthly budget and 50%/80% alerts on the OpenAI project that holds the Wor
 
 ### Deploy order for API changes
 
-The Worker serves both `/v1/responses` (legacy: the client sends instructions) and `/v2/qwix` (the client sends a task; prompts live in `prompts.js`). Deploy in this order so no installed build breaks:
-
-1. Worker with idempotency and `/v2/qwix` (compatible with every existing build).
-2. App builds that send `X-Qwixit-Operation-ID` and use `/v2/qwix`.
-3. After every installation has updated: a Worker without `/v1/responses`, with the operation header required. Only then can no client send its own instructions.
+`/v2/qwix` is the only model endpoint; the client sends a task and the Worker owns the prompt (`prompts.js`). When a change touches the request or response shape, keep the Worker backward compatible first: deploy a Worker that accepts both the old and the new shape, then ship the app, and remove the old shape only after every installation has updated. Builds from before October 2026 used the removed `/v1/responses` proxy and no longer work.
 
 A prompt change in `prompts.js` needs only a Worker deploy, not an app release. Before deploying one, deploy to a test Worker or accept a brief production window, then run the prompt eval:
 

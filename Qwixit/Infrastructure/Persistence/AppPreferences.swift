@@ -44,7 +44,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 enum DeveloperUsageScenario: String, CaseIterable, Identifiable {
     case live
     case limitReached
-    case unlimited
+    case advanced
 
     var id: String { rawValue }
 
@@ -52,7 +52,7 @@ enum DeveloperUsageScenario: String, CaseIterable, Identifiable {
         switch self {
         case .live: "Live"
         case .limitReached: "30 / 30"
-        case .unlimited: "Advanced"
+        case .advanced: "Advanced"
         }
     }
 
@@ -60,7 +60,7 @@ enum DeveloperUsageScenario: String, CaseIterable, Identifiable {
         switch self {
         case .live: "Use the real Worker response."
         case .limitReached: "Blocks AI requests to preview the paywall. Resets to Live on launch."
-        case .unlimited: "Preview Advanced UI only. Resets to Live on launch."
+        case .advanced: "Preview Advanced UI only. Resets to Live on launch."
         }
     }
 }
@@ -98,7 +98,7 @@ struct AppPreferences {
         switch developerUsageScenario {
         case .live: break
         case .limitReached: return 0
-        case .unlimited: return nil
+        case .advanced: return nil
         }
 #endif
         return defaults.object(forKey: AppPreferenceKey.quotaRemaining) as? Int
@@ -108,7 +108,7 @@ struct AppPreferences {
 #if DEBUG
         switch developerUsageScenario {
         case .live, .limitReached: break
-        case .unlimited: return true
+        case .advanced: return true
         }
 #endif
         return QwixitUsage.isAdvancedPlan(defaults.string(forKey: AppPreferenceKey.quotaPlan))

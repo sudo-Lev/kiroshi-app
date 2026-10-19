@@ -12,9 +12,6 @@ const OPENAI_URL = "https://api.openai.com/v1/responses";
 const MODEL = "gpt-5.6-luna";
 const FREE_ACTIONS_PER_MONTH = 30;
 const MAX_BODY_BYTES = 64 * 1024;
-const MAX_INPUT_CHARACTERS = 12_000;
-const MAX_INSTRUCTIONS_CHARACTERS = 4_000;
-const MAX_OUTPUT_TOKENS = 4_096;
 const INSTALLATION_ID_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const OPERATION_ID_PATTERN = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
 const MAX_ATTEMPTS_PER_OPERATION = 3;
@@ -32,7 +29,7 @@ const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"])
 const RESETTABLE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due", "paused"]);
 const PADDLE_SANDBOX_API_ORIGIN = "https://sandbox-api.paddle.com";
 const PADDLE_SANDBOX_CLIENT_TOKEN = "test_30d92b2b51bf80a52edcb3bb6ea";
-const PADDLE_SANDBOX_UNLIMITED_PRICE_ID = "pri_01m4135bkhzgwp4y51nf8wjkgp";
+const PADDLE_SANDBOX_ADVANCED_PRICE_ID = "pri_01m4135bkhzgwp4y51nf8wjkgp";
 
 export default {
   async fetch(request, env) {
@@ -64,92 +61,9 @@ export default {
       return handleDevelopmentReset(request, env);
     }
     if (url.pathname === "/v2/qwix") return handleQwix(request, env);
-    if (url.pathname !== "/v1/responses") {
-      return request.headers.get("accept")?.includes("text/html")
-        ? notFoundPage()
-        : errorResponse(404, "Not found.");
-    }
-    if (request.method !== "POST") return errorResponse(405, "Method not allowed.", {}, { Allow: "POST" });
-    if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
-      return errorResponse(415, "Content-Type must be application/json.");
-    }
-
-    const installationID = request.headers.get("x-qwixit-installation-id") ?? "";
-    if (!INSTALLATION_ID_PATTERN.test(installationID)) {
-      return errorResponse(401, "A valid Tokiri installation identity is required.", { code: "invalid_installation" });
-    }
-    // Retries of one user action share an operation ID so the ledger charges it once.
-    // Builds without the header keep the legacy charge-per-request behavior.
-    const operationID = request.headers.get("x-qwixit-operation-id");
-    if (operationID !== null && !OPERATION_ID_PATTERN.test(operationID)) {
-      return errorResponse(400, "Invalid operation identity.", { code: "invalid_operation" });
-    }
-    if (!env.USAGE_LEDGER) {
-      console.error("Missing USAGE_LEDGER Durable Object binding");
-      return errorResponse(500, "Worker usage storage is not configured.");
-    }
-    if (await isRateLimited(env, installationID, request)) return rateLimitedResponse();
-
-    let body;
-    try {
-      body = await readAndSanitizeRequest(request);
-    } catch (error) {
-      return errorResponse(400, error instanceof Error ? error.message : "Invalid request.");
-    }
-
-    const apiKey = env.OPENAI_API_KEY ?? env["qwixit-cloudflare-key"];
-    if (!apiKey) {
-      console.error("Missing OPENAI_API_KEY secret (or legacy qwixit-cloudflare-key)");
-      return errorResponse(500, "Worker is not configured.");
-    }
-
-    const checkoutURL = `${url.origin}/billing/checkout?installation_id=${encodeURIComponent(installationID)}`;
-    let quota;
-    try {
-      quota = await authorizeUsage(env, installationID, operationID);
-    } catch (error) {
-      console.error("Usage authorization failed", error instanceof Error ? error.message : "unknown error");
-      return errorResponse(503, "Usage verification is temporarily unavailable.");
-    }
-    if (quota.code === "operation_exhausted") return operationExhaustedResponse();
-    if (quota.code === "daily_limit" || quota.code === "monthly_limit") return advancedLimitResponse(quota);
-    if (!quota.allowed) {
-      return errorResponse(402, "You’re out of tokens!", {
-        code: "free_limit_reached",
-        checkout_url: checkoutURL,
-        limit: FREE_ACTIONS_PER_MONTH,
-        remaining: 0,
-      });
-    }
-
-    let upstream;
-    try {
-      upstream = await fetch(OPENAI_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "User-Agent": "Qwixit-Worker/1.0",
-          "X-Client-Request-Id": operationID ?? crypto.randomUUID(),
-        },
-        body: JSON.stringify(body),
-      });
-    } catch (error) {
-      console.error("OpenAI request failed", error instanceof Error ? error.message : "unknown error");
-      return upstreamFailure(env, installationID, operationID, quota);
-    }
-    if (upstream.status >= 500 || upstream.status === 429) {
-      console.error("OpenAI request failed", upstream.status);
-      return upstreamFailure(env, installationID, operationID, quota);
-    }
-
-    const headers = securityHeaders({
-      "Content-Type": upstream.headers.get("content-type") ?? "application/json",
-      ...quotaHeaders(quota),
-    });
-    copyHeader(upstream.headers, headers, "retry-after");
-    copyHeader(upstream.headers, headers, "x-request-id");
-    return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers });
+    return request.headers.get("accept")?.includes("text/html")
+      ? notFoundPage()
+      : errorResponse(404, "Not found.");
   },
 };
 
@@ -167,11 +81,11 @@ export class UsageLedger {
       const period = currentUTCMonth();
       const usage = (await this.storage.get("usage")) ?? { period, count: 0 };
       const count = usage.period === period ? usage.count : 0;
-      const unlimited = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status);
+      const advanced = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status);
       return Response.json({
-        plan: unlimited ? "unlimited" : "free",
+        plan: advanced ? "advanced" : "free",
         subscription_status: subscription.status,
-        remaining: unlimited ? null : Math.max(0, FREE_ACTIONS_PER_MONTH - count),
+        remaining: advanced ? null : Math.max(0, FREE_ACTIONS_PER_MONTH - count),
         period,
       }, { headers: securityHeaders() });
     }
@@ -186,9 +100,9 @@ export class UsageLedger {
 
     if (url.pathname === "/authorize") {
       const operationID = (await readOptionalJSON(request))?.operationID ?? null;
+      if (!operationID) return errorResponse(400, "operationID is required.");
       const now = Date.now();
       const result = await this.storage.transaction(async (txn) => {
-        if (!operationID) return chargeAction(txn);
 
         // Operation records hold only state, counters, and time — never request text.
         const key = `op:${operationID}`;
@@ -212,11 +126,11 @@ export class UsageLedger {
           createdAt: operation?.createdAt ?? now,
           counted: true,
           period: charge.period,
-          day: charge.unlimited ? currentUTCDate() : null,
+          day: charge.advanced ? currentUTCDate() : null,
         });
         return charge;
       });
-      if (operationID) await this.scheduleCleanup(now);
+      await this.scheduleCleanup(now);
       return Response.json(result, { headers: securityHeaders() });
     }
 
@@ -299,7 +213,7 @@ async function chargeAction(txn) {
   if (!quota.allowed) return quota;
   const usage = (await txn.get("usage")) ?? { period: quota.period, count: 0 };
   await txn.put("usage", { period: quota.period, count: (usage.period === quota.period ? usage.count : 0) + 1 });
-  if (quota.unlimited) {
+  if (quota.advanced) {
     const today = currentUTCDate();
     const day = (await txn.get("day")) ?? { date: today, count: 0 };
     await txn.put("day", { date: today, count: (day.date === today ? day.count : 0) + 1 });
@@ -323,13 +237,13 @@ async function quotaSnapshot(txn) {
     return {
       allowed: code === undefined,
       code,
-      unlimited: true,
+      advanced: true,
       remaining: null,
       dailyRemaining: Math.max(0, ADVANCED_ACTIONS_PER_DAY - dayCount),
       period,
     };
   }
-  return { allowed: count < FREE_ACTIONS_PER_MONTH, unlimited: false, remaining: Math.max(0, FREE_ACTIONS_PER_MONTH - count), period };
+  return { allowed: count < FREE_ACTIONS_PER_MONTH, advanced: false, remaining: Math.max(0, FREE_ACTIONS_PER_MONTH - count), period };
 }
 
 async function readOptionalJSON(request) {
@@ -360,7 +274,6 @@ async function refundUsage(env, installationID, operationID, reason = "failure")
 
 /** Refunds when possible; a failed refund keeps the action charged rather than failing the response. */
 async function tryRefund(env, installationID, operationID, quota, reason) {
-  if (!operationID) return quota;
   try {
     return await refundUsage(env, installationID, operationID, reason);
   } catch (error) {
@@ -369,9 +282,9 @@ async function tryRefund(env, installationID, operationID, quota, reason) {
   }
 }
 
-async function upstreamFailure(env, installationID, operationID, quota, headersFor = quotaHeaders) {
+async function upstreamFailure(env, installationID, operationID, quota) {
   const current = await tryRefund(env, installationID, operationID, quota, "failure");
-  return errorResponse(502, "The AI service is temporarily unavailable.", { code: "upstream_failed" }, headersFor(current));
+  return errorResponse(502, "The AI service is temporarily unavailable.", { code: "upstream_failed" }, qwixHeaders(current));
 }
 
 function operationExhaustedResponse() {
@@ -402,12 +315,12 @@ async function isRateLimited(env, installationID, request) {
   }
 }
 
-/** v2 reports the plan as "advanced" and, for Advanced, the actions left today. */
+/** For Advanced, the remaining count is the actions left today. */
 function qwixHeaders(quota) {
   return {
-    "X-Qwixit-Limit": String(quota.unlimited ? ADVANCED_ACTIONS_PER_DAY : FREE_ACTIONS_PER_MONTH),
-    "X-Qwixit-Remaining": String(quota.unlimited ? quota.dailyRemaining : quota.remaining),
-    "X-Qwixit-Plan": quota.unlimited ? "advanced" : "free",
+    "X-Qwixit-Limit": String(quota.advanced ? ADVANCED_ACTIONS_PER_DAY : FREE_ACTIONS_PER_MONTH),
+    "X-Qwixit-Remaining": String(quota.advanced ? quota.dailyRemaining : quota.remaining),
+    "X-Qwixit-Plan": quota.advanced ? "advanced" : "free",
     "X-Qwixit-Period": quota.period,
   };
 }
@@ -591,7 +504,7 @@ async function handleQwix(request, env) {
   }
 
   // Priority processing costs more, so only Advanced may request it.
-  const body = buildQwixRequest(task, { priority: task.priority && quota.unlimited });
+  const body = buildQwixRequest(task, { priority: task.priority && quota.advanced });
   let upstream;
   try {
     upstream = await fetch(OPENAI_URL, {
@@ -606,11 +519,11 @@ async function handleQwix(request, env) {
     });
   } catch (error) {
     console.error("OpenAI request failed", error instanceof Error ? error.message : "unknown error");
-    return upstreamFailure(env, installationID, operationID, quota, qwixHeaders);
+    return upstreamFailure(env, installationID, operationID, quota);
   }
   if (!upstream.ok) {
     console.error("OpenAI request failed", upstream.status);
-    return upstreamFailure(env, installationID, operationID, quota, qwixHeaders);
+    return upstreamFailure(env, installationID, operationID, quota);
   }
 
   if (task.task === "peek") {
@@ -633,15 +546,6 @@ async function handleQwix(request, env) {
   }
   const result = task.task === "fix" ? { result: "fixed", text: outcome.text } : { text: outcome.text };
   return Response.json(result, { headers: securityHeaders(qwixHeaders(quota)) });
-}
-
-function quotaHeaders(quota) {
-  return {
-    "X-Qwixit-Limit": String(FREE_ACTIONS_PER_MONTH),
-    "X-Qwixit-Remaining": quota.unlimited ? "unlimited" : String(quota.remaining),
-    "X-Qwixit-Plan": quota.unlimited ? "unlimited" : "free",
-    "X-Qwixit-Period": quota.period,
-  };
 }
 
 async function billingStatusResponse(env, installationID) {
@@ -728,7 +632,7 @@ export async function findPaddleSandboxSubscriptions(installationID, apiKey, fet
 
   for (let page = 0; page < 10; page += 1) {
     const url = new URL("/subscriptions", PADDLE_SANDBOX_API_ORIGIN);
-    url.searchParams.set("price_id", PADDLE_SANDBOX_UNLIMITED_PRICE_ID);
+    url.searchParams.set("price_id", PADDLE_SANDBOX_ADVANCED_PRICE_ID);
     url.searchParams.set("status", "active,past_due,paused");
     url.searchParams.set("per_page", "200");
     if (after) url.searchParams.set("after", after);
@@ -814,7 +718,7 @@ async function handlePaddleWebhook(request, env) {
     return Response.json({ accepted: true }, { headers: securityHeaders() });
   }
   const matchingItem = event.data?.items?.find(
-    (item) => item?.price?.id === PADDLE_SANDBOX_UNLIMITED_PRICE_ID,
+    (item) => item?.price?.id === PADDLE_SANDBOX_ADVANCED_PRICE_ID,
   );
   const status = matchingItem ? String(event.data?.status ?? "none") : "none";
   const id = env.USAGE_LEDGER.idFromName(installationID);
@@ -876,7 +780,7 @@ function checkoutPage(url) {
       const button=document.getElementById("checkout");const status=document.getElementById("status");
       Paddle.Environment.set("sandbox");
       Paddle.Initialize({token:${JSON.stringify(PADDLE_SANDBOX_CLIENT_TOKEN)},eventCallback(event){if(event.name==="checkout.completed")status.textContent="Payment completed. Activating Advanced…";if(event.name==="checkout.payment.error")status.textContent="The test payment failed. Try another test card.";}});
-      function openCheckout(){status.textContent="";Paddle.Checkout.open({items:[{priceId:${JSON.stringify(PADDLE_SANDBOX_UNLIMITED_PRICE_ID)},quantity:1}],customData:{qwixit_installation_id:${JSON.stringify(installationID)}},settings:{variant:"one-page",successUrl:${JSON.stringify(successUrl)}}});}
+      function openCheckout(){status.textContent="";Paddle.Checkout.open({items:[{priceId:${JSON.stringify(PADDLE_SANDBOX_ADVANCED_PRICE_ID)},quantity:1}],customData:{qwixit_installation_id:${JSON.stringify(installationID)}},settings:{variant:"one-page",successUrl:${JSON.stringify(successUrl)}}});}
       button.disabled=false;button.textContent="Get Advanced";button.addEventListener("click",openCheckout);openCheckout();
       if(!matchMedia("(prefers-reduced-motion: reduce)").matches){const face=document.querySelector(".face");setInterval(()=>{face.textContent=face.dataset.shut;setTimeout(()=>face.textContent=face.dataset.open,170)},4200)}
     </script>
@@ -912,7 +816,7 @@ function checkoutSuccessPage(url) {
       const statusUrl=${JSON.stringify(statusUrl)};let attempts=0,timer;
       function showReady(){clearTimeout(timer);document.title="Advanced is ready · Tokiri";face.textContent="[ ^_- ]";title.textContent="Advanced is ready.";message.textContent="Advanced is active. Tokiri is ready.";track.hidden=true;retry.hidden=true}
       function showDelayed(){face.textContent="[ ?_? ]";title.textContent="Still syncing.";message.textContent="Paddle is taking a little longer. Tokiri will keep checking.";retry.hidden=false}
-      async function check(){retry.hidden=true;try{const response=await fetch(statusUrl,{cache:"no-store"});if(response.ok&&["advanced","unlimited"].includes((await response.json()).plan)){showReady();return}}catch{}attempts+=1;if(attempts===12)showDelayed();timer=setTimeout(check,attempts<8?1200:attempts<20?2200:5000)}
+      async function check(){retry.hidden=true;try{const response=await fetch(statusUrl,{cache:"no-store"});if(response.ok&&(await response.json()).plan==="advanced"){showReady();return}}catch{}attempts+=1;if(attempts===12)showDelayed();timer=setTimeout(check,attempts<8?1200:attempts<20?2200:5000)}
       retry.addEventListener("click",()=>{attempts=0;face.textContent="[ @_@ ]";title.textContent="Checking again.";message.textContent="Activating Advanced… keep Tokiri open.";track.hidden=false;check()});check();
       if(!matchMedia("(prefers-reduced-motion: reduce)").matches){setInterval(()=>{if(face.textContent==="[ @_@ ]"){face.textContent="[ -_- ]";setTimeout(()=>{if(face.textContent==="[ -_- ]")face.textContent="[ @_@ ]"},170)}},4200)}
     </script>
@@ -924,44 +828,6 @@ function checkoutSuccessPage(url) {
 function notFoundPage() {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found · Tokiri</title><style>:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff;background:#100b17}body{margin:0;min-height:100vh;display:grid;place-items:center}main{text-align:center;padding:32px}.face{display:block;margin-bottom:18px;white-space:pre;font:800 34px/1 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:-2.8px 0 #00d8f0,2.8px 0 #ff2d9b}p{margin:0;color:#c9c1d3;font:700 14px/1.5 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}</style></head><body><main><span class="face">[ ?_? ]</span><p>page not found.</p></main></body></html>`;
   return new Response(html, { status: 404, headers: securityHeaders({ "Content-Type": "text/html; charset=utf-8" }) });
-}
-
-export async function readAndSanitizeRequest(request) {
-  const declaredLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) throw new Error("Request body is too large.");
-  const rawBody = await request.arrayBuffer();
-  if (rawBody.byteLength > MAX_BODY_BYTES) throw new Error("Request body is too large.");
-
-  let source;
-  try { source = JSON.parse(new TextDecoder().decode(rawBody)); } catch { throw new Error("Request body must be valid JSON."); }
-  if (!isObject(source)) throw new Error("Request body must be a JSON object.");
-  if (typeof source.input !== "string" || source.input.length === 0) throw new Error("input must be a non-empty string.");
-  if (source.input.length > MAX_INPUT_CHARACTERS) throw new Error(`input must be at most ${MAX_INPUT_CHARACTERS} characters.`);
-  if (typeof source.instructions !== "string" || source.instructions.length === 0) throw new Error("instructions must be a non-empty string.");
-  if (source.instructions.length > MAX_INSTRUCTIONS_CHARACTERS) throw new Error(`instructions must be at most ${MAX_INSTRUCTIONS_CHARACTERS} characters.`);
-
-  const body = { model: MODEL, instructions: source.instructions, input: source.input, reasoning: { effort: "none" }, max_output_tokens: outputTokenLimit(source.max_output_tokens), store: false };
-  if (source.stream === true) body.stream = true;
-  if (source.service_tier === "priority") body.service_tier = "priority";
-  const text = sanitizeTextOptions(source.text);
-  if (text) body.text = text;
-  return body;
-}
-
-function outputTokenLimit(value) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 2_048;
-  return Math.min(Math.max(Math.trunc(value), 64), MAX_OUTPUT_TOKENS);
-}
-
-function sanitizeTextOptions(value) {
-  if (!isObject(value)) return undefined;
-  const result = {};
-  if (["low", "medium", "high"].includes(value.verbosity)) result.verbosity = value.verbosity;
-  if (isObject(value.format) && value.format.type === "json_schema") {
-    const serialized = JSON.stringify(value.format);
-    if (serialized.length <= 12_000 && ["qwixit_peek", "qwixit_questions"].includes(value.format.name)) result.format = value.format;
-  }
-  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function currentUTCMonth() { return new Date().toISOString().slice(0, 7); }

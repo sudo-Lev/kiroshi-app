@@ -165,9 +165,8 @@ enum QwixitUsage {
 
     static var remaining: Int? { AppPreferences().remainingActions }
 
-    /// The Worker reports `advanced`; builds before the rename and `/billing/status` still say `unlimited`.
     static func isAdvancedPlan(_ plan: String?) -> Bool {
-        plan == "advanced" || plan == "unlimited"
+        plan == "advanced"
     }
 
     static func record(_ response: HTTPURLResponse, defaults: UserDefaults = .standard) {

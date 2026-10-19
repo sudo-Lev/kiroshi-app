@@ -118,7 +118,7 @@ final class SettingsBillingTests: XCTestCase {
         let billing = BillingSequenceStub(statuses: [
             BillingStatus(plan: "free", subscriptionStatus: "none", remaining: 0, period: "2026-10"),
             BillingStatus(plan: "free", subscriptionStatus: "none", remaining: 0, period: "2026-10"),
-            BillingStatus(plan: "unlimited", subscriptionStatus: "active", remaining: nil, period: "2026-10"),
+            BillingStatus(plan: "advanced", subscriptionStatus: "active", remaining: nil, period: "2026-10"),
         ])
         let model = SettingsViewModel(
             accessibility: OnboardingAccessibilityStub(),
