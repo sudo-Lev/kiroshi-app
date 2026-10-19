@@ -486,7 +486,7 @@ This surface is a compact one-column chooser. The active action uses the same da
 - One column. Translation targets appear first, followed by a 1 pt divider inset 4 pt, then rewrite actions. No section labels.
 - Row height: 41 pt. Labels are 14 pt system Bold; right-side digits are 12 pt Mono Bold.
 - The selected row is the only shape: 38 pt inner height plus 1.5 pt gradient edge (`#00ABC7 → #6D28FF → #6D28FF → #FF2D9B`, 100°), 8 pt cut corners, `#16131F` fill, and a 16 × 1.5 pt white highlight at x 10 / y 4. In Dark, use the existing dark Settings button fill and adaptive TokiriUI colors.
-- Unselected rows have no border or fill at rest; hover uses `#F6F4FD` in Light and the existing dark surface-hover token.
+- Unselected rows have no border or fill at rest; hover uses a quiet inset wash (`#F6F4FD` in Light, the existing dark surface-hover token) with 6 pt cut corners and 6 / 3 pt horizontal / vertical insets.
 - Selected row shows `↵`; other rows show plain digits. No boxed keycaps, subtitles, or per-action colors.
 - No leading icon or face. Keep the text edge aligned and let the title carry recognition.
 

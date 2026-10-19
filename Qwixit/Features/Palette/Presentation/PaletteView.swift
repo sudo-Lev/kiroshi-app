@@ -37,14 +37,14 @@ struct PaletteView: View {
             .font(.system(size: 14, weight: .medium, design: .monospaced))
             .foregroundStyle(text)
             .focused($searchFocused)
-            .layoutPriority(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(viewModel.contextLabel)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(KColor.popupMuted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
-                .fixedSize(horizontal: false, vertical: false)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 16)
         .frame(height: 48)

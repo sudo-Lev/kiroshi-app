@@ -217,22 +217,22 @@ struct MenuBarView: View {
             let contentWidth = geometry.size.width - 24
             let halfWidth = (contentWidth - 8) / 2
 
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 HStack(spacing: 8) {
                     actionCell(icon: .settings, title: "Settings", action: onOpenSettings)
-                        .frame(width: halfWidth, height: 32)
+                        .frame(width: halfWidth, height: 28)
                     quitActionCell
-                        .frame(width: halfWidth, height: 32)
+                        .frame(width: halfWidth, height: 28)
                 }
 
                 actionCell(icon: .onboarding, title: "Onboarding", action: onShowOnboarding)
-                    .frame(width: contentWidth, height: 32)
+                    .frame(width: contentWidth, height: 28)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 9)
+            .padding(.vertical, 7)
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .frame(height: 90)
+        .frame(height: 76)
         .background(KColor.canvasRaised)
     }
 

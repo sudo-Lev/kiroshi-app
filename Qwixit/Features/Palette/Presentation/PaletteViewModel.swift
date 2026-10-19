@@ -4,8 +4,8 @@ struct PaletteChoice: Identifiable, Equatable {
     let id: String
     let action: PaletteAction
     let isTranslation: Bool
+    let name: String
 
-    var name: String { action.name }
     var isCustomRewrite: Bool { id == "customRewrite" }
 }
 
@@ -241,11 +241,16 @@ final class PaletteViewModel: ObservableObject {
             prioritized(languages.map { language in
                 var action = translate
                 action.language = language.id
-                return PaletteChoice(id: "translate:\(language.id)", action: action, isTranslation: true)
+                return PaletteChoice(
+                    id: "translate:\(language.id)",
+                    action: action,
+                    isTranslation: true,
+                    name: language.name
+                )
             })
         } ?? []
         let rewrites = prioritized(allActions.filter { $0.id != "translate" }.map {
-            PaletteChoice(id: $0.id, action: $0, isTranslation: false)
+            PaletteChoice(id: $0.id, action: $0, isTranslation: false, name: $0.name)
         })
 
         let matchingTranslations = value.isEmpty ? translations : translations.filter {
@@ -266,7 +271,7 @@ final class PaletteViewModel: ObservableObject {
                 mode: .replace,
                 prompt: "Rewrite the selected text according to this instruction: \(instruction)"
             )
-            choices = [PaletteChoice(id: "customRewrite", action: action, isTranslation: false)]
+            choices = [PaletteChoice(id: "customRewrite", action: action, isTranslation: false, name: action.name)]
         } else {
             choices = matchingTranslations + matchingRewrites
         }

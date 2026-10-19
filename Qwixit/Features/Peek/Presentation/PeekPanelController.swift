@@ -166,29 +166,36 @@ final class PeekPanelController {
 
     private func preferredSize(for state: PeekLoadState) -> NSSize {
         if viewModel.isPinned { return NSSize(width: 360, height: 560) }
-        return switch state {
+        let height: CGFloat
+        switch state {
         case .idle:
             let rowCount = max(viewModel.visibleLanguages.count, 1)
-            let height = 2 + 48 + 1 + 20 + rowCount * 41 + max(rowCount - 1, 0) * 6 + 1 + 32
-            NSSize(width: 360, height: CGFloat(height))
-        case .loading, .success: NSSize(width: 360, height: 150)
-        case .loaded: NSSize(width: 360, height: resultHeight)
-        case .limitReached: NSSize(width: 360, height: 300)
-        case .failed(let message): NSSize(width: 360, height: message == "Select some text first." ? 165 : 200)
+            height = CGFloat(2 + 48 + 1 + 20 + rowCount * 41 + max(rowCount - 1, 0) * 6 + 1 + 32)
+        case .loading, .success:
+            height = 150
+        case .loaded:
+            height = resultHeight
+        case .limitReached:
+            height = 300
+        case .failed(let message):
+            height = message == "Select some text first." ? 165 : 200
         }
+        return NSSize(width: 360, height: height)
     }
 
     private var resultHeight: CGFloat {
         guard let result = viewModel.result else { return 150 }
         let font = NSFont.systemFont(ofSize: 15, weight: .regular)
         let textSize = (result.plainText as NSString).boundingRect(
-            with: NSSize(width: 326, height: .greatestFiniteMagnitude),
+            with: NSSize(width: 326, height: CGFloat.greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             attributes: [.font: font]
         ).size
         let paragraphs = result.plainText.components(separatedBy: "\n\n").count
-        let paragraphSpacing = CGFloat(max(paragraphs - 1, 0) * 8)
-        return min(max(2 + 48 + 1 + ceil(textSize.height) + paragraphSpacing + 30 + 1 + 32, 150), 334)
+        let paragraphSpacing = CGFloat(max(paragraphs - 1, 0)) * 8
+        let fixedHeight: CGFloat = 2 + 48 + 1 + 30 + 1 + 32
+        let contentHeight = fixedHeight + ceil(textSize.height) + paragraphSpacing
+        return min(max(contentHeight, 150), 334)
     }
 
     private func appKitRect(_ rect: CGRect) -> CGRect? {
@@ -211,8 +218,8 @@ final class PeekPanelController {
             switch event.keyCode {
             case 53: close()
             case 48: viewModel.moveChoice(event.modifierFlags.contains(.shift) ? -1 : 1)
-            case 123, 126: viewModel.moveChoice(-1)
-            case 124, 125: viewModel.moveChoice(1)
+            case 126: viewModel.moveChoice(-1)
+            case 125: viewModel.moveChoice(1)
             case 36: viewModel.submitChoice()
             default:
                 guard viewModel.query.isEmpty else { return false }
@@ -246,8 +253,9 @@ private final class PeekPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    override func keyDown(with event: NSEvent) {
-        if keyHandler?(event) != true { super.keyDown(with: event) }
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, keyHandler?(event) == true { return }
+        super.sendEvent(event)
     }
 }
 

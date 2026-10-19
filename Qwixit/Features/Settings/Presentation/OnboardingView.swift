@@ -452,9 +452,13 @@ private struct OnboardingPaletteSurface: View {
     @State private var syncedSelection = 0
 
     var body: some View {
-        PaletteView(viewModel: viewModel, onClose: { _ = model.escapeOverlay() })
+        PaletteView(viewModel: viewModel)
             .frame(width: 440, height: 190)
             .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
+            .onKeyPress(.escape) {
+                _ = model.escapeOverlay()
+                return .handled
+            }
             .onAppear {
                 viewModel.open(capture: PaletteCapture(
                     element: nil,

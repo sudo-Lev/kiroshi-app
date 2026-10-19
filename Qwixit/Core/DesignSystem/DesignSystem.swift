@@ -1370,13 +1370,20 @@ struct PopupSelectedButtonStyle: ButtonStyle {
 /// Plain text rows gain only a quiet hover/press wash; they never acquire a border.
 struct PopupPlainRowButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background((configuration.isPressed || isHovering) ? KColor.surfaceHover : .clear)
+            .background {
+                QwixitControlShape(cut: 6)
+                    .fill((configuration.isPressed || isHovering) ? KColor.surfaceHover : .clear)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+            }
             .contentShape(Rectangle())
             .opacity(isEnabled ? 1 : 0.45)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovering)
             .onHover { isHovering = isEnabled && $0 }
     }
 }

@@ -68,13 +68,13 @@ struct PeekView: View {
                     .font(.system(size: 14, weight: .medium, design: .monospaced))
                     .foregroundStyle(PeekPalette.text)
                     .focused($searchFocused)
-                    .layoutPriority(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Text(viewModel.contextLabel)
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(KColor.popupMuted)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
-                        .fixedSize(horizontal: false, vertical: false)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(.horizontal, 16)
                 .onAppear { searchFocused = true }
@@ -91,11 +91,12 @@ struct PeekView: View {
                         .help("Next language")
                         .accessibilityLabel("Target language: \(viewModel.targetLanguageName). Switch to next language.")
                     Spacer(minLength: 0)
-                    Button("⇥ next") { viewModel.cycleLanguage() }
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(KColor.popupMuted)
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Next language")
+                    Button(action: onClose) {
+                        TokiriUI.Icon(.close, size: 10)
+                    }
+                    .buttonStyle(TokiriUI.IconButton(accent: KColor.popupMuted))
+                    .help("Close Peek")
+                    .accessibilityLabel("Close Peek")
                 }
                 .padding(.leading, 16)
                 .padding(.trailing, 10)

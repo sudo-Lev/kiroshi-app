@@ -20,6 +20,7 @@ enum TokiriUI {
     typealias CompactButton = CompactButtonStyle
     typealias PopupSelectedButton = PopupSelectedButtonStyle
     typealias PopupPlainRowButton = PopupPlainRowButtonStyle
+    typealias IconButton = IconButtonStyle
     typealias Shortcut = ShortcutBadge
     typealias ShortcutButton = ShortcutBadgeButton
     typealias PopupCloseButton = PopupCloseBadgeButton

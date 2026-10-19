@@ -15,12 +15,10 @@ struct PeekSentence: Codable, Equatable, Identifiable {
     var id: String { source + "\u{0}" + target }
     let source: String
     let target: String
-    let lead: String?
 
-    init(source: String, target: String, lead: String? = nil) {
+    init(source: String, target: String) {
         self.source = source
         self.target = target
-        self.lead = lead
     }
 }
 
@@ -30,14 +28,7 @@ enum PeekResult: Equatable {
 
     var plainText: String {
         return switch self {
-        case .translation(let sentences): sentences.enumerated().map { index, sentence in
-            let lead = sentence.lead?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let cleanLead = lead.trimmingCharacters(in: .punctuationCharacters)
-            guard !cleanLead.isEmpty else { return sentence.target }
-            return index == 0
-                ? "# \(cleanLead)\n\n\(sentence.target)"
-                : "**\(cleanLead):** \(sentence.target)"
-        }.joined(separator: "\n\n")
+        case .translation(let sentences): sentences.map(\.target).joined(separator: "\n\n")
         case .summary(let content): content.joined(separator: "\n\n")
         }
     }
