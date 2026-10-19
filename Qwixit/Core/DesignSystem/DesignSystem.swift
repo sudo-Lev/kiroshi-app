@@ -1159,7 +1159,7 @@ struct PrimaryButtonStyle: ButtonStyle {
 
 struct QuitButtonStyle: ButtonStyle {
     var compact = false
-    var appearance: TokiriButtonAppearance = .filled
+    var appearance: TokiriButtonAppearance = .soft
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1181,7 +1181,7 @@ struct QuitButtonStyle: ButtonStyle {
             .font(.system(size: compact ? 10 : 11.5, weight: .heavy, design: .rounded))
             .foregroundStyle(isFilled ? Color.white : KColor.danger)
             .padding(.horizontal, compact ? 9 : 14)
-            .frame(minHeight: compact ? 26 : 32)
+            .frame(minHeight: compact ? 24 : 32)
             .background {
                 shape.fill(isFilled
                     ? (isHovering ? KColor.quitFillHover : KColor.quitFill)

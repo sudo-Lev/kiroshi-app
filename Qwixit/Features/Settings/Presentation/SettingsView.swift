@@ -249,7 +249,7 @@ struct SettingsView: View {
                     Text("Quit")
                 }
             }
-            .buttonStyle(TokiriUI.QuitButton())
+            .buttonStyle(TokiriUI.QuitButton(appearance: .soft))
             .accessibilityLabel("Quit Tokiri")
         }
         .padding(.horizontal, 18)

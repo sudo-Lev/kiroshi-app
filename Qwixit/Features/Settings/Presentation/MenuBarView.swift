@@ -218,7 +218,7 @@ struct MenuBarView: View {
             HStack(spacing: 6) {
                 actionCell(icon: .settings, title: "Settings", action: onOpenSettings)
                     .frame(width: columnWidth, height: 28)
-                actionCell(icon: .onboarding, title: "Onboarding", appearance: .ghost, action: onShowOnboarding)
+                actionCell(icon: .onboarding, title: "Onboarding", action: onShowOnboarding)
                     .frame(width: columnWidth, height: 28)
                 quitActionCell
                     .frame(width: columnWidth, height: 28)
@@ -233,7 +233,6 @@ struct MenuBarView: View {
     private func actionCell(
         icon: TokiriUI.IconName,
         title: String,
-        appearance: TokiriUI.ButtonAppearance = .soft,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -245,7 +244,7 @@ struct MenuBarView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .buttonStyle(TokiriUI.PrimaryButton(compact: true, appearance: appearance))
+        .buttonStyle(TokiriUI.PrimaryButton(compact: true, appearance: .soft))
         .contentShape(Rectangle())
         .accessibilityLabel(title)
     }
