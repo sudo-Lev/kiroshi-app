@@ -69,9 +69,9 @@ final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProvi
 
         for element in accessibilityCandidates() {
             let range = selectedRange(of: element)
-            let bounds = range.flatMap { selectionBounds(for: element, range: $0) }
             if let text = selectedText(in: element),
                !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let bounds = range.flatMap { selectionBounds(for: element, range: $0) } ?? selectionBounds()
                 return TextSelectionSnapshot(
                     text: text,
                     bounds: bounds,
@@ -86,9 +86,11 @@ final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProvi
         guard let text = await selectedTextUsingCopy(),
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let element = focusedElement()
+        // Browser and Electron editors hide AXSelectedText but often still expose
+        // the selection rect through text markers, which keeps the HUD beside the text.
         return TextSelectionSnapshot(
             text: text,
-            bounds: nil,
+            bounds: selectionBounds(),
             fallbackPoint: fallbackPoint,
             processIdentifier: processIdentifier,
             element: element,
