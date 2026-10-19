@@ -78,7 +78,7 @@ struct PeekView: View {
                 }
                 .padding(.horizontal, 16)
                 .onAppear { searchFocused = true }
-                .onChange(of: viewModel.wordCount) { _, _ in searchFocused = true }
+                .onValueChange(of: viewModel.wordCount) { _ in searchFocused = true }
             } else {
                 HStack(spacing: 10) {
                     Text("\(viewModel.sourceLanguage?.displayName ?? "Unknown language") →")
@@ -128,7 +128,7 @@ struct PeekView: View {
                     .padding(10)
                 }
                 .frame(maxHeight: 380)
-                .onChange(of: viewModel.selectedChoiceIndex) { _, value in proxy.scrollTo(value, anchor: .center) }
+                .onValueChange(of: viewModel.selectedChoiceIndex) { value in proxy.scrollTo(value, anchor: .center) }
             }
             Rectangle().fill(PeekPalette.popupDivider).frame(height: 1)
             footer

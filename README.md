@@ -13,7 +13,7 @@ Tokiri is a native macOS menu-bar utility built with SwiftUI and AppKit. Select 
 
 Use **Product → Run** (`⌘R`) each time you want to start the local build. Tokiri enforces one running process per bundle identifier: launching from Xcode automatically closes an older Tokiri instance before registering the global shortcut and showing feedback. You may need to quit an older pre-fix build manually once from its menu-bar window or Activity Monitor.
 
-The project targets macOS 14 and has App Sandbox disabled because global Accessibility replacement and Carbon hotkeys require system-wide access. For distribution, sign and notarize the app with your Developer ID.
+The project targets macOS 13 and has App Sandbox disabled because global Accessibility replacement and Carbon hotkeys require system-wide access. For distribution, sign and notarize the app with your Developer ID.
 
 ## What it does
 

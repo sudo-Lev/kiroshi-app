@@ -1,7 +1,7 @@
 # Qwixit Design Blueprint
 
 **Status:** normative product and motion specification  
-**Platform:** macOS 14+, menu bar utility  
+**Platform:** macOS 13+, menu bar utility  
 **Implementation model:** SwiftUI views hosted in AppKit windows and panels  
 **Canvas unit:** 1 point at native macOS scale  
 **Source of truth:** the current Qwixit implementation on `main`

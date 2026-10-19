@@ -179,6 +179,16 @@ extension View {
     }
 
     func tokiriPopupPanel() -> some View { modifier(TokiriPopupPanelModifier()) }
+
+    /// `onChange` that still runs on macOS 13, where only the single-value form exists.
+    @ViewBuilder
+    func onValueChange<V: Equatable>(of value: V, perform action: @escaping (V) -> Void) -> some View {
+        if #available(macOS 14.0, *) {
+            onChange(of: value) { _, newValue in action(newValue) }
+        } else {
+            onChange(of: value, perform: action)
+        }
+    }
 }
 
 private struct TokiriPopupPanelModifier: ViewModifier {
@@ -795,11 +805,20 @@ private struct TokiriElectricTraceModifier<Trigger: Equatable, S: Shape>: ViewMo
     let prominent: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityDimFlashingLights) private var dimFlashingLights
     @Environment(\.isEnabled) private var isEnabled
     @State private var impulse = 0
 
+    @ViewBuilder
     func body(content: Content) -> some View {
+        // SwiftUI only exposes Dim Flashing Lights on macOS 14+; Reduce Motion still gates the trace on 13.
+        if #available(macOS 14.0, *) {
+            DimFlashingLightsReader { trace(content, dimFlashingLights: $0) }
+        } else {
+            trace(content, dimFlashingLights: false)
+        }
+    }
+
+    private func trace(_ content: Content, dimFlashingLights: Bool) -> some View {
         content
             .overlay {
                 if impulse > 0, !reduceMotion, !dimFlashingLights, isEnabled {
@@ -807,11 +826,19 @@ private struct TokiriElectricTraceModifier<Trigger: Equatable, S: Shape>: ViewMo
                         .id(impulse)
                 }
             }
-            .onChange(of: trigger) { _, _ in
+            .onValueChange(of: trigger) { _ in
                 guard shouldRun, isEnabled, !reduceMotion, !dimFlashingLights else { return }
                 impulse &+= 1
             }
     }
+}
+
+@available(macOS 14.0, *)
+private struct DimFlashingLightsReader<Content: View>: View {
+    @Environment(\.accessibilityDimFlashingLights) private var dimFlashingLights
+    let content: (Bool) -> Content
+
+    var body: some View { content(dimFlashingLights) }
 }
 
 private extension View {

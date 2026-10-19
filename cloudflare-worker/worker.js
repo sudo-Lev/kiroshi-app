@@ -415,7 +415,8 @@ export function plausibleOutputLength(task, input, output) {
   const ratio = output.length / input.length;
   const [low, high] = task.task === "fix"
     ? [0.6, 1.5]
-    : task.action === "translate" ? [0.4, 2.5] : [0.25, 2.0];
+    // Slack/formal may legitimately compress a long message; only a near-empty result is suspicious.
+    : task.action === "translate" ? [0.4, 2.5] : [0.1, 2.0];
   return ratio >= low && ratio <= high;
 }
 
