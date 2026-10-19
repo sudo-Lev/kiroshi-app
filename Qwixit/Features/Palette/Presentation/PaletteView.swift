@@ -3,7 +3,6 @@ import SwiftUI
 struct PaletteView: View {
     @ObservedObject var viewModel: PaletteViewModel
     @FocusState private var searchFocused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let text = KColor.ink
     private let muted = KColor.secondary
@@ -56,9 +55,7 @@ struct PaletteView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
-                    if let refinement = viewModel.refinement {
-                        refineContent(refinement)
-                    } else if viewModel.choices.isEmpty {
+                    if viewModel.choices.isEmpty {
                         Text("No matching action")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(muted)
@@ -85,9 +82,6 @@ struct PaletteView: View {
             }
             .frame(maxHeight: 380)
             .onChange(of: viewModel.selectedIndex) { _, value in proxy.scrollTo(value, anchor: .center) }
-            .onChange(of: viewModel.refinement?.focusedQuestion) { _, value in
-                if let value { proxy.scrollTo(value, anchor: .center) }
-            }
         }
     }
 
@@ -125,66 +119,7 @@ struct PaletteView: View {
         }
     }
 
-    private var placeholder: String {
-        viewModel.isRefining ? "Answer questions…" : "Search…"
-    }
-
-    @ViewBuilder
-    private func refineContent(_ refinement: PaletteRefinement) -> some View {
-        Text("\(refinement.action.name) · Quick questions")
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
-            .foregroundStyle(KColor.popupMuted)
-            .padding(.horizontal, 4)
-            .padding(.bottom, 2)
-
-        if refinement.isLoading {
-            refinementStatusChip
-        } else {
-            ForEach(Array(refinement.questions.enumerated()), id: \.offset) { questionIndex, question in
-                let focused = questionIndex == refinement.focusedQuestion
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(question.question)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(focused ? text : muted)
-                    HStack(spacing: 5) {
-                        ForEach(Array(question.options.enumerated()), id: \.offset) { optionIndex, option in
-                            let chosen = refinement.answers[questionIndex] == optionIndex
-                            Button {
-                                viewModel.chooseAnswer(question: questionIndex, option: optionIndex)
-                            } label: {
-                                HStack(spacing: 5) {
-                                    if focused {
-                                        Text("\(optionIndex + 1)")
-                                            .foregroundStyle(chosen ? KColor.violet : muted)
-                                    }
-                                    Text(option).lineLimit(1)
-                                }
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            }
-                            .buttonStyle(CompactButtonStyle(accent: KColor.violet, isSelected: chosen))
-                        }
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(focused ? KColor.violet.opacity(0.06) : .clear)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .id(questionIndex)
-            }
-        }
-    }
-
-    private var refinementStatusChip: some View {
-        FeedbackPill(
-            phase: .processing,
-            reduceMotion: reduceMotion,
-            onClose: {}
-        )
-        .id("palette-refinement-processing")
-        .allowsHitTesting(false)
-        .accessibilityLabel("Sharpening. Press Return to skip questions.")
-    }
+    private var placeholder: String { "Search…" }
 
     private var footer: some View {
         Text(viewModel.footerText)

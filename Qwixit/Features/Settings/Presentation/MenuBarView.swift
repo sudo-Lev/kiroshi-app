@@ -142,17 +142,17 @@ struct MenuBarView: View {
     private var statusRow: some View {
         HStack(spacing: 7) {
             QwixitFaceView(
-                face: settingsViewModel.isUnlimited ? .advanced : .hello,
+                face: settingsViewModel.isAdvanced ? .advanced : .hello,
                 size: 13,
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                color: settingsViewModel.isUnlimited ? KColor.terminalGreen : KColor.ink
+                color: settingsViewModel.isAdvanced ? KColor.terminalGreen : KColor.ink
             )
             .frame(width: 56, height: 30)
-            .accessibilityLabel(settingsViewModel.isUnlimited ? "Advanced plan active" : "Free plan")
+            .accessibilityLabel(settingsViewModel.isAdvanced ? "Advanced plan active" : "Free plan")
             VStack(alignment: .leading, spacing: 2) {
                 Text(billingTitle)
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundStyle(settingsViewModel.isUnlimited ? KColor.terminalGreen : KColor.ink)
+                    .foregroundStyle(settingsViewModel.isAdvanced ? KColor.terminalGreen : KColor.ink)
                 Text(billingDetail)
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(KColor.secondary)
@@ -195,7 +195,7 @@ struct MenuBarView: View {
         .padding(.horizontal, 14)
         .frame(height: 42)
         .background {
-            if settingsViewModel.isUnlimited {
+            if settingsViewModel.isAdvanced {
                 LinearGradient(
                     colors: [KColor.success.opacity(0.18), KColor.success.opacity(0.07)],
                     startPoint: .topLeading,
@@ -207,7 +207,7 @@ struct MenuBarView: View {
         }
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(settingsViewModel.isUnlimited ? KColor.success.opacity(0.38) : KColor.line)
+                .fill(settingsViewModel.isAdvanced ? KColor.success.opacity(0.38) : KColor.line)
                 .frame(height: 1)
         }
     }
@@ -298,15 +298,15 @@ struct MenuBarView: View {
 
     private var showsCheckoutAction: Bool {
         settingsViewModel.remainingActions == 0
-            && !settingsViewModel.isUnlimited
+            && !settingsViewModel.isAdvanced
     }
 
     private var billingTitle: String {
-        settingsViewModel.isUnlimited ? "Advanced" : "Free"
+        settingsViewModel.isAdvanced ? "Advanced" : "Free"
     }
 
     private var billingDetail: String {
-        if settingsViewModel.isUnlimited { return "no monthly cap" }
+        if settingsViewModel.isAdvanced { return "more room to work" }
         guard settingsViewModel.remainingActions != nil else { return "30 free / month" }
         return "\(usedActions) / 30 used"
     }

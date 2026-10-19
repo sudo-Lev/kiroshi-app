@@ -9,7 +9,7 @@ final class SettingsViewModel: ObservableObject {
     let onboarding: OnboardingModel
     @Published private(set) var accessibilityGranted: Bool
     @Published private(set) var remainingActions: Int?
-    @Published private(set) var isUnlimited: Bool
+    @Published private(set) var isAdvanced: Bool
 #if DEBUG
     @Published private(set) var developerUsageScenario: DeveloperUsageScenario
 #endif
@@ -96,7 +96,7 @@ final class SettingsViewModel: ObservableObject {
         developerUsageScenario = preferences.developerUsageScenario
 #endif
         remainingActions = preferences.remainingActions
-        isUnlimited = preferences.isUnlimited
+        isAdvanced = preferences.isAdvanced
         peekTargetLanguage = preferences.peekTargetLanguage
         peekSmartDefault = preferences.peekSmartDefault
         peekRememberMode = preferences.peekRememberMode
@@ -185,7 +185,7 @@ final class SettingsViewModel: ObservableObject {
     private func readCachedUsage() {
         let preferences = AppPreferences(defaults: defaults)
         remainingActions = preferences.remainingActions
-        isUnlimited = preferences.isUnlimited
+        isAdvanced = preferences.isAdvanced
     }
 
     private func startBillingStatusRefresh(shouldPoll: Bool = false) {
@@ -206,7 +206,7 @@ final class SettingsViewModel: ObservableObject {
                     guard !Task.isCancelled else { return }
                     QwixitUsage.record(status, defaults: defaults)
                     readCachedUsage()
-                    if status.isUnlimited {
+                    if status.isAdvanced {
                         return
                     }
                 } catch {

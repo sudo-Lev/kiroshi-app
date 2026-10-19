@@ -58,7 +58,6 @@ flowchart LR
     R --> OK[Success HUD]
     A1 --> P[Action palette]
     P --> R
-    P --> RC[Panel result card]
     Z --> PK[Translator language chooser]
     PK --> PR[Read or copy result]
     A[First launch] --> OA[Accessibility]
@@ -495,12 +494,10 @@ This surface is a compact one-column chooser. The active action uses the same da
 1–2. **Translate** — one row per useful target language; replaces selection.
 Then a divider, followed by **Slack style** and **Make formal**; both replace selection.
 - The last-used supported choice is preselected and appears first within its section.
-- Typing filters visible language names and action names. If an Actions search has no matches, show the selected row `Rewrite: "<typed text>"`; Return runs that user-entered rewrite instruction.
+- Typing filters visible language names and action names. If an Actions search has no matches, show "No matching action"; Return does nothing. Actions never sends typed text to the model as an instruction.
 - Footer: `Replaces selection · ⌘Z undo`.
 
-### Refinement state
-
-If an action asks quick questions, keep them inside the same panel. Focused question fill is violet at 6%. Answer chips are 24 pt high, radius 6, with the selected answer at 16% accent fill and 72% border. While questions load, reuse the compact branded `PROCESSING` chip; never show a generic system spinner or skeleton.
+Actions has no quick-questions step and no panel output. Every preset (translate, Slack style, make formal) replaces the selection; its prompt lives in the Worker. A selection over 2 pages (6 000 characters) shows the `TOO LONG` error chip instead of opening the palette.
 
 ### Keyboard map
 
@@ -510,10 +507,8 @@ If an action asks quick questions, keep them inside the same panel. Focused ques
 | Tab / Shift Tab | Move forward/back |
 | Return | Run selected action |
 | 1–4 | Run corresponding visible row when query is empty |
-| Escape | Back one layer, then close |
-| Left | Back when available |
+| Escape | Close |
 | Command Z | Undo the latest text replacement |
-| Left / Right in refinement | Change answer |
 
 Mouse clicking a row performs the same action as Return. Clicking outside closes the palette.
 
@@ -574,7 +569,7 @@ Translation results use a compact Markdown renderer:
 - inline Markdown supports emphasis, strong text, links, and code spans;
 - all rendered result text remains selectable.
 
-The translation request returns logical semantic blocks rather than one item per sentence. The first block always supplies a concise 3–7 word title in the target language. For technical input longer than 45 words, produce 3–6 ordered blocks of one or two sentences without omitting content. Later blocks may have short bold lead-ins such as Context, Problem, Cause, Impact, Behavior, or Fix when that role is clear. Preserve paragraphs, headings, lists, quotes, fenced code, existing Markdown, file names, line references, commands, and code identifiers. Do not add commentary or repeat information.
+The translation request returns `{ "paragraphs": [string] }`: one item per paragraph of the input, in order, with each list, code block, or heading as its own item. It never repeats the original text, so output stays roughly the size of the translation alone. It adds no titles or section labels. Preserve headings, lists, quotes, fenced code, existing Markdown, file names, line references, commands, and code identifiers. Do not add commentary. Empty items are dropped; the copy action joins paragraphs with blank lines.
 
 ### Loading and state content
 
@@ -757,24 +752,7 @@ Usage may be shown here as persistent plan information. It must not generate a s
 
 ---
 
-## 15. Panel result card
-
-Actions configured for panel output use a larger result card.
-
-- Window: **480 × 360**.
-- Standard 14 pt panel surface.
-- Header: 16 pt padding, 10 pt Bold Mono.
-- Action title uses magenta diamond and action name.
-- State copy says `Text unchanged` because panel mode does not replace the source.
-- Result: selectable 13 pt body with 5 pt line spacing and 18 pt padding.
-- Footer input area: 14 pt padding.
-- Follow up field placeholder: `Ask about this text…`.
-- Controls: Copy and magenta Insert below.
-- Loading uses a small magenta progress control and `Qwixing…`.
-
----
-
-## 16. Content and copy rules
+## 15. Content and copy rules
 
 - Write short, direct, calm sentences.
 - Operational UI may be terse: `READY`, `AI`, `OK`, `ERR`, `Esc`, `Copy ⌘C`.
@@ -787,7 +765,7 @@ Actions configured for panel output use a larger result card.
 
 ---
 
-## 17. Accessibility and input
+## 16. Accessibility and input
 
 - Every icon-only control has an accessibility label.
 - Face text exposes a useful state label such as `Scanning` rather than each animation frame.
@@ -803,7 +781,7 @@ Actions configured for panel output use a larger result card.
 
 ---
 
-## 18. State and acceptance checklist
+## 17. State and acceptance checklist
 
 ### Visual
 
@@ -850,15 +828,15 @@ Actions configured for panel output use a larger result card.
 
 ---
 
-## 19. Design handoff prompt
+## 18. Design handoff prompt
 
 Paste the following together with this document:
 
-> Design Qwixit for macOS from the attached normative blueprint. Reproduce its tokens, fixed window sizes, keyboard behavior, state hierarchy, face system, and motion timings exactly. Use the supplied Qwixit assets without redrawing them. Treat the Option-Command-X feedback HUD, Option-Command-A action palette, dedicated Option-Command-Z translator, onboarding, Settings, menu bar popover, and result card as one coherent system. Keep quick actions clear and keyboard first. Do not add generic AI chat patterns, large mascot art, glassmorphism, new gradients, new actions, or internal design annotations. Provide light and dark variants, all loading/success/error/limit states, and static Reduced Motion variants. Show interaction specifications for mouse, arrows, Tab, Return, Escape, and number keys. Validate every screen against the acceptance checklist before presenting it.
+> Design Qwixit for macOS from the attached normative blueprint. Reproduce its tokens, fixed window sizes, keyboard behavior, state hierarchy, face system, and motion timings exactly. Use the supplied Qwixit assets without redrawing them. Treat the Option-Command-X feedback HUD, Option-Command-A action palette, dedicated Option-Command-Z translator, onboarding, Settings, and menu bar popover as one coherent system. Keep quick actions clear and keyboard first. Do not add generic AI chat patterns, large mascot art, glassmorphism, new gradients, new actions, or internal design annotations. Provide light and dark variants, all loading/success/error/limit states, and static Reduced Motion variants. Show interaction specifications for mouse, arrows, Tab, Return, Escape, and number keys. Validate every screen against the acceptance checklist before presenting it.
 
 ---
 
-## 20. Implementation references
+## 19. Implementation references
 
 These files are the final authority if a numeric or behavioral ambiguity remains:
 
@@ -868,7 +846,6 @@ These files are the final authority if a numeric or behavioral ambiguity remains
 - `Qwixit/Features/Palette/Presentation/PaletteView.swift`
 - `Qwixit/Features/Palette/Presentation/PalettePanelController.swift`
 - `Qwixit/Features/Palette/Presentation/ResultHUDController.swift`
-- `Qwixit/Features/Palette/Presentation/ResultCardController.swift`
 - `Qwixit/Features/Peek/Presentation/PeekView.swift`
 - `Qwixit/Features/Peek/Presentation/PeekPanelController.swift`
 - `Qwixit/Features/Settings/Presentation/OnboardingView.swift`

@@ -220,6 +220,11 @@ private struct QwixitPanelModifier: ViewModifier {
 
 enum QwixitErrorCopy {
     enum Kind {
+        case tooLong
+        case rejected
+        case dailyLimit
+        case monthlyLimit
+        case rateLimited
         case verification
         case replacement
         case emptyReply
@@ -232,6 +237,11 @@ enum QwixitErrorCopy {
 
     static func kind(for message: String) -> Kind {
         let normalized = message.lowercased()
+        if normalized.hasPrefix("too long") { return .tooLong }
+        if normalized.contains("didn’t pass") { return .rejected }
+        if normalized.hasPrefix("daily limit") { return .dailyLimit }
+        if normalized.hasPrefix("monthly limit") { return .monthlyLimit }
+        if normalized.hasPrefix("slow down") { return .rateLimited }
         if normalized.contains("confirm"),
            (normalized.contains("replacement") || normalized.contains("text change")) {
             return .verification
@@ -259,6 +269,16 @@ enum QwixitErrorCopy {
 
     static func title(for message: String) -> String {
         switch kind(for: message) {
+        case .tooLong:
+            return "Selection is too long"
+        case .rejected:
+            return "Result didn’t pass checks"
+        case .dailyLimit:
+            return "Today’s limit reached"
+        case .monthlyLimit:
+            return "This month’s limit reached"
+        case .rateLimited:
+            return "Slow down a bit"
         case .verification:
             return "Couldn’t confirm the change"
         case .replacement:
@@ -280,6 +300,11 @@ enum QwixitErrorCopy {
 
     static func headline(for message: String) -> String {
         switch kind(for: message) {
+        case .tooLong: "TOO LONG"
+        case .rejected: "NOT REPLACED"
+        case .dailyLimit: "DAILY LIMIT"
+        case .monthlyLimit: "MONTHLY LIMIT"
+        case .rateLimited: "SLOW DOWN"
         case .verification: "CHECK THE TEXT"
         case .replacement: "NOT REPLACED"
         case .emptyReply: "EMPTY REPLY"

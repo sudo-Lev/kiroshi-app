@@ -11,24 +11,13 @@ enum PeekLoadState: Equatable {
     case failed(String)
 }
 
-struct PeekSentence: Codable, Equatable, Identifiable {
-    var id: String { source + "\u{0}" + target }
-    let source: String
-    let target: String
-
-    init(source: String, target: String) {
-        self.source = source
-        self.target = target
-    }
-}
-
 enum PeekResult: Equatable {
-    case translation([PeekSentence])
+    case translation([String])
     case summary([String])
 
     var plainText: String {
         return switch self {
-        case .translation(let sentences): sentences.map(\.target).joined(separator: "\n\n")
+        case .translation(let paragraphs): paragraphs.joined(separator: "\n\n")
         case .summary(let content): content.joined(separator: "\n\n")
         }
     }
@@ -70,6 +59,8 @@ final class PeekViewModel: ObservableObject {
     private let detector: LanguageDetecting
     private let defaults: UserDefaults
     private var cache: [PeekCacheKey: PeekResult] = [:]
+    /// One operation per panel request, reused by Retry so a repeat is not charged again.
+    private var operationIDs: [PeekCacheKey: String] = [:]
     private var requestTask: Task<Void, Never>?
     private var prefetchTasks: [Task<Void, Never>] = []
     private var copyResetTask: Task<Void, Never>?
@@ -130,6 +121,7 @@ final class PeekViewModel: ObservableObject {
     func open(text: String) {
         cancelAll()
         query = ""
+        operationIDs.removeAll()
         guard PeekInputLimit.accepts(text) else {
             sourceText = ""
             sourceLanguage = nil
@@ -170,6 +162,7 @@ final class PeekViewModel: ObservableObject {
         query = ""
         isRetrying = false
         cache.removeAll()
+        operationIDs.removeAll()
         sourceText = ""
         sourceLanguage = nil
         result = nil
@@ -306,7 +299,7 @@ final class PeekViewModel: ObservableObject {
         switch mode {
         case .translate:
             let value = try JSONDecoder().decode(TranslationEnvelope.self, from: data)
-            return .translation(value.sentences.filter { !$0.target.isEmpty })
+            return .translation(value.paragraphs.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         case .summary:
             return .summary(try JSONDecoder().decode(SummaryEnvelope.self, from: data).content)
         }
@@ -360,7 +353,7 @@ final class PeekViewModel: ObservableObject {
         requestTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let value = try await fetch(mode: requestedMode, length: summaryLength)
+                let value = try await fetch(mode: requestedMode, length: summaryLength, operationID: operationID(for: key))
                 try Task.checkCancellation()
                 guard mode == requestedMode else { return }
                 cache[key] = value
@@ -390,7 +383,14 @@ final class PeekViewModel: ObservableObject {
         }
     }
 
-    private func fetch(mode: PeekMode, length: PeekSummaryLength) async throws -> PeekResult {
+    private func operationID(for key: PeekCacheKey) -> String {
+        if let existing = operationIDs[key] { return existing }
+        let created = QwixitOperation.makeID()
+        operationIDs[key] = created
+        return created
+    }
+
+    private func fetch(mode: PeekMode, length: PeekSummaryLength, operationID: String) async throws -> PeekResult {
         let responseLanguage = mode == .translate
             ? targetLanguage
             : sourceLanguage?.code ?? targetLanguage
@@ -399,7 +399,8 @@ final class PeekViewModel: ObservableObject {
             sourceLanguage: sourceLanguage?.code,
             targetLanguage: responseLanguage,
             mode: mode,
-            length: length
+            length: length,
+            operationID: operationID
         )
         var json = ""
         for try await delta in client.stream(request) {
@@ -451,5 +452,5 @@ final class PeekViewModel: ObservableObject {
     }
 }
 
-private struct TranslationEnvelope: Decodable { let sentences: [PeekSentence] }
+private struct TranslationEnvelope: Decodable { let paragraphs: [String] }
 private struct SummaryEnvelope: Decodable { let content: [String] }

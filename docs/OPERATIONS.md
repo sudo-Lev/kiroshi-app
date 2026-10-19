@@ -73,6 +73,7 @@ The webhook updates the installation ledger when Paddle delivers a subscription 
 Required production-like bindings and secrets:
 
 - `USAGE_LEDGER` Durable Object binding
+- `INSTALLATION_RATE_LIMITER` (20 requests/minute per installation) and `IP_RATE_LIMITER` (60 requests/minute per IP) Rate Limiting bindings from `wrangler.toml`; without them the Worker skips the per-minute guard
 - `OPENAI_API_KEY`
 - `PADDLE_WEBHOOK_SECRET`
 
@@ -97,6 +98,18 @@ https://qwixit-api.levmisiliuk.workers.dev/billing/webhook
 ```
 
 Never print or commit secret values. Worker logs must not include selected text, model input, or model output.
+
+Set a monthly budget and 50%/80% alerts on the OpenAI project that holds the Worker key; this is the last guard behind rate limits and quotas.
+
+### Deploy order for API changes
+
+The Worker serves both `/v1/responses` (legacy: the client sends instructions) and `/v2/qwix` (the client sends a task; prompts live in `prompts.js`). Deploy in this order so no installed build breaks:
+
+1. Worker with idempotency and `/v2/qwix` (compatible with every existing build).
+2. App builds that send `X-Qwixit-Operation-ID` and use `/v2/qwix`.
+3. After every installation has updated: a Worker without `/v1/responses`, with the operation header required. Only then can no client send its own instructions.
+
+A prompt change in `prompts.js` needs only a Worker deploy, not an app release.
 
 ## Reset the complete sandbox flow
 
@@ -134,7 +147,7 @@ Before a public build, verify this sequence from a clean installation:
 3. Confirm `⌥⌘X` safely fixes and replaces text in native and browser-backed editors.
 4. Confirm `⌥⌘A` transforms and replaces text.
 5. Confirm `⌥⌘Z` shows a read-only result and does not replace the source.
-6. Consume all 30 free actions and verify that each server-authorized request decrements exactly once.
+6. Consume all 30 free actions and verify that each user action decrements exactly once, including when a retry happens (for example, toggle Wi‑Fi during a Fix) and when Peek's Retry repeats a request.
 7. Verify the limit state does not alter selected text and offers the correct upgrade path.
 8. Complete Paddle checkout and verify signed webhook activation unlocks Advanced.
 9. Relaunch the app and verify subscription restoration from server state.

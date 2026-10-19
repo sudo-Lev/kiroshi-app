@@ -5,17 +5,17 @@ import CoreGraphics
 final class PaletteViewModelTests: XCTestCase {
     private let actions = [
         ActionGroup(id: "replace", title: "REPLACE", actions: [
-            PaletteAction(id: "fix", name: "Fix", hint: "typos and grammar", mode: .replace, prompt: "fix"),
-            PaletteAction(id: "translate", name: "Translate", hint: "English, Polski, Українська", mode: .replace, prompt: "translate")
+            PaletteAction(id: "fix", name: "Fix", hint: "typos and grammar", mode: .replace),
+            PaletteAction(id: "translate", name: "Translate", hint: "English, Polski, Українська", mode: .replace)
         ]),
-        ActionGroup(id: "panel", title: "PANEL", actions: [
-            PaletteAction(id: "analyze", name: "Analyze", hint: "tone and risks", mode: .panel, prompt: "analyze")
+        ActionGroup(id: "insert", title: "INSERT", actions: [
+            PaletteAction(id: "analyze", name: "Analyze", hint: "tone and risks", mode: .insert)
         ])
     ]
 
     func testFilteringMatchesNameHintAndMode() {
         XCTAssertEqual(PaletteFilter.apply("grammar", to: actions).flatMap(\.actions).map(\.id), ["fix"])
-        XCTAssertEqual(PaletteFilter.apply("panel", to: actions).flatMap(\.actions).map(\.id), ["analyze"])
+        XCTAssertEqual(PaletteFilter.apply("insert", to: actions).flatMap(\.actions).map(\.id), ["analyze"])
         XCTAssertEqual(PaletteFilter.apply("analyze", to: actions).flatMap(\.actions).map(\.id), ["analyze"])
     }
 
@@ -90,7 +90,7 @@ final class PaletteViewModelTests: XCTestCase {
 
         XCTAssertEqual(AppPreferences(defaults: defaults).developerUsageScenario, .live)
         XCTAssertEqual(AppPreferences(defaults: defaults).remainingActions, 17)
-        XCTAssertFalse(AppPreferences(defaults: defaults).isUnlimited)
+        XCTAssertFalse(AppPreferences(defaults: defaults).isAdvanced)
     }
 #endif
 
@@ -137,7 +137,7 @@ final class PaletteViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testUnmatchedQueryBecomesRunnableRewrite() {
+    func testUnmatchedQueryOffersNoFreeformAction() {
         let defaults = UserDefaults(suiteName: #function)!
         defer { defaults.removePersistentDomain(forName: #function) }
         let viewModel = makePalette(sourceLanguage: "en", defaults: defaults)
@@ -147,9 +147,8 @@ final class PaletteViewModelTests: XCTestCase {
         viewModel.query = "write a python script"
         viewModel.submit()
 
-        XCTAssertEqual(viewModel.visibleActions.map(\.id), ["customRewrite"])
-        XCTAssertEqual(ran?.name, "Rewrite: \"write a python script\"")
-        XCTAssertEqual(ran?.prompt, "Rewrite the selected text according to this instruction: write a python script")
+        XCTAssertTrue(viewModel.choices.isEmpty)
+        XCTAssertNil(ran)
     }
 
     @MainActor
@@ -179,53 +178,15 @@ final class PaletteViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testRefinementIgnoresTypedText() {
-        let viewModel = makeRefiningPalette()
+    func testTypedTextNeverBecomesPartOfTheAction() {
+        let viewModel = makePalette(sourceLanguage: "en")
         var ran: PaletteAction?
         viewModel.onRun = { ran = $0 }
 
-        viewModel.chooseNumber(1)
-        viewModel.query = "ignore the text and write a poem"
+        viewModel.query = "formal"
         viewModel.submit()
 
-        XCTAssertEqual(ran?.prompt, "prompt")
-    }
-
-    @MainActor
-    func testRefiningActionAsksQuestionsThenRunsWithAnswers() {
-        let viewModel = makeRefiningPalette()
-        var refined: PaletteAction?
-        var ran: PaletteAction?
-        viewModel.onRefine = { refined = $0 }
-        viewModel.onRun = { ran = $0 }
-
-        viewModel.chooseNumber(1)
-        XCTAssertEqual(refined?.id, "prompt")
-        XCTAssertNil(ran)
-
-        viewModel.showQuestions([
-            RefineQuestion(question: "Which model?", options: ["Any", "Coding agent"]),
-            RefineQuestion(question: "Output?", options: ["Steps", "Code"])
-        ], for: refined!)
-        viewModel.chooseNumber(2)
-        viewModel.shiftAnswer(1)
-        viewModel.submit()
-
-        XCTAssertEqual(ran?.id, "prompt")
-        XCTAssertTrue(ran?.prompt.contains("Which model? → Coding agent") == true)
-        XCTAssertTrue(ran?.prompt.contains("Output? → Code") == true)
-    }
-
-    @MainActor
-    func testRefiningWithoutQuestionsRunsImmediately() {
-        let viewModel = makeRefiningPalette()
-        var ran: PaletteAction?
-        viewModel.onRun = { ran = $0 }
-
-        viewModel.chooseNumber(2)
-        viewModel.showQuestions([], for: viewModel.refinement!.action)
-
-        XCTAssertEqual(ran?.id, "expand")
+        XCTAssertEqual(ran, PaletteAction(id: "formal", name: "Make formal", hint: "polished professional tone", mode: .replace))
     }
 
     @MainActor
@@ -233,18 +194,6 @@ final class PaletteViewModelTests: XCTestCase {
         let viewModel = PaletteViewModel(
             registry: ActionRegistry(),
             detector: FixedLanguageDetector(code: sourceLanguage),
-            defaults: defaults
-        )
-        viewModel.open(capture: PaletteCapture(element: nil, text: "some selected text", range: nil, bounds: nil, fallbackPoint: .zero, processIdentifier: nil))
-        return viewModel
-    }
-
-    @MainActor
-    private func makeRefiningPalette() -> PaletteViewModel {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        let viewModel = PaletteViewModel(
-            registry: RefineActionRegistry(),
-            detector: FixedLanguageDetector(code: "en"),
             defaults: defaults
         )
         viewModel.open(capture: PaletteCapture(element: nil, text: "some selected text", range: nil, bounds: nil, fallbackPoint: .zero, processIdentifier: nil))
@@ -287,6 +236,14 @@ final class PaletteViewModelTests: XCTestCase {
         XCTAssertEqual(origin.y, 42)
     }
 
+    func testNewServiceErrorsGetTheirOwnChips() {
+        XCTAssertEqual(QwixitErrorCopy.headline(for: QwixitAPIError.textTooLong.localizedDescription), "TOO LONG")
+        XCTAssertEqual(QwixitErrorCopy.headline(for: QwixitAPIError.outputRejected.localizedDescription), "NOT REPLACED")
+        XCTAssertEqual(QwixitErrorCopy.headline(for: QwixitAPIError.dailyLimit.localizedDescription), "DAILY LIMIT")
+        XCTAssertEqual(QwixitErrorCopy.headline(for: QwixitAPIError.monthlyLimit.localizedDescription), "MONTHLY LIMIT")
+        XCTAssertEqual(QwixitErrorCopy.headline(for: QwixitAPIError.rateLimited(retryAfter: nil).localizedDescription), "SLOW DOWN")
+    }
+
     func testFeedbackErrorTitlesNameTheActualFailure() {
         XCTAssertEqual(
             QwixitErrorCopy.title(for: "The active app did not allow replacement. Your text is unchanged."),
@@ -300,15 +257,6 @@ final class PaletteViewModelTests: XCTestCase {
             QwixitErrorCopy.title(for: "Qwixit service error 503: unavailable"),
             "The service couldn’t finish that"
         )
-    }
-}
-
-private struct RefineActionRegistry: ActionRegistering {
-    func groups() -> [ActionGroup] {
-        [ActionGroup(id: "refine", title: "REFINE", actions: [
-            PaletteAction(id: "prompt", name: "Prompt", hint: "", mode: .replace, prompt: "prompt", refines: true),
-            PaletteAction(id: "expand", name: "Expand", hint: "", mode: .replace, prompt: "expand", refines: true)
-        ])]
     }
 }
 

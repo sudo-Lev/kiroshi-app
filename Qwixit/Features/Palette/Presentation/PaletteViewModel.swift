@@ -5,26 +5,6 @@ struct PaletteChoice: Identifiable, Equatable {
     let action: PaletteAction
     let isTranslation: Bool
     let name: String
-
-    var isCustomRewrite: Bool { id == "customRewrite" }
-}
-
-/// Quick questions asked before a `refines` action runs. Every question starts on its first option,
-/// so pressing ↵ straight away still produces a sensible result.
-struct PaletteRefinement: Equatable {
-    let action: PaletteAction
-    var questions: [RefineQuestion] = []
-    var answers: [Int] = []
-    var focusedQuestion = 0
-    var isLoading = true
-
-    var instruction: String {
-        let choices = zip(questions, answers).map { question, answer in
-            "- \(question.question) → \(question.options[answer])"
-        }
-        guard !choices.isEmpty else { return action.prompt }
-        return action.prompt + "\nChoices:\n" + choices.joined(separator: "\n")
-    }
 }
 
 @MainActor
@@ -35,7 +15,6 @@ final class PaletteViewModel: ObservableObject {
     @Published private(set) var choices: [PaletteChoice] = []
     @Published private(set) var capture: PaletteCapture?
     @Published private(set) var detectedLanguage: DetectedLanguage?
-    @Published private(set) var refinement: PaletteRefinement?
 
     /// Two useful targets for the selected text. The source language is never offered.
     var languages: [TranslationLanguage] {
@@ -43,8 +22,6 @@ final class PaletteViewModel: ObservableObject {
     }
 
     var onRun: ((PaletteAction) -> Void)?
-    /// Asked to fetch clarifying questions for a `refines` action.
-    var onRefine: ((PaletteAction) -> Void)?
 
     private let registry: ActionRegistering
     private let detector: LanguageDetecting
@@ -67,7 +44,6 @@ final class PaletteViewModel: ObservableObject {
     }
     var wordCount: Int { capture?.text.split(whereSeparator: \.isWhitespace).count ?? 0 }
     var contextLabel: String { "\(detectedLanguage?.displayName ?? "Unknown language") · \(wordCount) words" }
-    var isRefining: Bool { refinement != nil }
 
     var footerText: String { "Replaces selection · ⌘Z undo" }
 
@@ -75,78 +51,19 @@ final class PaletteViewModel: ObservableObject {
         self.capture = capture
         detectedLanguage = detector.detect(capture.text)
         query = ""
-        refinement = nil
         baseGroups = registry.groups()
         groups = baseGroups
         rebuild()
     }
 
     func move(_ step: Int) {
-        if var refinement {
-            guard !refinement.questions.isEmpty else { return }
-            let count = refinement.questions.count
-            refinement.focusedQuestion = (refinement.focusedQuestion + step + count) % count
-            self.refinement = refinement
-            return
-        }
         let count = choiceCount
         guard count > 0 else { return }
         selectedIndex = (selectedIndex + step + count) % count
     }
 
-    /// ←→ inside the refine step.
-    func shiftAnswer(_ step: Int) {
-        guard var refinement, !refinement.questions.isEmpty else { return }
-        let question = refinement.focusedQuestion
-        let count = refinement.questions[question].options.count
-        refinement.answers[question] = (refinement.answers[question] + step + count) % count
-        self.refinement = refinement
-    }
-
-    func chooseAnswer(question: Int, option: Int) {
-        guard var refinement, refinement.questions.indices.contains(question),
-              refinement.questions[question].options.indices.contains(option) else { return }
-        refinement.answers[question] = option
-        refinement.focusedQuestion = min(question + 1, refinement.questions.count - 1)
-        self.refinement = refinement
-    }
-
-    func beginRefinement(_ action: PaletteAction) {
-        refinement = PaletteRefinement(action: action)
-        query = ""
-    }
-
-    func showQuestions(_ questions: [RefineQuestion], for action: PaletteAction) {
-        guard refinement?.action.id == action.id else { return }
-        guard !questions.isEmpty else { finishRefinement(); return }
-        refinement = PaletteRefinement(
-            action: action,
-            questions: questions,
-            answers: Array(repeating: 0, count: questions.count),
-            isLoading: false
-        )
-    }
-
-    /// Runs the refined action; with no questions loaded it runs with the base prompt.
-    func finishRefinement() {
-        guard let refinement else { return }
-        let action = refinement.action
-        onRun?(PaletteAction(
-            id: action.id,
-            name: action.name,
-            hint: action.hint,
-            mode: action.mode,
-            prompt: refinement.instruction,
-            language: action.language
-        ))
-    }
-
     func chooseNumber(_ number: Int) {
         guard query.isEmpty else { return }
-        if let refinement {
-            chooseAnswer(question: refinement.focusedQuestion, option: number - 1)
-            return
-        }
         runChoice(at: number - 1)
     }
 
@@ -165,32 +82,15 @@ final class PaletteViewModel: ObservableObject {
         guard choices.indices.contains(index) else { return }
         selectedIndex = index
         let choice = choices[index]
-        if !choice.isCustomRewrite {
-            defaults.set(choice.id, forKey: lastUsedChoiceKey)
-        }
-        select(choice.action)
+        defaults.set(choice.id, forKey: lastUsedChoiceKey)
+        onRun?(choice.action)
     }
 
     func index(of action: PaletteAction, in group: ActionGroup) -> Int {
         choiceStartIndex(of: action)
     }
 
-    func goBack() -> Bool {
-        if let refinement {
-            self.refinement = nil
-            query = ""
-            selectedIndex = choices.firstIndex { $0.action.id == refinement.action.id } ?? 0
-            return true
-        }
-        return false
-    }
-
     func submit() {
-        if isRefining {
-            // ↵ while questions are still loading runs with the base prompt.
-            finishRefinement()
-            return
-        }
         runChoice(at: selectedIndex)
     }
 
@@ -199,21 +99,6 @@ final class PaletteViewModel: ObservableObject {
         query = ""
         groups = []
         choices = []
-        refinement = nil
-    }
-
-    /// Translation targets are already concrete actions; refining actions ask questions.
-    private func select(_ action: PaletteAction) {
-        if action.refines {
-            beginRefinement(action)
-            onRefine?(action)
-        } else {
-            run(action)
-        }
-    }
-
-    private func run(_ action: PaletteAction) {
-        onRun?(action)
     }
 
     nonisolated static func translationTargets(for sourceLanguage: String?) -> [String] {
@@ -262,19 +147,7 @@ final class PaletteViewModel: ObservableObject {
             matches(value, in: $0.name + " " + $0.action.hint)
         }
 
-        if !value.isEmpty, matchingTranslations.isEmpty, matchingRewrites.isEmpty {
-            let instruction = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            let action = PaletteAction(
-                id: "customRewrite",
-                name: "Rewrite: \"\(instruction)\"",
-                hint: "",
-                mode: .replace,
-                prompt: "Rewrite the selected text according to this instruction: \(instruction)"
-            )
-            choices = [PaletteChoice(id: "customRewrite", action: action, isTranslation: false, name: action.name)]
-        } else {
-            choices = matchingTranslations + matchingRewrites
-        }
+        choices = matchingTranslations + matchingRewrites
 
         if value.isEmpty {
             let lastUsed = defaults.string(forKey: lastUsedChoiceKey)

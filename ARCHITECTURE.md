@@ -68,8 +68,8 @@ AppKit objects owning windows or panels end in `WindowController` or `PanelContr
 
 1. `AppDelegate` receives the Carbon hotkey without activating Qwixit.
 2. `QuickImproveViewModel` verifies Accessibility access and captures the selected text and its screen bounds.
-3. `TextImprovementService` sends a conservative correction request through `OpenAIClient`.
-4. The Worker atomically authorizes usage before proxying the request with server-controlled model policy and `store: false`.
+3. `TextImprovementService` sends a `fix` task through `OpenAIClient`. Selections over 6 000 characters are rejected first with the `TOO LONG` chip, without a request.
+4. The Worker atomically authorizes usage, builds the prompt, and checks the result (see Worker request API). If Fix finds nothing to change, Qwixit shows `ALREADY CLEAN` and touches neither the selection nor the clipboard, in either mode.
 5. In the default mode, Qwixit restores focus and sends the replacement through the shared clipboard paste path. With **Preview & Approve** enabled, it keeps a transient selection snapshot and proposed output in memory, shows an anchored review panel, and sends the paste only after the user approves it. If a reviewable snapshot cannot be captured, it reports an error instead of replacing immediately. After a Fix paste attempt, the replacement remains on the system clipboard for manual ⌘V.
 6. The feedback controller reports processing, success, limit, permission, connectivity, or failure. Success means the result was prepared and the paste event was posted; the note above it offers ⌘V if the text is missing. Esc or Keep original leaves the source text unchanged. A posted paste event is not proof that the destination editor accepted it.
 
@@ -78,8 +78,8 @@ The original text must remain unchanged whenever capture, authorization, or mode
 ### Actions (`⌥⌘A`)
 
 1. The independent Actions hotkey opens `PalettePanelController` beside the selection.
-2. `PaletteViewModel` exposes available explicit transformations and keyboard selection state.
-3. The chosen action runs through the same metered service boundary.
+2. `PaletteViewModel` exposes the presets (translate, Slack style, make formal) and keyboard selection state. Typed search text only filters; it never reaches the model.
+3. The chosen preset runs as an `action` task through the same metered service boundary.
 4. A successful action replaces the selection; failures leave it unchanged.
 
 Actions is a replacing flow. It must stay independent from the Fix hotkey and must not depend on double-tap timing.
@@ -92,6 +92,20 @@ Actions is a replacing flow. It must stay independent from the Fix hotkey and mu
 4. Results remain in the panel for reading or copying; Peek never automatically replaces source text.
 5. Selections exceeding the request limit receive a visible error; Peek never silently translates or summarizes only a prefix.
 
+### Worker request API
+
+`POST /v2/qwix` accepts only a task and enumerated parameters, never instructions:
+
+```json
+{ "task": "fix", "text": "…" }
+{ "task": "action", "text": "…", "action": "translate", "language": "uk" }
+{ "task": "peek", "text": "…", "mode": "translate", "language": "uk", "sourceLanguage": "pl" }
+```
+
+`action` is `translate`, `slack`, or `formal`; Peek `mode` is `translate` or `summary` with `length` `tldr`, `points`, or `full`; languages are short language codes; `priority: true` is honored only for Advanced. Unknown tasks or fields return `400 invalid_task`; text above 6 000 characters returns `413 text_too_long` before any charge. `cloudflare-worker/prompts.js` builds every prompt and wraps the selection in `<selected_text>` tags, escaping lookalike tags inside it.
+
+Fix and Actions are not streamed so the Worker can check the result first: status `completed`, non-empty, no wrapper tags, and a plausible length ratio (Fix 0.6–1.5, translate 0.4–2.5, Slack/formal 0.25–2.0, always ±40 characters). A failed check refunds the action and returns `422 output_rejected`. Fix answers with the `qwixit_fix` schema; a `clean` verdict, or a "fix" identical after NFC, line-ending, and edge-whitespace normalization, returns `{ "result": "clean" }` and refunds the action (at most 20 per UTC day). Otherwise Fix returns `{ "result": "fixed", "text": "…" }` and Actions `{ "text": "…" }`. Peek keeps streaming. v2 responses report `X-Qwixit-Plan: advanced` and, for Advanced, today's remaining actions; `/v1/responses` and `/billing/status` still report `unlimited` until old builds are gone.
+
 ### Billing and quota
 
 1. Each installation gets a random identifier stored in Keychain.
@@ -100,6 +114,10 @@ Actions is a replacing flow. It must stay independent from the Fix hotkey and mu
 4. Active Paddle subscription statuses bypass the free allowance.
 5. Paddle signs webhook events; the Worker verifies the signature and deduplicates event IDs before updating subscription state.
 6. The client caches display state, but the server ledger remains authoritative.
+7. One user action is charged once. `NetworkRetry` creates a UUID before the first attempt and sends it as `X-Qwixit-Operation-ID` on every retry; Peek keeps one ID per panel request and reuses it for Retry. The ledger stores only `op:<id> → {state, attempts, createdAt}` (no text or text hash), allows at most 3 attempts within 15 minutes (`409 operation_exhausted` after that, without calling OpenAI), and removes records older than an hour with a Durable Object alarm.
+8. When OpenAI is unreachable or answers 5xx/429, the Worker refunds the operation (`502 upstream_failed`), capped at 20 refunds per installation per UTC day. A retry of a refunded operation charges again, so a successful action always costs exactly one. Requests without the header keep the legacy charge-per-request behavior.
+9. Advanced is capped at 300 actions per UTC day and 3 000 per UTC month (`429 daily_limit` / `monthly_limit`); these are a billing hypothesis, not doctrine. Per-minute Rate Limiting bindings guard each installation (20) and IP (60) with `429 rate_limited` and `Retry-After`.
+10. Client retries cover connectivity errors, 408/425/5xx, and 429 after `Retry-After` (backoff 1 s, then 2 s). Incomplete or empty output, 402, 409, and other 4xx are not retried. The session times out after 30 s without data and 60 s per request.
 
 ## Focus, selection, and clipboard invariants
 
@@ -142,7 +160,7 @@ These invariants are core behavior, not cosmetic implementation details.
 - View-model tests use protocol fakes and assert state transitions plus requested effects.
 - Domain logic is tested without SwiftUI or AppKit where possible.
 - Infrastructure tests cover serialization, hotkey registration behavior, language targeting, quota, webhook security, and boundary failures.
-- Worker tests cover server-enforced request policy, atomic allowance behavior, Paddle signature verification, subscription transitions, and safe reset semantics.
+- Worker tests cover server-enforced request policy, `/v2/qwix` task validation and output checks, atomic allowance behavior, Paddle signature verification, subscription transitions, and safe reset semantics.
 - App composition receives a build smoke test so missing wiring is caught.
 - Manual validation covers Accessibility, focus, browser-backed editors, Fix's clipboard backup, Actions' clipboard restoration, keyboard/mouse parity, themes, Reduce Motion, VoiceOver, and multiple displays.
 

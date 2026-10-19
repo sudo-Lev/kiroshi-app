@@ -10,13 +10,10 @@ final class PalettePanelController {
     private let hud: ResultHUDController
     private let replacementRecovery: ReplacementRecoveryPresenting
     private let popupDismiss: PopupDismissCoordinator
-    private let resultCard: ResultCardController
     private var panel: KeyboardPanel?
     private var outsideMonitor: Any?
     private var hostApplication: NSRunningApplication?
     private var actionTask: Task<Void, Never>?
-    private var refineTask: Task<Void, Never>?
-    private var followUpTask: Task<Void, Never>?
     private var choicesObserver: AnyCancellable?
 
     init(
@@ -33,25 +30,26 @@ final class PalettePanelController {
         self.hud = hud
         self.replacementRecovery = replacementRecovery
         self.popupDismiss = popupDismiss
-        resultCard = ResultCardController(popupDismiss: popupDismiss)
         choicesObserver = viewModel.$choices
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.resizeForCurrentChoices() }
         self.hud.onUndo = { [weak self] in Task { @MainActor in await self?.bridge.undo() } }
-        resultCard.onHide = { [weak self] in self?.followUpTask?.cancel() }
         self.viewModel.onRun = { [weak self] action in self?.run(action) }
-        self.viewModel.onRefine = { [weak self] action in self?.fetchQuestions(for: action) }
     }
 
     var isVisible: Bool { panel?.isVisible == true }
 
     func toggle() async {
         if isVisible { close(); return }
-        resultCard.hide()
         hostApplication = NSWorkspace.shared.frontmostApplication
         guard let capture = await bridge.capture() else {
             hud.showNeutral("Select some text first.", point: NSEvent.mouseLocation)
+            return
+        }
+        // Reject long selections before the palette opens: no request, no charge, text unchanged.
+        guard QwixitAPI.accepts(capture.text) else {
+            hud.showError(QwixitAPIError.textTooLong.localizedDescription, capture: capture)
             return
         }
         viewModel.open(capture: capture)
@@ -59,7 +57,6 @@ final class PalettePanelController {
     }
 
     func close() {
-        refineTask?.cancel()
         if let panel { popupDismiss.hide(panel) }
         panel?.orderOut(nil)
         removeMonitors()
@@ -100,39 +97,7 @@ final class PalettePanelController {
         }
     }
 
-    private func fetchQuestions(for action: PaletteAction) {
-        guard let capture = viewModel.capture else { return }
-        let service = improver
-        refineTask?.cancel()
-        refineTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let questions = try await NetworkRetry.perform(
-                    operation: {
-                        try await service.clarifyingQuestions(capture.text, goal: action.prompt)
-                    },
-                    onRetry: { [weak self] attempt, total in
-                        self?.hud.showRetrying(attempt: attempt, total: total, capture: capture)
-                    }
-                )
-                guard !Task.isCancelled else { return }
-                viewModel.showQuestions(questions, for: action)
-            } catch QwixitAPIError.quotaExceeded {
-                close()
-                hud.showLimitReached(capture: capture)
-            } catch let error where QwixitAPI.isConnectivityError(error) {
-                close()
-                hud.showOffline(capture: capture)
-            } catch {
-                guard !Task.isCancelled else { return }
-                // If refinement is unavailable, the original action remains useful.
-                viewModel.showQuestions([], for: action)
-            }
-        }
-    }
-
     private func run(_ action: PaletteAction) {
-        refineTask?.cancel()
         guard let capture = viewModel.capture else { return }
         if let panel { popupDismiss.hide(panel) }
         panel?.orderOut(nil)
@@ -144,14 +109,10 @@ final class PalettePanelController {
         actionTask = Task { [weak self] in
             guard let self else { return }
             do {
-                var instruction = action.prompt
-                if action.id == "translate" {
-                    let language = action.language ?? "uk"
-                    instruction += " Language: \(language)."
-                }
+                let language = action.id == "translate" ? action.language ?? "uk" : nil
                 let output = try await NetworkRetry.perform(
                     operation: {
-                        try await service.perform(capture.text, instruction: instruction)
+                        try await service.perform(capture.text, action: action.id, language: language)
                     },
                     onRetry: { [weak self] attempt, total in
                         self?.hud.showRetrying(attempt: attempt, total: total, capture: capture)
@@ -175,52 +136,6 @@ final class PalettePanelController {
                     } else {
                         showRecovery(freshText: "\n" + output, report: report, capture: capture)
                     }
-                case .panel:
-                    hud.hide()
-                    resultCard.show(
-                        action: action,
-                        result: output,
-                        capture: capture,
-                        onInsert: { [weak self] in
-                            guard let self else { return }
-                            resultCard.hide()
-                            Task { @MainActor in
-                                let report = await self.bridge.insert(capture, text: output)
-                                if report.isSubmitted {
-                                    self.hud.showDone(action: action, detail: "Paste sent", capture: capture)
-                                } else {
-                                    self.showRecovery(freshText: "\n" + output, report: report, capture: capture)
-                                }
-                            }
-                        },
-                        onAsk: { [weak self] question in
-                            guard let self else { return }
-                            resultCard.setLoading(true)
-                            self.followUpTask?.cancel()
-                            self.followUpTask = Task {
-                                do {
-                                    let reply = try await NetworkRetry.perform(
-                                        operation: {
-                                            try await self.improver.perform(
-                                                capture.text,
-                                                instruction: "Answer about the text: \(question)"
-                                            )
-                                        },
-                                        onRetry: { [weak self] attempt, total in
-                                            self?.hud.showRetrying(attempt: attempt, total: total, capture: capture)
-                                        }
-                                    )
-                                    try Task.checkCancellation()
-                                    self.resultCard.update(result: reply)
-                                } catch is CancellationError {
-                                    return
-                                } catch {
-                                    guard !Task.isCancelled else { return }
-                                    self.resultCard.update(result: error.localizedDescription)
-                                }
-                            }
-                        }
-                    )
                 }
                 viewModel.reset()
             } catch is CancellationError {
@@ -250,20 +165,13 @@ final class PalettePanelController {
         if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "z" {
             Task { await bridge.undo() }; return true
         }
-        if viewModel.isRefining, let handled = handleRefining(event) { return handled }
         switch event.keyCode {
-        case 53:
-            if !viewModel.goBack() { close() }
+        case 53: close()
         case 125: viewModel.move(1)
         case 126: viewModel.move(-1)
         case 36: viewModel.submit()
         case 48: viewModel.move(event.modifierFlags.contains(.shift) ? -1 : 1)
-        case 124: return false
-        case 123:
-            if !viewModel.goBack() { return false }
-        case 51:
-            if viewModel.query.isEmpty, viewModel.goBack() { return true }
-            return false
+        case 123, 124, 51: return false
         default:
             if viewModel.query.isEmpty,
                let number = event.charactersIgnoringModifiers.flatMap(Int.init),
@@ -271,20 +179,6 @@ final class PalettePanelController {
                 viewModel.chooseNumber(number); return true
             }
             return false
-        }
-        return true
-    }
-
-    /// Keys inside the quick-questions step; `nil` falls through to the regular handling.
-    private func handleRefining(_ event: NSEvent) -> Bool? {
-        switch event.keyCode {
-        case 53:
-            refineTask?.cancel()
-            _ = viewModel.goBack()
-        case 123: viewModel.shiftAnswer(-1)
-        case 124: viewModel.shiftAnswer(1)
-        case 48: viewModel.move(event.modifierFlags.contains(.shift) ? -1 : 1)
-        default: return nil
         }
         return true
     }

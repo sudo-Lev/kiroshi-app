@@ -207,17 +207,54 @@ final class PeekViewModelTests: XCTestCase {
         }
     }
 
-    func testTranslationDecodePreservesSentenceAlignment() throws {
-        let data = Data(#"{"sentences":[{"source":"One.","target":"Один."},{"source":"Two.","target":"Два."}]}"#.utf8)
+    func testTranslationDecodeKeepsParagraphsAndDropsEmptyOnes() throws {
+        let data = Data(#"{"paragraphs":["Один.","  ","Два."]}"#.utf8)
         let result = try PeekViewModel.decodeResult(data, mode: .translate)
 
-        XCTAssertEqual(
-            result,
-            .translation([
-                PeekSentence(source: "One.", target: "Один."),
-                PeekSentence(source: "Two.", target: "Два.")
-            ])
+        XCTAssertEqual(result, .translation(["Один.", "Два."]))
+        XCTAssertEqual(result.plainText, "Один.\n\nДва.")
+    }
+
+    func testPeekRequestSendsOnlyTheTaskAndItsParameters() throws {
+        let request = PeekRequest(
+            text: "Jedno.\n\nDwa.",
+            sourceLanguage: "pl-PL",
+            targetLanguage: "uk",
+            mode: .translate,
+            length: .points,
+            operationID: QwixitOperation.makeID()
         )
+        let data = try PeekClient().makeBody(request)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: String])
+
+        XCTAssertEqual(body, [
+            "task": "peek",
+            "text": "Jedno.\n\nDwa.",
+            "mode": "translate",
+            "length": "points",
+            "language": "uk",
+            "sourceLanguage": "pl"
+        ])
+    }
+
+    @MainActor
+    func testRetryReusesTheOperationIDAndANewChoiceGetsANewOne() async {
+        let client = PeekClientSpy()
+        client.failuresRemaining = 1
+        let viewModel = PeekViewModel(client: client, detector: StubLanguageDetector(code: "en"))
+        viewModel.open(text: "A short selected sentence.")
+
+        viewModel.chooseNumber(1)
+        await waitUntil { if case .failed = viewModel.loadState { true } else { false } }
+        viewModel.retry()
+        await waitUntil { viewModel.loadState == .loaded }
+        viewModel.cycleLanguage()
+        await waitUntil { client.requests.count > 2 }
+
+        let ids = client.requests.map(\.operationID)
+        XCTAssertEqual(ids.count, 3)
+        XCTAssertEqual(ids[0], ids[1])
+        XCTAssertNotEqual(ids[1], ids[2])
     }
 
     func testCacheKeyIncludesModeLanguageAndLength() {
@@ -232,12 +269,17 @@ final class PeekViewModelTests: XCTestCase {
 
 private final class PeekClientSpy: PeekClientProtocol {
     private(set) var requests: [PeekRequest] = []
+    var failuresRemaining = 0
 
     func stream(_ request: PeekRequest) -> AsyncThrowingStream<String, Error> {
         requests.append(request)
+        if failuresRemaining > 0 {
+            failuresRemaining -= 1
+            return AsyncThrowingStream { $0.finish(throwing: URLError(.badServerResponse)) }
+        }
         return AsyncThrowingStream { continuation in
             let value = switch request.mode {
-            case .translate: #"{"sentences":[{"source":"A.","target":"Б."}]}"#
+            case .translate: #"{"paragraphs":["Б."]}"#
             case .summary: #"{"content":["Short summary."]}"#
             }
             continuation.yield(value)

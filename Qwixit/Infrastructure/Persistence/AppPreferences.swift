@@ -104,14 +104,14 @@ struct AppPreferences {
         return defaults.object(forKey: AppPreferenceKey.quotaRemaining) as? Int
     }
 
-    var isUnlimited: Bool {
+    var isAdvanced: Bool {
 #if DEBUG
         switch developerUsageScenario {
         case .live, .limitReached: break
         case .unlimited: return true
         }
 #endif
-        return defaults.string(forKey: AppPreferenceKey.quotaPlan) == "unlimited"
+        return QwixitUsage.isAdvancedPlan(defaults.string(forKey: AppPreferenceKey.quotaPlan))
     }
 
 #if DEBUG

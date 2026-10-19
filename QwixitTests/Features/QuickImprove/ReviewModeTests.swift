@@ -268,20 +268,6 @@ final class ReviewModeTests: XCTestCase {
         XCTAssertLessThanOrEqual(QwixitErrorCopy.detail(for: message).count, 180)
     }
 
-    func testResponseTextPreservesLeadingAndTrailingFormatting() throws {
-        let data = Data(#"{"output":[{"type":"message","content":[{"type":"output_text","text":"  fixed\n"}]}]}"#.utf8)
-        XCTAssertEqual(try ResponseText.output(from: data), "  fixed\n")
-    }
-
-    func testIncompleteResponseCannotReplaceSelectedText() {
-        let data = Data(#"{"status":"incomplete","output":[{"type":"message","content":[{"type":"output_text","text":"partial"}]}]}"#.utf8)
-        XCTAssertThrowsError(try ResponseText.output(from: data)) { error in
-            guard case QwixitAPIError.incompleteOutput = error else {
-                return XCTFail("Expected incomplete output error")
-            }
-        }
-    }
-
     func testNetworkRetrySucceedsOnTheThirdAttempt() async throws {
         var attempts = 0
         var retryAttempts: [Int] = []
@@ -324,14 +310,188 @@ final class ReviewModeTests: XCTestCase {
 
         XCTAssertEqual(attempts, 3)
     }
+
+    func testNetworkRetrySendsOneOperationIDOnEveryAttempt() async throws {
+        var ids: [String?] = []
+        var delays: [Duration] = []
+
+        _ = try await NetworkRetry.perform(
+            operation: {
+                ids.append(QwixitOperation.id)
+                if ids.count < 3 { throw URLError(.timedOut) }
+                return "done"
+            },
+            sleep: { delays.append($0) }
+        )
+
+        XCTAssertEqual(ids.count, 3)
+        XCTAssertNotNil(ids[0])
+        XCTAssertEqual(Set(ids).count, 1)
+        XCTAssertEqual(delays, [.seconds(1), .seconds(2)])
+        XCTAssertNil(QwixitOperation.id)
+    }
+
+    func testSeparateActionsGetSeparateOperationIDs() async throws {
+        let first = try await NetworkRetry.perform(operation: { QwixitOperation.id }, sleep: { _ in })
+        let second = try await NetworkRetry.perform(operation: { QwixitOperation.id }, sleep: { _ in })
+        XCTAssertNotEqual(first, second)
+    }
+
+    func testNonRecoverableErrorsAreNotRetried() async {
+        let errors: [Error] = [
+            QwixitAPIError.incompleteOutput,
+            QwixitAPIError.emptyOutput,
+            QwixitAPIError.quotaExceeded(checkoutURL: nil),
+            QwixitAPIError.operationExhausted,
+            QwixitAPIError.api(status: 400, message: "bad"),
+            QwixitAPIError.api(status: 413, message: "too long"),
+            QwixitAPIError.api(status: 422, message: "rejected")
+        ]
+        for error in errors {
+            var attempts = 0
+            _ = try? await NetworkRetry.perform(
+                operation: { () async throws -> String in
+                    attempts += 1
+                    throw error
+                },
+                sleep: { _ in }
+            )
+            XCTAssertEqual(attempts, 1, "\(error)")
+        }
+    }
+
+    func testRateLimitWaitsForRetryAfter() async throws {
+        var attempts = 0
+        var delays: [Duration] = []
+
+        _ = try await NetworkRetry.perform(
+            operation: {
+                attempts += 1
+                if attempts == 1 { throw QwixitAPIError.rateLimited(retryAfter: .seconds(4)) }
+                return "done"
+            },
+            sleep: { delays.append($0) }
+        )
+
+        XCTAssertEqual(delays, [.seconds(4)])
+        XCTAssertFalse(QwixitAPI.isRetryableError(QwixitAPIError.rateLimited(retryAfter: .seconds(60))))
+    }
+
+    func testCleanFixLeavesTextAndClipboardAloneEvenInReviewMode() async {
+        for reviewFirst in [false, true] {
+            let suite = "\(#function)-\(reviewFirst)"
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            defaults.set(reviewFirst, forKey: AppPreferenceKey.reviewBeforeApplying)
+
+            let selection = SelectionSnapshotSpy()
+            let review = ReviewPresentingSpy()
+            let feedback = FeedbackPresentingSpy()
+            let viewModel = QuickImproveViewModel(
+                accessibility: ReviewAccessibilityStub(),
+                improver: FixedImprover(output: nil),
+                feedback: feedback,
+                review: review,
+                selectionSnapshots: selection,
+                preferences: defaults
+            )
+
+            viewModel.improveSelection()
+            for _ in 0..<40 where viewModel.phase != .alreadyClean { await Task.yield() }
+
+            XCTAssertEqual(viewModel.phase, .alreadyClean)
+            XCTAssertEqual(feedback.phases.last, .alreadyClean)
+            XCTAssertFalse(review.didShow)
+            XCTAssertEqual(selection.replaceCalls, 0)
+            viewModel.stop()
+        }
+    }
+
+    func testTooLongSelectionIsRejectedBeforeAnyRequest() async {
+        let suite = #function
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let selection = SelectionSnapshotSpy()
+        selection.snapshot = TextSelectionSnapshot(text: String(repeating: "x", count: QwixitAPI.maxTextUTF16Units + 1))
+        let improver = FixedImprover(output: "fixed")
+        let viewModel = QuickImproveViewModel(
+            accessibility: ReviewAccessibilityStub(),
+            improver: improver,
+            feedback: FeedbackPresentingSpy(),
+            selectionSnapshots: selection,
+            preferences: defaults
+        )
+
+        viewModel.improveSelection()
+        for _ in 0..<40 where viewModel.phase == .ready { await Task.yield() }
+
+        XCTAssertEqual(improver.calls, 0)
+        XCTAssertEqual(selection.replaceCalls, 0)
+        guard case .error(let message) = viewModel.phase else { return XCTFail("Expected an error chip") }
+        XCTAssertEqual(QwixitErrorCopy.headline(for: message), "TOO LONG")
+        viewModel.stop()
+    }
+
+    func testFixRequestBodyCarriesOnlyTheTaskAndText() throws {
+        let data = try JSONEncoder().encode(QwixTask(task: "fix", text: "helo"))
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: data) as? [String: String], ["task": "fix", "text": "helo"])
+
+        let action = try JSONEncoder().encode(QwixTask(task: "action", text: "hi", action: "translate", language: "pl"))
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: action) as? [String: String],
+            ["task": "action", "text": "hi", "action": "translate", "language": "pl"]
+        )
+    }
+
+    func testBothPlanSpellingsMeanAdvanced() {
+        XCTAssertTrue(QwixitUsage.isAdvancedPlan("advanced"))
+        XCTAssertTrue(QwixitUsage.isAdvancedPlan("unlimited"))
+        XCTAssertFalse(QwixitUsage.isAdvancedPlan("free"))
+        XCTAssertFalse(QwixitUsage.isAdvancedPlan(nil))
+    }
+
+    func testResponseErrorMapsWorkerCodes() throws {
+        let url = QwixitAPI.endpoint
+        func error(_ status: Int, _ code: String) throws -> QwixitAPIError {
+            let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil))
+            return QwixitAPI.responseError(response, data: Data(#"{"error":{"message":"m","code":"\#(code)"}}"#.utf8))
+        }
+        guard case .textTooLong = try error(413, "text_too_long") else { return XCTFail("413") }
+        guard case .outputRejected = try error(422, "output_rejected") else { return XCTFail("422") }
+        guard case .dailyLimit = try error(429, "daily_limit") else { return XCTFail("daily") }
+        guard case .monthlyLimit = try error(429, "monthly_limit") else { return XCTFail("monthly") }
+        guard case .rateLimited = try error(429, "rate_limited") else { return XCTFail("rate") }
+        XCTAssertFalse(QwixitAPI.isRetryableError(QwixitAPIError.dailyLimit))
+        XCTAssertFalse(QwixitAPI.isRetryableError(QwixitAPIError.outputRejected))
+    }
+
+    func testResponseErrorMapsRateLimitAndExhaustedOperation() throws {
+        let url = QwixitAPI.endpoint
+        let limited = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": "3"]))
+        guard case .rateLimited(let retryAfter) = QwixitAPI.responseError(limited, data: Data()) else {
+            return XCTFail("Expected rate limit")
+        }
+        XCTAssertEqual(retryAfter, .seconds(3))
+
+        let exhausted = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 409, httpVersion: nil, headerFields: nil))
+        let body = Data(#"{"error":{"message":"no","code":"operation_exhausted"}}"#.utf8)
+        guard case .operationExhausted = QwixitAPI.responseError(exhausted, data: body) else {
+            return XCTFail("Expected exhausted operation")
+        }
+    }
 }
 
 private final class FixedImprover: TextImproving {
-    let output: String
+    /// `nil` makes the Worker answer "clean".
+    let output: String?
+    private(set) var calls = 0
 
-    init(output: String) { self.output = output }
+    init(output: String?) { self.output = output }
 
-    func improve(_ text: String, instruction: String?) async throws -> String { output }
+    func improve(_ text: String) async throws -> FixOutcome {
+        calls += 1
+        return output.map(FixOutcome.fixed) ?? .clean
+    }
 }
 
 private final class ReviewAccessibilityStub: AccessibilityServicing {

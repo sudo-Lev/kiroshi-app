@@ -135,10 +135,10 @@ final class SettingsBillingTests: XCTestCase {
         }
         model.refreshUsage()
 
-        for _ in 0..<100 where !model.isUnlimited {
+        for _ in 0..<100 where !model.isAdvanced {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertTrue(model.isUnlimited)
+        XCTAssertTrue(model.isAdvanced)
         let fetchCount = await billing.fetchCount()
         XCTAssertEqual(fetchCount, 3)
     }

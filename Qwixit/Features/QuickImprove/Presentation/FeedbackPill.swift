@@ -319,7 +319,7 @@ struct FeedbackPill: View {
             case .processing:
                 QwixitLockup()
                     .frame(width: 28, height: 12)
-            case .success:
+            case .success, .alreadyClean:
                 TokiriUI.Icon(.check, size: 13)
                     .foregroundStyle(tone)
             case .pasteSent:
@@ -410,6 +410,7 @@ struct FeedbackPill: View {
         case .processing: "Sharpening your text…"
         case .success: "Text replaced"
         case .pasteSent: "Success"
+        case .alreadyClean: "Already clean"
         case .noSelection: "Select some text first"
         case .permissionDenied: "Accessibility access needed"
         case .offline: "You’re offline"
@@ -421,6 +422,7 @@ struct FeedbackPill: View {
 
     private var detail: String? {
         switch phase {
+        case .alreadyClean: "Nothing to fix. Your text is unchanged."
         case .noSelection: "Highlight text in any app, then try again."
         case .permissionDenied: "Allow Tokiri in System Settings to continue."
         case .offline: "Your text is unchanged. Try again when you’re back online."
@@ -434,6 +436,7 @@ struct FeedbackPill: View {
         switch phase {
         case .success: KColor.success
         case .pasteSent: KColor.success
+        case .alreadyClean: KColor.success
         case .permissionDenied: KColor.warning
         case .offline: KColor.cyan
         case .retrying: KColor.cyan
@@ -474,7 +477,7 @@ struct FeedbackPill: View {
     private var statusTone: Color {
         if isError { return KColor.danger }
         if phase == .offline { return KColor.cyan }
-        if phase == .success { return KColor.terminalGreen }
+        if phase == .success || phase == .alreadyClean { return KColor.terminalGreen }
         return phase == .pasteSent ? KColor.terminalGreen : KColor.hudTone
     }
 
@@ -489,6 +492,7 @@ struct FeedbackPill: View {
     private var statusHeadline: String {
         if embedded && phase == .noSelection { return "NO TEXT CAPTURED" }
         if phase == .pasteSent { return "SUCCESS" }
+        if phase == .alreadyClean { return "ALREADY CLEAN" }
         if phase == .offline { return "CONNECTION LOST" }
         guard case .error(let message) = phase else { return "READY" }
         return QwixitErrorCopy.headline(for: message)
@@ -501,6 +505,7 @@ struct FeedbackPill: View {
         }
         if phase == .offline { return "TEXT UNCHANGED · TRY AGAIN" }
         if phase == .pasteSent { return "RESULT READY" }
+        if phase == .alreadyClean { return "NOTHING TO FIX · TEXT UNCHANGED" }
         if isError, case .error(let message) = phase {
             return QwixitErrorCopy.detail(for: message)
         }
@@ -510,12 +515,12 @@ struct FeedbackPill: View {
     private var statusBadge: String {
         if isError { return "ERR" }
         if phase == .offline { return "NET" }
-        if phase == .success { return "OK" }
+        if phase == .success || phase == .alreadyClean { return "OK" }
         return phase == .pasteSent ? "OK" : "AI"
     }
 
     private var usesCyberStatus: Bool {
-        isProcessingLike || phase == .success || phase == .pasteSent || phase == .offline || isError
+        isProcessingLike || phase == .success || phase == .pasteSent || phase == .alreadyClean || phase == .offline || isError
     }
 
     private var isDismissible: Bool {

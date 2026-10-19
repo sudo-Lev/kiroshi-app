@@ -88,7 +88,7 @@ Qwixit is built around speed and anonymity.
 
 ## Business model
 
-The current model is 30 free AI actions per installation per calendar month and $10/month for Qwixit Advanced. Advanced removes the monthly action cap while keeping the same careful Fix quality bar. This is a working hypothesis with several purposes:
+The current model is 30 free AI actions per installation per calendar month and $10/month for Qwixit Advanced. Advanced gives more room to work, with a fair-use ceiling (proposed: 300 actions per UTC day, 3 000 per month), while keeping the same careful Fix quality bar. Fix, Actions, and Peek accept up to about 2 pages (6 000 characters); longer selections are rejected in the app before any request. This is a working hypothesis with several purposes:
 
 - let the app remain installed and useful without immediate payment;
 - expose natural usage and limit behavior;

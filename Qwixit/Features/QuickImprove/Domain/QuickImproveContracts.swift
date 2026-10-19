@@ -8,6 +8,8 @@ enum AppPhase: Equatable {
     case noSelection
     case permissionDenied
     case limitReached
+    /// Fix found nothing to change; the selection and clipboard stay untouched.
+    case alreadyClean
     case retrying(attempt: Int, total: Int)
     case offline
     case error(String)
@@ -41,7 +43,7 @@ protocol AccessibilityServicing: AnyObject {
 }
 
 protocol TextImproving: AnyObject {
-    func improve(_ text: String, instruction: String?) async throws -> String
+    func improve(_ text: String) async throws -> FixOutcome
 }
 
 @MainActor

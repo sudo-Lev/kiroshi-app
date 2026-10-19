@@ -1,20 +1,13 @@
 import Foundation
 
 protocol ActionPerforming: AnyObject {
-    func perform(_ text: String, instruction: String) async throws -> String
-    /// Short multiple-choice questions whose answers most change the result of `goal`.
-    func clarifyingQuestions(_ text: String, goal: String) async throws -> [RefineQuestion]
-}
-
-struct RefineQuestion: Codable, Equatable {
-    let question: String
-    let options: [String]
+    /// Runs a server-defined action preset; the Worker owns the prompt for each `action` id.
+    func perform(_ text: String, action: String, language: String?) async throws -> String
 }
 
 enum ActionMode: String, Codable, CaseIterable, Hashable {
     case replace = "REPLACE"
     case insert = "INSERT"
-    case panel = "PANEL"
 }
 
 struct PaletteAction: Identifiable, Codable, Hashable {
@@ -22,11 +15,7 @@ struct PaletteAction: Identifiable, Codable, Hashable {
     let name: String
     let hint: String
     let mode: ActionMode
-    let prompt: String
     var language: String?
-    var isPreset = false
-    /// Asks a few quick questions before running, so the result lands in one pass.
-    var refines = false
 }
 
 struct ActionGroup: Identifiable, Equatable {
@@ -42,9 +31,9 @@ protocol ActionRegistering {
 struct ActionRegistry: ActionRegistering {
     func groups() -> [ActionGroup] {
         let actions = [
-            PaletteAction(id: "translate", name: "Translate", hint: "choose one of two languages", mode: .replace, prompt: "Translate naturally."),
-            PaletteAction(id: "slack", name: "Slack style", hint: "clear, concise, human", mode: .replace, prompt: "Rewrite as a brief, natural Slack message. Keep facts and intent."),
-            PaletteAction(id: "formal", name: "Make formal", hint: "polished professional tone", mode: .replace, prompt: "Rewrite professionally and directly. Keep the meaning.")
+            PaletteAction(id: "translate", name: "Translate", hint: "choose one of two languages", mode: .replace),
+            PaletteAction(id: "slack", name: "Slack style", hint: "clear, concise, human", mode: .replace),
+            PaletteAction(id: "formal", name: "Make formal", hint: "polished professional tone", mode: .replace)
         ]
         return [ActionGroup(id: "actions", title: "Actions", actions: actions)]
     }

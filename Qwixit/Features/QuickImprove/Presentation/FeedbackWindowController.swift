@@ -133,6 +133,7 @@ private struct FeedbackHost: View {
         case .processing: "processing"
         case .success: "success"
         case .pasteSent: "paste-sent"
+        case .alreadyClean: "already-clean"
         case .noSelection: "no-selection"
         case .permissionDenied: "permission"
         case .limitReached: "limit-reached"
