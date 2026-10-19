@@ -48,7 +48,7 @@ struct PaletteView: View {
         .padding(.horizontal, 16)
         .frame(height: 48)
         .onAppear { searchFocused = true }
-        .onChange(of: viewModel.wordCount) { _, _ in searchFocused = true }
+        .onValueChange(of: viewModel.wordCount) { _ in searchFocused = true }
     }
 
     private var list: some View {
@@ -81,7 +81,7 @@ struct PaletteView: View {
                 .padding(10)
             }
             .frame(maxHeight: 380)
-            .onChange(of: viewModel.selectedIndex) { _, value in proxy.scrollTo(value, anchor: .center) }
+            .onValueChange(of: viewModel.selectedIndex) { value in proxy.scrollTo(value, anchor: .center) }
         }
     }
 

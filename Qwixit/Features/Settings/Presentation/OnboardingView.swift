@@ -455,10 +455,7 @@ private struct OnboardingPaletteSurface: View {
         PaletteView(viewModel: viewModel)
             .frame(width: 440, height: 190)
             .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
-            .onKeyPress(.escape) {
-                _ = model.escapeOverlay()
-                return .handled
-            }
+            .onboardingEscape { _ = model.escapeOverlay() }
             .onAppear {
                 viewModel.open(capture: PaletteCapture(
                     element: nil,
@@ -484,7 +481,7 @@ private struct OnboardingPaletteSurface: View {
                     model.chooseAction(choice)
                 }
             }
-            .onChange(of: model.selectionIndex) { _, newValue in
+            .onValueChange(of: model.selectionIndex) { newValue in
                 viewModel.move(newValue - syncedSelection)
                 syncedSelection = newValue
             }
@@ -494,6 +491,19 @@ private struct OnboardingPaletteSurface: View {
 private extension View {
     func onboardingTitle(_ size: CGFloat) -> some View { font(.system(size: size, weight: .heavy, design: .rounded)).tracking(size >= 30 ? -0.8 : -0.6).multilineTextAlignment(.center) }
     func onboardingBody() -> some View { font(.system(size: 14)).lineSpacing(7).foregroundStyle(KColor.secondary) }
+
+    /// `onKeyPress` is macOS 14+; `onExitCommand` delivers the same Escape on macOS 13.
+    @ViewBuilder
+    func onboardingEscape(_ action: @escaping () -> Void) -> some View {
+        if #available(macOS 14.0, *) {
+            onKeyPress(.escape) {
+                action()
+                return .handled
+            }
+        } else {
+            onExitCommand(perform: action)
+        }
+    }
 }
 
 #Preview("Onboarding · Welcome") { OnboardingView(model: OnboardingModel(accessibility: PreviewAccessibility()), onFinish: {}) }

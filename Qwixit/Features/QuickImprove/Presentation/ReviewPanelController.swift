@@ -301,11 +301,11 @@ private struct ReviewPanelView: View {
                 return result + Text(verbatim: chunk.text)
             case (.inline, .removed):
                 return result + Text(verbatim: chunk.text)
-                    .foregroundStyle(KColor.danger)
+                    .foregroundColor(KColor.danger)
                     .strikethrough(true, color: KColor.danger)
             case (.inline, .added):
                 return result + Text(verbatim: chunk.text)
-                    .foregroundStyle(KColor.terminalGreen)
+                    .foregroundColor(KColor.terminalGreen)
                     .underline(true, color: KColor.terminalGreen)
             case (_, .same):
                 return result + Text(verbatim: chunk.text)

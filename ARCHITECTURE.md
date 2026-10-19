@@ -2,7 +2,7 @@
 
 **Last reviewed:** 2026-10-16
 
-Qwixit is a native macOS 14+ menu-bar utility built with SwiftUI and AppKit. It uses feature-first MVVM inside a lightweight Clean Architecture shell: enough separation to make system integrations testable, without adding framework ceremony to a small application.
+Qwixit is a native macOS 13+ menu-bar utility built with SwiftUI and AppKit. It uses feature-first MVVM inside a lightweight Clean Architecture shell: enough separation to make system integrations testable, without adding framework ceremony to a small application.
 
 ## System boundary
 
