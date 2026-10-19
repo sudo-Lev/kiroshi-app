@@ -109,7 +109,16 @@ The Worker serves both `/v1/responses` (legacy: the client sends instructions) a
 2. App builds that send `X-Qwixit-Operation-ID` and use `/v2/qwix`.
 3. After every installation has updated: a Worker without `/v1/responses`, with the operation header required. Only then can no client send its own instructions.
 
-A prompt change in `prompts.js` needs only a Worker deploy, not an app release.
+A prompt change in `prompts.js` needs only a Worker deploy, not an app release. Before deploying one, deploy to a test Worker or accept a brief production window, then run the prompt eval:
+
+```sh
+cd cloudflare-worker
+npm run eval:prompts                          # production Worker
+QWIXIT_WORKER_URL=https://… npm run eval:prompts
+npm run eval:prompts -- --only peek           # a subset by case name
+```
+
+It sends about two dozen synthetic cases through the real model (prompt injection, questions, Ukrainian, surzhyk, slang, code, Markdown, clean text, two pages, Actions presets, Peek translation and summary). It costs model calls, so it is run by hand, not in CI. Each case uses a fresh random installation ID. Every case must pass before a prompt change ships.
 
 ## Reset the complete sandbox flow
 
