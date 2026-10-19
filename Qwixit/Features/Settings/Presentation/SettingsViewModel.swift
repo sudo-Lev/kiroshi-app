@@ -65,21 +65,25 @@ final class SettingsViewModel: ObservableObject {
     private let accessibility: AccessibilityServicing
     private let checkout: CheckoutOpening
     private let billingStatus: BillingStatusChecking
+    private let billingPollInterval: Duration
     private let defaults: UserDefaults
     private var permissionTask: Task<Void, Never>?
     private var billingTask: Task<Void, Never>?
+    private var isPollingAfterCheckout = false
     private var usageObserver: NSObjectProtocol?
 
     init(
         accessibility: AccessibilityServicing,
         checkout: CheckoutOpening = PaddleCheckoutOpener(),
         billingStatus: BillingStatusChecking = BillingStatusClient(),
+        billingPollInterval: Duration = .seconds(2),
         defaults: UserDefaults = .standard
     ) {
         self.accessibility = accessibility
         onboarding = OnboardingModel(accessibility: accessibility)
         self.checkout = checkout
         self.billingStatus = billingStatus
+        self.billingPollInterval = billingPollInterval
         self.defaults = defaults
         accessibilityGranted = accessibility.isTrusted
         showSuccess = defaults.object(forKey: AppPreferenceKey.showSuccess) as? Bool ?? true
@@ -127,6 +131,7 @@ final class SettingsViewModel: ObservableObject {
     func stop() {
         permissionTask?.cancel()
         billingTask?.cancel()
+        isPollingAfterCheckout = false
         onboarding.stop()
     }
 
@@ -184,15 +189,21 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func startBillingStatusRefresh(shouldPoll: Bool = false) {
+        // A window appearing or the app reactivating must not replace the
+        // checkout poll with a single request before Paddle's webhook arrives.
+        guard !isPollingAfterCheckout else { return }
         billingTask?.cancel()
+        isPollingAfterCheckout = shouldPoll
 
         billingTask = Task { [weak self] in
             guard let self else { return }
-            let attempts = shouldPoll ? 45 : 1
-            for _ in 0..<attempts {
+            defer { if shouldPoll { isPollingAfterCheckout = false } }
+            let attempts = shouldPoll ? 100 : 1
+            for attempt in 0..<attempts {
                 guard !Task.isCancelled else { return }
                 do {
                     let status = try await billingStatus.fetchStatus()
+                    guard !Task.isCancelled else { return }
                     QwixitUsage.record(status, defaults: defaults)
                     readCachedUsage()
                     if status.isUnlimited {
@@ -202,8 +213,12 @@ final class SettingsViewModel: ObservableObject {
                     if !shouldPoll { return }
                 }
 
-                guard shouldPoll else { return }
-                try? await Task.sleep(for: .seconds(2))
+                guard shouldPoll, attempt < attempts - 1 else { return }
+                // Keep checking while checkout is open, but ease off if the
+                // customer needs more than a minute to complete payment.
+                let interval = attempt < 45 ? billingPollInterval : .seconds(10)
+                do { try await Task.sleep(for: interval) }
+                catch { return }
             }
         }
     }

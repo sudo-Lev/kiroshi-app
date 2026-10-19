@@ -243,9 +243,14 @@ struct SettingsView: View {
                 .tracking(0.3)
                 .foregroundStyle(KColor.secondary)
             Spacer()
-            Button("Quit Tokiri") { onQuit() }
-                .buttonStyle(SubtleButtonStyle())
-                .foregroundStyle(KColor.danger)
+            Button(action: onQuit) {
+                HStack(spacing: 7) {
+                    TokiriUI.Icon(.quit, size: 13)
+                    Text("Quit")
+                }
+            }
+            .buttonStyle(TokiriUI.QuitButton())
+            .accessibilityLabel("Quit Tokiri")
         }
         .padding(.horizontal, 18)
         .frame(height: 54)

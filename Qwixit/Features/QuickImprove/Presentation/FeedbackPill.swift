@@ -6,19 +6,22 @@ struct FeedbackPill: View {
     let successDetail: String
     let embedded: Bool
     let onClose: () -> Void
+    let onUpgrade: (() -> Void)?
 
     init(
         phase: AppPhase,
         reduceMotion: Bool,
         successDetail: String = "TEXT REPLACED",
         embedded: Bool = false,
-        onClose: @escaping () -> Void
+        onClose: @escaping () -> Void,
+        onUpgrade: (() -> Void)? = nil
     ) {
         self.phase = phase
         self.reduceMotion = reduceMotion
         self.successDetail = successDetail
         self.embedded = embedded
         self.onClose = onClose
+        self.onUpgrade = onUpgrade
     }
 
     @Environment(\.colorScheme) private var colorScheme
@@ -32,8 +35,6 @@ struct FeedbackPill: View {
                 upgradeCard
             } else if phase == .permissionDenied {
                 accessNotice
-            } else if phase == .pasteSent && !embedded {
-                completionWithBackupNote
             } else if usesCyberStatus {
                 cyberStatusBox
             } else {
@@ -245,46 +246,6 @@ struct FeedbackPill: View {
         )
     }
 
-    private var completionWithBackupNote: some View {
-        ZStack(alignment: .topTrailing) {
-            backupNote
-                .offset(x: 5, y: -14)
-
-            cyberStatusBox
-        }
-        .padding(.top, 17)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Pasted. If it's not there, press Command V.")
-    }
-
-    private var backupNote: some View {
-        HStack(spacing: 4) {
-            Text("NOT HERE?")
-                .font(PasteNoteFont.font(size: 7))
-                .tracking(1)
-                .foregroundStyle(pasteNoteColor(light: 0x6E6B7D, dark: 0xB0ABBF))
-                .lineLimit(1)
-
-            TokiriUI.Shortcut(modifiers: ["⌘"], key: "V", compact: true)
-        }
-        .padding(.leading, 6)
-        .padding(.trailing, 2)
-        .frame(height: 16)
-        .fixedSize(horizontal: true, vertical: false)
-        .padding(.top, 1)
-        .background(PasteNoteTabShape().fill(pasteNoteColor(light: 0xFDFCFF, dark: 0x120F19)))
-        .overlay {
-            PasteNoteTabBorder()
-                .stroke(pasteNoteColor(light: 0xDCDBE2, dark: 0x34323C), lineWidth: 1)
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private func pasteNoteColor(light: UInt32, dark: UInt32) -> Color {
-        Color(nsColor: KColor.hex(colorScheme == .dark ? dark : light))
-    }
-
     private var statusGlyph: some View {
         ZStack {
             QwixitControlShape(cut: 5)
@@ -418,15 +379,17 @@ struct FeedbackPill: View {
                 Spacer(minLength: 10)
 
                 HStack(spacing: 9) {
-                    Button {
-                        _ = PaddleCheckoutOpener().openStarterCheckout()
-                        onClose()
-                    } label: {
-                        Text("Get Advanced · $10")
-                            .frame(maxWidth: .infinity)
+                    if let onUpgrade {
+                        Button {
+                            onUpgrade()
+                            onClose()
+                        } label: {
+                            Text("Get Advanced · $10")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .accessibilityLabel("Get Tokiri Advanced for ten dollars per month")
                     }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .accessibilityLabel("Get Tokiri Advanced for ten dollars per month")
 
                     Button("Nah", action: onClose)
                         .buttonStyle(SubtleButtonStyle())
@@ -578,31 +541,6 @@ struct FeedbackPill: View {
 
     private var isProcessingLike: Bool {
         phase == .processing || isRetrying
-    }
-}
-
-private struct PasteNoteTabShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX + 5, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + 5))
-            path.closeSubpath()
-        }
-    }
-}
-
-private struct PasteNoteTabBorder: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX + 0.5, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX + 0.5, y: rect.minY + 5))
-            path.addLine(to: CGPoint(x: rect.minX + 5, y: rect.minY + 0.5))
-            path.addLine(to: CGPoint(x: rect.maxX - 0.5, y: rect.minY + 0.5))
-            path.addLine(to: CGPoint(x: rect.maxX - 0.5, y: rect.maxY))
-        }
     }
 }
 

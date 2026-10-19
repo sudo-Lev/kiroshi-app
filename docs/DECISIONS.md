@@ -104,6 +104,6 @@ Fix and Actions capture selected text and source focus, restore that focus, and 
 
 **Status:** accepted
 
-After Fix posts ⌘V, leave the generated replacement on the system clipboard. Show the green success chip for the completed Fix request, with a small `NOT HERE? ⌘V` note above it. Success does not assert that the destination editor consumed the paste. Selection-copy fallbacks and Actions continue restoring the previous clipboard, and a newer clipboard change is never overwritten.
+After Fix posts ⌘V, leave the generated replacement on the system clipboard. Show the compact green success chip for the completed Fix request. Success does not assert that the destination editor consumed the paste. Selection-copy fallbacks and Actions continue restoring the previous clipboard, and a newer clipboard change is never overwritten.
 
 **Why:** some editors miss a synthetic paste event. The user can press ⌘V immediately without reopening Tokiri or losing the generated correction.

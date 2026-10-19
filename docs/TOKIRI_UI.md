@@ -16,8 +16,8 @@ Use `TokiriUI` for shared appearance and interaction primitives. Feature-specifi
 | On/off, including no visible label | `TokiriUI.Toggle` | Supply `.accessibilityLabel` when `showsLabel: false`. |
 | Explicit Light/Dark choice | `TokiriUI.ThemePicker` | Segmented, not a boolean toggle. |
 | One of several choices | `TokiriUI.RadioOption` | Compact radio option. |
-| Primary, subtle, compact buttons | `TokiriUI.PrimaryButton`, `.SubtleButton`, `.CompactButton` | Existing button styles. |
-| Hotkey badge, dismissible hotkey badge, popup close badge, access badge | `TokiriUI.Shortcut`, `.ShortcutButton`, `.PopupCloseButton`, `.AccessBadge` | The popup close button reuses the shortcut badge and receives its visible binding from `HotkeyCatalog.popupDismiss`; panel controllers own the actual dismissal. |
+| Primary, subtle, compact, and Quit buttons | `TokiriUI.PrimaryButton`, `.SubtleButton`, `.CompactButton`, `.QuitButton` | Primary has filled, soft, and transparent idle appearances; Quit has filled and soft appearances. They share their cut corners, highlight, and press trace across appearances. The filled Quit style uses the same red fill and warm-to-pink gradient border in both themes. |
+| Hotkey badge, dismissible hotkey badge, popup close badge, access badge | `TokiriUI.Shortcut`, `.ShortcutButton`, `.PopupCloseButton`, `.AccessBadge` | The popup close button reuses the shortcut badge and receives its visible binding from `HotkeyCatalog.popupDismiss`; panel controllers own the actual dismissal. The access badge supports an icon-only layout with its status in the accessibility label. |
 | Paywall usage strip | `QwixitPaywallUsageStrip` | Shared 30-action usage state for limit surfaces. |
 | Meaningful icon | `TokiriUI.Icon(.name, size:)` | Decorative by default; label an icon-only parent control. |
 
@@ -25,7 +25,7 @@ Other established primitives in `DesignSystem.swift` (panel modifier, card, mark
 
 `HotkeyCatalog` in `Infrastructure/Hotkeys/GlobalHotKey.swift` holds the default Fix, Actions, Peek, and popup dismissal bindings. Interactive transient panels show `⌥⌘X` in the shared close button. The app routes that key to the frontmost visible popup before Fix; when Fix is remapped, popup dismissal remains `⌥⌘X`. Click-through processing and success notices have no close control.
 
-The Fix completion notice uses the compact display-only `TokiriUI.Shortcut` badge for its 17 pt `NOT HERE? ⌘V` clipboard backup tab. That variant has an 11 pt inner keycap, a 1 pt four-corner cut border, and locally bundled JetBrains Mono ExtraBold. The default badge size stays available for controls and settings. The note does not accept focus or intercept clicks.
+The Fix completion notice uses the shared compact status HUD without an additional shortcut badge. `TokiriUI.Shortcut` remains available for controls and settings.
 
 ## Control motion
 
@@ -55,6 +55,6 @@ Never substitute a stock symbol for a missing primary product icon without recor
 |---|---|---|
 | Search/input field and menu/picker styling | Native SwiftUI controls in feature views | Define only after a repeated use with consistent behavior appears. |
 | Developer-only usage scenario selector | Native segmented `Picker` | Decide whether it merits a shared multi-option control; keep native for now. |
-| Feature-local plain/native buttons (for example the menu-bar access badge) | SwiftUI `.plain` or native button behavior | Migrate only when a shared interaction or matching surface is defined; these do not yet use the TokiriUI edge trace. |
+| Feature-local plain/native buttons (for example the menu-bar access badge) | SwiftUI `.plain` or native button behavior | Migrate only when a shared interaction or matching surface is defined; these do not yet use the TokiriUI edge trace. The menu actions use the shared Primary and Quit button styles. |
 | Distinctive utility icons beyond primary product icons | Catalogued SF Symbols for close, arrows, lock, network, status, and platform cues | Curate vector replacements only where repeated use or brand value outweighs the clarity of a familiar macOS symbol. No feature view selects an SF Symbol directly. |
 | Visual component gallery | None | Add app-local previews for light/dark, enabled/disabled, and reduced-motion states once the catalog grows. |

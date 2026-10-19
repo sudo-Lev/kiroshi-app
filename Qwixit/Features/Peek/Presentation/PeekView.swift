@@ -12,6 +12,7 @@ struct PeekView: View {
     @ObservedObject var viewModel: PeekViewModel
     let onClose: () -> Void
     let onTogglePin: () -> Void
+    let onUpgrade: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -203,9 +204,7 @@ struct PeekView: View {
             Spacer(minLength: 10)
 
             HStack(spacing: 9) {
-                Button {
-                    _ = PaddleCheckoutOpener().openStarterCheckout()
-                } label: {
+                Button(action: onUpgrade) {
                     Text("Get Advanced · $10")
                         .frame(maxWidth: .infinity)
                 }

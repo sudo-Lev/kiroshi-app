@@ -117,7 +117,7 @@ All semantic colors have explicit light and dark variants. Use sRGB values exact
 - Violet is the default interactive accent.
 - Cyan owns translation and network/cloud cues.
 - Magenta owns summary and panel style output.
-- Green is reserved for completed or allowed states. In the Fix HUD, the green chip marks the completed request and posted paste; the note above it explains the clipboard backup.
+- Green is reserved for completed or allowed states. In the Fix HUD, the green chip marks the completed request and posted paste.
 - Warning and danger appear only when the user needs to act or an action failed.
 - Cyan and magenta may appear together only for the chromatic face split, scan line, or processing sweep.
 - Strong accent backgrounds use white foreground text.
@@ -217,7 +217,7 @@ Faces are text, always monospaced, kept on one line, and usually bracketed. They
 | Broke | `[ $_00_$ ]` | Out of tokens |
 | Empty | `[ x_x ]` | 30/30 used |
 | Upsell | `[ ¬_¬ ]` | Advanced plan prompt |
-| Advanced | `[ $^_^$ ]` | Advanced plan active; more room to work |
+| Advanced | `[ $ᴗ$ ]` | Advanced plan active; more room to work. It stays visible without blinking to another expression. |
 | Lost | `[ ?_? ]` | No network signal |
 | Retry | `[ @_@ ]` | Reconnecting or retrying |
 | Idle | `[ #_# ]` | Offline waiting |
@@ -407,7 +407,7 @@ The one press fix flow uses a compact processing/success/error HUD beside the se
 - Headline: SUCCESS in `terminalGreen`.
 - Detail: RESULT READY in 8 pt mono.
 - Badge: OK.
-- Behind the box, place a 17 pt tall neutral note tab reading **NOT HERE?** with a compact `⌘V` keycap. Its right edge extends 5 pt past the box, and its top sits 14 pt above the box so the box overlaps it by 3 pt. Its 5 pt top-left cut and open bottom border join it visually to the box. Use the exact light/dark tab colors and JetBrains Mono ExtraBold sizes (7 pt label, 8 pt keycap) from the paste-chip specification. The Fix result stays on the system clipboard after the automatic paste attempt.
+- The Fix result stays on the system clipboard after the automatic paste attempt.
 - Success marks a completed Fix request and posted paste event; it does not prove that the editor accepted the paste. If the result is missing, the user can press ⌘V.
 - Default one press duration: 1.25 seconds.
 
@@ -626,6 +626,7 @@ Onboarding is a real interactive rehearsal, not a slideshow.
 - Standard titled, closable macOS window with transparent title bar.
 - Header: 62 pt, horizontal padding 24.
 - Qwixit lockup: 90 × 30.
+- On Welcome, the center visual is a large `[ ^_- ]` face instead of a second lockup. The wink is magenta; the rest uses the theme's ink color.
 - Main title: 30 pt Black Rounded.
 - Content maximum width: 660.
 - Footer: 58 pt, horizontal padding 28, top divider.
@@ -720,6 +721,7 @@ Key press state changes use a 160 ms snappy transition. Stop the demonstration w
 - Subtitle: 10 pt Sans.
 - Scroll content padding: 18; section gap: 14.
 - Footer: 54 pt, horizontal padding 18, `canvasRaised`.
+- Footer Quit uses the shared red cut-corner button with a power icon in both themes.
 
 ### Sections
 
@@ -751,14 +753,12 @@ Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have 
 - Background: `canvas`.
 - Wrapper: `QwixitControlShape` with a 16 pt chamfer on the top-left and bottom-right corners, plus a 1 pt `line` stroke; do not use a rounded outer container.
 - AppKit host: borderless, nonactivating panel with a native shadow; do not expose the system popover bubble or chevron.
-- Utility bar: 28 pt, horizontal padding 12, version left and cyan `Cloud` right.
-- Brand header: 68 pt, horizontal padding 14, lockup 108 × 34.
-- Show the shared `⌥⌘X` close badge and compact access badge in the brand header. The close badge is a button, not a static shortcut hint.
-- Show a compact `Preview & Approve` switch below the brand header, bound to the same preference as Settings. Include a one-line status hint that nothing changes until approval.
-- Optional billing row: 34 pt; 44 pt when an upgrade button is visible.
-- Bottom action row: 43 pt with three equal actions: Settings, Onboarding, Quit.
-- Use 1 pt vertical dividers of height 24.
-- Quit uses `danger`; other actions use `secondary`.
+- Utility bar: 26 pt, horizontal padding 12, version left and cyan `Cloud` right.
+- Status row: 60 pt, horizontal padding 14. It contains the plan face, a two-line plan block, a flexible spacer, the shared `⌥⌘X` close badge, and an icon-only access badge. The entire Advanced row has a soft success-green gradient and green divider, with `[ $ᴗ$ ]` and the plan title in a readable green. The entire Free row uses a neutral surface and `[ ^_^ ]` face. The face has no separate badge background. The close badge is a button, not a static shortcut hint.
+- At the free limit, `Get Advanced` replaces the spacer and the close badge may hide to fit. The popup dismissal shortcut still works.
+- Show a compact `Preview & Approve` switch below the status row, bound to the same preference as Settings. Include a one-line status hint that nothing changes until approval.
+- Bottom action row: 40 pt with three equal 28 pt buttons, 8 pt outer padding, and 6 pt gaps. Settings uses the soft shared `PrimaryButton` style with a light violet tint and chromatic border. Onboarding uses its transparent idle variant. Quit uses the soft shared `QuitButton` style with a light danger tint and warm-to-pink border. All keep the same cut corners, highlight, and press trace as their filled variants. The Settings footer keeps the filled red Quit style.
+- The four sections are the utility strip, status row, review row, and actions row, separated by single horizontal dividers.
 
 Usage may be shown here as persistent plan information. It must not generate a separate 29/30 notification. At 30/30, show the upgrade action.
 
@@ -786,7 +786,7 @@ Actions configured for panel output use a larger result card.
 - Write short, direct, calm sentences.
 - Operational UI may be terse: `READY`, `AI`, `OK`, `ERR`, `Esc`, `Copy ⌘C`.
 - Explanations use normal sentence case.
-- Fix may show SUCCESS after Tokiri prepares the result and posts Command V; it does not claim the target editor accepted the text. The `NOT HERE? ⌘V` note points to the clipboard backup.
+- Fix may show SUCCESS after Tokiri prepares the result and posts Command V; it does not claim the target editor accepted the text.
 - Avoid generic AI language such as “magic,” “assistant is thinking,” or long model explanations.
 - Keep technical implementation details out of product copy.
 - Error titles explain the outcome; the detail explains the recovery action.

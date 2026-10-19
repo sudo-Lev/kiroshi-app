@@ -68,6 +68,41 @@ test("active subscription unlocks unlimited actions", async () => {
   assert.deepEqual(await response.json(), { allowed: true, unlimited: true, remaining: null, period: currentPeriod });
 });
 
+test("signed Paddle webhook activates Advanced in billing status", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  const installationID = "a".repeat(43);
+  const secret = "pdl_ntfset_test";
+  const namespace = {
+    idFromName(value) { return value; },
+    get() { return { fetch: (url, init) => ledger.fetch(new Request(url, init)) }; },
+  };
+  const body = JSON.stringify({
+    event_id: "evt_advanced",
+    event_type: "subscription.created",
+    occurred_at: new Date().toISOString(),
+    data: {
+      id: "sub_advanced",
+      status: "active",
+      custom_data: { qwixit_installation_id: installationID },
+      items: [{ price: { id: "pri_01m4135bkhzgwp4y51nf8wjkgp" } }],
+    },
+  });
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = createHmac("sha256", secret).update(`${timestamp}:${body}`).digest("hex");
+  const webhook = await worker.fetch(new Request("https://example.test/billing/webhook", {
+    method: "POST",
+    headers: { "Paddle-Signature": `ts=${timestamp};h1=${signature}` },
+    body,
+  }), { USAGE_LEDGER: namespace, PADDLE_WEBHOOK_SECRET: secret });
+  assert.equal(webhook.status, 200);
+
+  const status = await worker.fetch(
+    new Request(`https://example.test/billing/status?installation_id=${installationID}`),
+    { USAGE_LEDGER: namespace },
+  );
+  assert.deepEqual(await status.json(), { plan: "unlimited", subscription_status: "active", remaining: null, period: currentPeriod });
+});
+
 test("reports billing status without consuming a free action", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
   const before = await ledger.fetch(new Request("https://usage.qwixit/status"));

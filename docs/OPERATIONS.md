@@ -51,7 +51,7 @@ Do not launch an additional app process casually during automated verification: 
 
 Fix and Actions use one replacement path in every app: capture the selected text and source focus, restore the source app and focused element, put the fresh text on the clipboard, then post ⌘V. AX is used to read the selection and restore focus; it never writes the replacement or decides whether a paste succeeded. Actions' insert mode sends Right Arrow first to collapse the selection at its end, then uses the same paste path.
 
-ReplacementAttemptReport contains only three transient steps: clipboard write, optional caret move, and ⌘V event. isSubmitted means the clipboard write completed and the required keyboard events were posted. Fix shows “Success” with a `NOT HERE? ⌘V` note; this marks a completed request and posted event, not proof that another app consumed the paste. If Tokiri cannot prepare the clipboard or post the required event, it offers the fresh text and a manual copy button. Fix leaves the correction on the system clipboard as a manual paste backup after a successful clipboard write; Actions restores the previous clipboard. Neither selected nor generated text is logged or stored in Qwixit data.
+ReplacementAttemptReport contains only three transient steps: clipboard write, optional caret move, and ⌘V event. isSubmitted means the clipboard write completed and the required keyboard events were posted. Fix shows “Success”; this marks a completed request and posted event, not proof that another app consumed the paste. If Tokiri cannot prepare the clipboard or post the required event, it offers the fresh text and a manual copy button. Fix leaves the correction on the system clipboard as a manual paste backup after a successful clipboard write; Actions restores the previous clipboard. Neither selected nor generated text is logged or stored in Qwixit data.
 
 Unit tests cover the clipboard, paste-event, and caret-move requirements for a submitted status, plus recovery when a paste event cannot be posted. Clipboard archive tests verify that Fix keeps the correction, Actions restores rich clipboard contents, and newer clipboard content is preserved. These tests do not measure delivery to real editors. Before claiming a replacement success rate, use controlled, unsent drafts in a native text control and browser editors such as Slack and GitHub, plus representative spreadsheet and messaging apps. Exercise single-line, multiline, and repeated selections; Fix, Actions replace, and Actions insert. Confirm that manual ⌘V pastes the Fix result and that Actions restores the previous clipboard. Record only pass/fail and editor category. A 99.5% delivery claim requires a sufficiently large real-editor trial; unit tests alone cannot support it.
 
@@ -67,6 +67,8 @@ npm run check
 ```
 
 It proxies model requests, enforces monthly usage atomically with a Durable Object, exposes billing state, receives signed Paddle webhooks, and hosts the checkout and activation pages.
+
+The webhook updates the installation ledger when Paddle delivers a subscription event. The macOS app checks `/billing/status` on launch, after returning to the foreground, and whenever the menu opens. After opening checkout from Settings, the menu, Fix, or Peek limit notices, it polls every two seconds at first, then every ten seconds for a longer checkout (up to about ten minutes). Opening Settings or the menu does not interrupt this poll. Verify activation in the menu without opening Settings during the sandbox journey.
 
 Required production-like bindings and secrets:
 

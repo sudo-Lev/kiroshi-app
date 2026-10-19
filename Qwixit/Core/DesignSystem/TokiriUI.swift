@@ -13,7 +13,9 @@ enum TokiriUI {
     typealias Toggle = QwixitToggleStyle
     typealias ThemePicker = QwixitThemePicker
     typealias RadioOption<Selection: Hashable> = QwixitRadioOption<Selection>
+    typealias ButtonAppearance = TokiriButtonAppearance
     typealias PrimaryButton = PrimaryButtonStyle
+    typealias QuitButton = QuitButtonStyle
     typealias SubtleButton = SubtleButtonStyle
     typealias CompactButton = CompactButtonStyle
     typealias Shortcut = ShortcutBadge

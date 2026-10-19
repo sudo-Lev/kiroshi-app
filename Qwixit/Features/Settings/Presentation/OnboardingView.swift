@@ -74,13 +74,21 @@ struct OnboardingView: View {
 
     private var welcome: some View {
         VStack(spacing: 16) {
-            QwixitLockup(style: .light).frame(width: 188, height: 73)
+            welcomeFace.frame(width: 188, height: 73)
             Text("Your words. Sharper.").onboardingTitle(32)
             Text("Select text anywhere, then press a shortcut to sharpen it in place.")
                 .onboardingBody().frame(maxWidth: 570).multilineTextAlignment(.center)
             welcomeCard("Fix", fixShortcut.displayString, "Select. Shortcut. Done. Fix typos, grammar, and awkward wording without leaving the app.", KColor.violet)
                 .frame(width: 430)
         }.padding(.top, 20)
+    }
+
+    private var welcomeFace: some View {
+        (Text("[ ^_").foregroundColor(KColor.ink)
+            + Text("-").foregroundColor(KColor.magenta)
+            + Text(" ]").foregroundColor(KColor.ink))
+            .font(.system(size: 42, weight: .heavy, design: .monospaced))
+            .accessibilityLabel("Tokiri winking face")
     }
 
     private func welcomeCard(_ title: String, _ shortcut: String, _ body: String, _ accent: Color) -> some View {

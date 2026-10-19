@@ -6,14 +6,16 @@ import SwiftUI
 final class PeekPanelController {
     private let viewModel: PeekViewModel
     private let popupDismiss: PopupDismissCoordinator
+    private let onUpgrade: () -> Void
     private var panel: PeekPanel?
     private var outsideMonitor: Any?
     private var activeSelection: PeekSelection?
     private var stateObserver: AnyCancellable?
 
-    init(viewModel: PeekViewModel, popupDismiss: PopupDismissCoordinator) {
+    init(viewModel: PeekViewModel, popupDismiss: PopupDismissCoordinator, onUpgrade: @escaping () -> Void) {
         self.viewModel = viewModel
         self.popupDismiss = popupDismiss
+        self.onUpgrade = onUpgrade
         // @Published emits before the value changes; hop a run-loop turn so SwiftUI swaps
         // the content first and the panel then grows around the new layout.
         stateObserver = viewModel.$loadState
@@ -62,7 +64,8 @@ final class PeekPanelController {
             panel.contentView = NSHostingView(rootView: PeekView(
                 viewModel: viewModel,
                 onClose: { [weak self] in self?.close() },
-                onTogglePin: { [weak self] in self?.togglePin() }
+                onTogglePin: { [weak self] in self?.togglePin() },
+                onUpgrade: onUpgrade
             ))
             self.panel = panel
         }

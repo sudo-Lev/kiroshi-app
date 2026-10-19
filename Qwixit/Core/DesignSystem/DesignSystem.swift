@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import CoreText
 
 enum ContextPanelPlacement {
     static let edgeInset: CGFloat = 12
@@ -115,6 +114,11 @@ enum KColor {
     static let terminalGreen = adaptive(light: hex(0x0C7332), dark: rgb(0.28, 0.9, 0.49))
     static let warning = adaptive(light: rgb(0.82, 0.45, 0.03), dark: rgb(0.98, 0.65, 0.16))
     static let danger = adaptive(light: rgb(0.9, 0.16, 0.24), dark: rgb(1, 0.37, 0.43))
+    static let quitFill = adaptive(light: hex(0xD11538), dark: hex(0xA3142F))
+    static let quitFillHover = adaptive(light: hex(0xE2173C), dark: hex(0xB71635))
+    static let quitBorderStart = Color(nsColor: hex(0xFF8A5C))
+    static let quitBorderMiddle = Color(nsColor: hex(0xF0284A))
+    static let quitBorderEnd = Color(nsColor: hex(0xFF2D9B))
     static let receipt = adaptive(light: rgb(0.953, 0.945, 0.969), dark: rgb(0.12, 0.101, 0.151))
 
     private static func adaptive(light: NSColor, dark: NSColor) -> Color {
@@ -294,7 +298,7 @@ enum QwixitFace: Int, CaseIterable {
         case .broke: "$_00_$"
         case .empty: "x_x"
         case .upsell: "¬_¬"
-        case .advanced: "$^_^$"
+        case .advanced: "$ᴗ$"
         case .lost: "?_?"
         case .retry: ">_<"
         case .idle: "#_#"
@@ -305,6 +309,7 @@ enum QwixitFace: Int, CaseIterable {
     var shut: String {
         switch self {
         case .broke: "-_00_-"
+        case .advanced: "$ᴗ$"
         default: "-_-"
         }
     }
@@ -362,6 +367,13 @@ struct QwixitFaceView: View {
 
     var body: some View {
         ZStack {
+            // Reserve the widest face so a blink cannot move adjacent controls.
+            Text(face.text(closed: false, bracketed: bracketed))
+                .font(faceFont)
+                .hidden()
+            Text(face.text(closed: true, bracketed: bracketed))
+                .font(faceFont)
+                .hidden()
             if size >= 13 {
                 glyph.foregroundStyle(KColor.cyan).offset(x: -split)
                 glyph.foregroundStyle(KColor.magenta).offset(x: split)
@@ -374,7 +386,7 @@ struct QwixitFaceView: View {
         .task(id: AnimationID(face: face, reduceMotion: reduceMotion)) {
             closed = false
             scanningFrame = 0
-            guard !reduceMotion else { return }
+            guard !reduceMotion, face != .advanced else { return }
             if face == .scanning {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .milliseconds(320))
@@ -561,16 +573,11 @@ struct Keycap: View {
 struct ShortcutBadge: View {
     let modifiers: [String]
     let key: String
-    var compact = false
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Group {
-            if compact { pasteNoteKeycap }
-            else { standardKeycap }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel((modifiers + [key]).joined(separator: " "))
+        standardKeycap
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel((modifiers + [key]).joined(separator: " "))
     }
 
     private var standardKeycap: some View {
@@ -585,65 +592,6 @@ struct ShortcutBadge: View {
         .frame(height: 25)
         .background(KColor.surfaceHover, in: QwixitControlShape(cut: 5))
         .overlay(QwixitControlShape(cut: 5).stroke(KColor.line))
-    }
-
-    private var pasteNoteKeycap: some View {
-        HStack(spacing: 2) {
-            Text(modifiers.joined())
-                .foregroundStyle(pasteNoteColor(light: 0x6E6B7D, dark: 0xB0ABBF))
-            Text(key.uppercased())
-                .foregroundStyle(pasteNoteColor(light: 0x6D28FF, dark: 0x9661FF))
-        }
-        .font(PasteNoteFont.font(size: 8))
-        .padding(.horizontal, 3)
-        .frame(height: 11)
-        .padding(1)
-        .background {
-            ZStack {
-                FourCornerCutShape(cut: 3)
-                    .fill(pasteNoteColor(light: 0xC9C4DA, dark: 0x4A4556))
-                FourCornerCutShape(cut: 2.6)
-                    .fill(pasteNoteColor(light: 0xF2F0FA, dark: 0x251F30))
-                    .padding(1)
-            }
-        }
-    }
-
-    private func pasteNoteColor(light: UInt32, dark: UInt32) -> Color {
-        Color(nsColor: KColor.hex(colorScheme == .dark ? dark : light))
-    }
-}
-
-enum PasteNoteFont {
-    private static let graphicsFont: CGFont? = {
-        guard let data = NSDataAsset(name: "JetBrainsMonoExtraBold")?.data,
-              let provider = CGDataProvider(data: data as CFData) else { return nil }
-        return CGFont(provider)
-    }()
-
-    static func font(size: CGFloat) -> Font {
-        guard let graphicsFont else {
-            return .system(size: size, weight: .heavy, design: .monospaced)
-        }
-        return Font(CTFontCreateWithGraphicsFont(graphicsFont, size, nil, nil))
-    }
-}
-
-private struct FourCornerCutShape: Shape {
-    let cut: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX + cut, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + cut))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cut))
-            path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX + cut, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - cut))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + cut))
-            path.closeSubpath()
-        }
     }
 }
 
@@ -718,19 +666,22 @@ struct ShortcutBadgeButtonStyle: ButtonStyle {
 struct AccessStatusBadge: View {
     let granted: Bool
     var compact = false
+    var iconOnly = false
 
     private var color: Color { granted ? KColor.success : KColor.warning }
 
     var body: some View {
         HStack(spacing: compact ? 4 : 6) {
             TokiriUI.Icon(granted ? .statusSuccess : .statusWarning, size: compact ? 9 : 10)
-            Text(granted ? "Access" : "Access needed")
-                .font(.system(size: compact ? 7.5 : 9, weight: .bold, design: .monospaced))
-                .tracking(compact ? 0 : 0.2)
+            if !iconOnly {
+                Text(granted ? "Access" : "Access needed")
+                    .font(.system(size: compact ? 7.5 : 9, weight: .bold, design: .monospaced))
+                    .tracking(compact ? 0 : 0.2)
+            }
         }
         .foregroundStyle(color)
-        .padding(.horizontal, compact ? 6 : 9)
-        .frame(height: compact ? 24 : 28)
+        .padding(.horizontal, iconOnly ? 0 : compact ? 6 : 9)
+        .frame(width: iconOnly ? (compact ? 24 : 28) : nil, height: compact ? 24 : 28)
         .background(color.opacity(0.09), in: QwixitControlShape(cut: compact ? 4 : 5))
         .overlay(QwixitControlShape(cut: compact ? 4 : 5).stroke(color.opacity(0.35), lineWidth: 1))
         .accessibilityElement(children: .combine)
@@ -1132,8 +1083,15 @@ struct QwixitRadioOption<Selection: Hashable>: View {
     }
 }
 
+enum TokiriButtonAppearance: Equatable {
+    case filled
+    case soft
+    case ghost
+}
+
 struct PrimaryButtonStyle: ButtonStyle {
     var compact = false
+    var appearance: TokiriButtonAppearance = .filled
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
@@ -1141,31 +1099,111 @@ struct PrimaryButtonStyle: ButtonStyle {
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
+        let shape = QwixitControlShape(cut: compact ? 4 : 6)
+        let softBorder = LinearGradient(
+            colors: [KColor.cyan, KColor.violet, KColor.magenta],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+
         configuration.label
             .font(.system(size: compact ? 10 : 11.5, weight: .heavy, design: .rounded))
-            .foregroundStyle(.white)
+            .foregroundStyle(appearance == .filled ? Color.white : KColor.violet)
             .padding(.horizontal, compact ? 9 : 14)
             .frame(minHeight: compact ? 24 : 32)
             .background {
-                QwixitControlShape(cut: compact ? 4 : 6).fill(KColor.cyan).offset(x: -1.5, y: 1)
-                QwixitControlShape(cut: compact ? 4 : 6).fill(KColor.magenta).offset(x: 1.5, y: -1)
-                QwixitControlShape(cut: compact ? 4 : 6).fill(isHovering ? KColor.primaryActionHover : KColor.primaryAction)
+                if appearance == .filled {
+                    shape.fill(KColor.cyan).offset(x: -1.5, y: 1)
+                    shape.fill(KColor.magenta).offset(x: 1.5, y: -1)
+                    shape.fill(isHovering ? KColor.primaryActionHover : KColor.primaryAction)
+                } else {
+                    shape.fill(appearance == .ghost
+                        ? (isHovering ? KColor.violet.opacity(0.08) : Color.clear)
+                        : KColor.violet.opacity(isHovering ? 0.12 : 0.055))
+                }
             }
-            .overlay { QwixitControlShape(cut: compact ? 4 : 6).stroke(KColor.violet.opacity(0.9), lineWidth: 1) }
+            .overlay {
+                if appearance == .filled {
+                    shape.stroke(KColor.violet.opacity(0.9), lineWidth: 1)
+                } else if appearance == .soft {
+                    shape.stroke(softBorder, lineWidth: 1)
+                } else {
+                    shape.stroke(KColor.violet.opacity(isHovering ? 0.55 : 0), lineWidth: 1)
+                }
+            }
             .overlay(alignment: .topLeading) {
-                Rectangle().fill(.white.opacity(0.72)).frame(width: compact ? 12 : 15, height: 1).offset(x: compact ? 7 : 9, y: compact ? 4 : 5)
+                Rectangle()
+                    .fill(appearance == .ghost && !isHovering ? Color.clear : appearance == .filled ? Color.white.opacity(0.72) : KColor.violet.opacity(0.7))
+                    .frame(width: compact ? 12 : 15, height: 1)
+                    .offset(x: compact ? 7 : 9, y: compact ? 4 : 5)
             }
             .tokiriElectricTrace(
-                in: QwixitControlShape(cut: compact ? 4 : 6),
+                in: shape,
                 on: configuration.isPressed,
                 when: configuration.isPressed,
                 accent: KColor.cyan,
-                prominent: true
+                prominent: appearance == .filled
             )
-            .shadow(color: KColor.violet.opacity(isHovering ? (colorScheme == .dark ? 0.24 : 0.16) : 0.12), radius: isHovering ? (compact ? 6 : 8) : (compact ? 4 : 5), y: compact ? 2 : 3)
+            .shadow(color: KColor.violet.opacity(appearance == .filled
+                ? (isHovering ? (colorScheme == .dark ? 0.24 : 0.16) : 0.12)
+                : appearance == .soft ? (isHovering ? 0.10 : 0.04) : 0),
+                radius: isHovering ? (compact ? 6 : 8) : (compact ? 4 : 5), y: compact ? 2 : 3)
             .opacity(isEnabled ? (configuration.isPressed ? 0.86 : 1) : 0.45)
             .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? (compact ? 0.97 : 0.96) : isHovering ? (compact ? 1.015 : 1.025) : 1)
             .offset(y: reduceMotion ? 0 : configuration.isPressed ? (compact ? 1 : 2) : 0)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.14), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
+    }
+}
+
+struct QuitButtonStyle: ButtonStyle {
+    var compact = false
+    var appearance: TokiriButtonAppearance = .filled
+
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    private var cut: CGFloat { compact ? 4 : 6 }
+
+    func makeBody(configuration: Configuration) -> some View {
+        let isFilled = appearance == .filled
+        let shape = QwixitControlShape(cut: cut)
+        let border = LinearGradient(
+            colors: [KColor.quitBorderStart, KColor.quitBorderMiddle, KColor.quitBorderEnd]
+                .map { $0.opacity(isFilled ? 1 : 0.8) },
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+
+        configuration.label
+            .font(.system(size: compact ? 10 : 11.5, weight: .heavy, design: .rounded))
+            .foregroundStyle(isFilled ? Color.white : KColor.danger)
+            .padding(.horizontal, compact ? 9 : 14)
+            .frame(minHeight: compact ? 26 : 32)
+            .background {
+                shape.fill(isFilled
+                    ? (isHovering ? KColor.quitFillHover : KColor.quitFill)
+                    : KColor.danger.opacity(isHovering ? 0.11 : 0.05))
+            }
+            .overlay { shape.stroke(border, lineWidth: isFilled ? 1.5 : 1) }
+            .overlay(alignment: .topLeading) {
+                Rectangle()
+                    .fill(isFilled ? Color.white : KColor.quitBorderStart)
+                    .frame(width: compact ? 12 : 15, height: 1)
+                    .offset(x: compact ? 7 : 9, y: compact ? 4 : 5)
+            }
+            .tokiriElectricTrace(
+                in: shape,
+                on: configuration.isPressed,
+                when: configuration.isPressed,
+                accent: KColor.quitBorderEnd
+            )
+            .contentShape(shape)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.86 : 1) : 0.45)
+            .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.97 : 1)
+            .offset(y: reduceMotion ? 0 : configuration.isPressed ? 1 : 0)
             .animation(reduceMotion ? nil : .snappy(duration: 0.14), value: configuration.isPressed)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isHovering)
             .onHover { isHovering = isEnabled && $0 }
