@@ -244,7 +244,7 @@ struct MenuBarView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .buttonStyle(TokiriUI.PrimaryButton(compact: true, appearance: .soft))
+        .buttonStyle(TokiriUI.PrimaryButton(compact: true, appearance: .filled))
         .contentShape(Rectangle())
         .accessibilityLabel(title)
     }
