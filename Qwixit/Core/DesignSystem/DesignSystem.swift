@@ -1109,8 +1109,8 @@ struct PrimaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: compact ? 10 : 11.5, weight: .heavy, design: .rounded))
             .foregroundStyle(appearance == .filled ? Color.white : KColor.violet)
-            .padding(.horizontal, compact ? 9 : 14)
-            .frame(minHeight: compact ? 24 : 32)
+            .padding(.horizontal, compact ? 12 : 14)
+            .frame(minHeight: compact ? 28 : 32)
             .background {
                 if appearance == .filled {
                     shape.fill(KColor.cyan).offset(x: -1.5, y: 1)
@@ -1180,8 +1180,8 @@ struct QuitButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: compact ? 10 : 11.5, weight: .heavy, design: .rounded))
             .foregroundStyle(isFilled ? Color.white : KColor.danger)
-            .padding(.horizontal, compact ? 9 : 14)
-            .frame(minHeight: compact ? 24 : 32)
+            .padding(.horizontal, compact ? 12 : 14)
+            .frame(minHeight: compact ? 28 : 32)
             .background {
                 shape.fill(isFilled
                     ? (isHovering ? KColor.quitFillHover : KColor.quitFill)

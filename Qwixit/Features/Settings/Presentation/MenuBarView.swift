@@ -214,19 +214,25 @@ struct MenuBarView: View {
 
     private var actionsRow: some View {
         GeometryReader { geometry in
-            let columnWidth = (geometry.size.width - 28) / 3
-            HStack(spacing: 6) {
-                actionCell(icon: .settings, title: "Settings", action: onOpenSettings)
-                    .frame(width: columnWidth, height: 28)
+            let contentWidth = geometry.size.width - 24
+            let halfWidth = (contentWidth - 8) / 2
+
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    actionCell(icon: .settings, title: "Settings", action: onOpenSettings)
+                        .frame(width: halfWidth, height: 32)
+                    quitActionCell
+                        .frame(width: halfWidth, height: 32)
+                }
+
                 actionCell(icon: .onboarding, title: "Onboarding", action: onShowOnboarding)
-                    .frame(width: columnWidth, height: 28)
-                quitActionCell
-                    .frame(width: columnWidth, height: 28)
+                    .frame(width: contentWidth, height: 32)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .frame(height: 40)
+        .frame(height: 90)
         .background(KColor.canvasRaised)
     }
 
