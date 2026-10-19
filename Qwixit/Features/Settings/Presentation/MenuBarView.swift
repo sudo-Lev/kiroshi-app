@@ -151,10 +151,10 @@ struct MenuBarView: View {
             .accessibilityLabel(settingsViewModel.isUnlimited ? "Advanced plan active" : "Free plan")
             VStack(alignment: .leading, spacing: 2) {
                 Text(billingTitle)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundStyle(settingsViewModel.isUnlimited ? KColor.terminalGreen : KColor.ink)
                 Text(billingDetail)
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(KColor.secondary)
             }
             .lineLimit(1)
