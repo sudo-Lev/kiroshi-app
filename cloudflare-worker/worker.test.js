@@ -602,6 +602,14 @@ test("retrying a clean operation neither charges nor counts another clean", asyn
   assert.equal(storage.values.get("clean").count, 1);
 });
 
+test("Slack style may compress a long message, but not to nothing", () => {
+  const text = "Dear colleagues, ".repeat(36);
+  const task = parseQwixTask({ task: "action", text, action: "slack" });
+  const reply = (output) => evaluateQwixOutput(task, { status: "completed", output: [{ content: [{ type: "output_text", text: output }] }] });
+  assert.equal(reply("Heads up: deploy moves to tomorrow morning, see you then everyone!").kind, "text");
+  assert.equal(reply("ok").kind, "rejected");
+});
+
 test("an Action with an identical result is still charged", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
   await withOpenAI(() => modelResponse("Hello there."), async () => {
