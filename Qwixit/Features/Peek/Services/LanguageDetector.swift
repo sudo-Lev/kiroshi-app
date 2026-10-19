@@ -52,7 +52,7 @@ struct LanguageDetector: LanguageDetecting {
         recognizer.processString(text)
         guard let language = recognizer.dominantLanguage else { return nil }
         let code = language.rawValue
-        let name = Locale.current.localizedString(forLanguageCode: code) ?? code.uppercased()
+        let name = Locale.current.localizedString(forLanguageCode: code) ?? "Unknown language"
         return DetectedLanguage(code: code, displayName: name)
     }
 }

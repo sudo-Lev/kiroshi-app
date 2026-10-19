@@ -137,16 +137,45 @@ final class PaletteViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testUnmatchedQueryNeverRunsAsInstruction() {
-        let viewModel = makePalette(sourceLanguage: "en")
+    func testUnmatchedQueryBecomesRunnableRewrite() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer { defaults.removePersistentDomain(forName: #function) }
+        let viewModel = makePalette(sourceLanguage: "en", defaults: defaults)
         var ran: PaletteAction?
         viewModel.onRun = { ran = $0 }
 
         viewModel.query = "write a python script"
         viewModel.submit()
 
-        XCTAssertTrue(viewModel.visibleActions.isEmpty)
-        XCTAssertNil(ran)
+        XCTAssertEqual(viewModel.visibleActions.map(\.id), ["customRewrite"])
+        XCTAssertEqual(ran?.name, "Rewrite: \"write a python script\"")
+        XCTAssertEqual(ran?.prompt, "Rewrite the selected text according to this instruction: write a python script")
+    }
+
+    @MainActor
+    func testSearchFiltersTargetNamesAndSelectsTheFirstMatch() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer { defaults.removePersistentDomain(forName: #function) }
+        let viewModel = makePalette(sourceLanguage: "en", defaults: defaults)
+
+        viewModel.query = "polish"
+
+        XCTAssertEqual(viewModel.choices.map(\.id), ["translate:pl"])
+        XCTAssertEqual(viewModel.selectedIndex, 0)
+        XCTAssertEqual(viewModel.contextLabel, "English · 3 words")
+    }
+
+    @MainActor
+    func testLastUsedChoiceIsPreselectedAndPrioritizedWithinItsGroup() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer { defaults.removePersistentDomain(forName: #function) }
+        let first = makePalette(sourceLanguage: "en", defaults: defaults)
+        first.runChoice(at: 3)
+
+        let reopened = makePalette(sourceLanguage: "en", defaults: defaults)
+
+        XCTAssertEqual(reopened.selectedAction?.id, "formal")
+        XCTAssertEqual(reopened.choices[reopened.translationChoices.count].action.id, "formal")
     }
 
     @MainActor
@@ -200,15 +229,24 @@ final class PaletteViewModelTests: XCTestCase {
     }
 
     @MainActor
-    private func makePalette(sourceLanguage: String) -> PaletteViewModel {
-        let viewModel = PaletteViewModel(registry: ActionRegistry(), detector: FixedLanguageDetector(code: sourceLanguage))
+    private func makePalette(sourceLanguage: String, defaults: UserDefaults = UserDefaults(suiteName: UUID().uuidString)!) -> PaletteViewModel {
+        let viewModel = PaletteViewModel(
+            registry: ActionRegistry(),
+            detector: FixedLanguageDetector(code: sourceLanguage),
+            defaults: defaults
+        )
         viewModel.open(capture: PaletteCapture(element: nil, text: "some selected text", range: nil, bounds: nil, fallbackPoint: .zero, processIdentifier: nil))
         return viewModel
     }
 
     @MainActor
     private func makeRefiningPalette() -> PaletteViewModel {
-        let viewModel = PaletteViewModel(registry: RefineActionRegistry(), detector: FixedLanguageDetector(code: "en"))
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let viewModel = PaletteViewModel(
+            registry: RefineActionRegistry(),
+            detector: FixedLanguageDetector(code: "en"),
+            defaults: defaults
+        )
         viewModel.open(capture: PaletteCapture(element: nil, text: "some selected text", range: nil, bounds: nil, fallbackPoint: .zero, processIdentifier: nil))
         return viewModel
     }
@@ -276,7 +314,16 @@ private struct RefineActionRegistry: ActionRegistering {
 
 private struct FixedLanguageDetector: LanguageDetecting {
     let code: String
-    func detect(_ text: String) -> DetectedLanguage? { DetectedLanguage(code: code, displayName: code) }
+    func detect(_ text: String) -> DetectedLanguage? {
+        let name = switch code.split(separator: "-").first?.lowercased() {
+        case "en": "English"
+        case "uk": "Ukrainian"
+        case "pl": "Polish"
+        case "fr": "French"
+        default: code
+        }
+        return DetectedLanguage(code: code, displayName: name)
+    }
 }
 
 private final class PaletteHotKeySpy: HotKeyManaging {

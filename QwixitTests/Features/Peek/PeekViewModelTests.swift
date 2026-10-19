@@ -113,6 +113,65 @@ final class PeekViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testSearchFiltersFullLanguageNamesAndDigitsChooseVisibleRows() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer { defaults.removePersistentDomain(forName: #function) }
+        let client = PeekClientSpy()
+        let viewModel = PeekViewModel(
+            client: client,
+            detector: StubLanguageDetector(code: "en"),
+            defaults: defaults
+        )
+        viewModel.open(text: "A short selected sentence.")
+        viewModel.query = "French"
+
+        XCTAssertEqual(viewModel.visibleLanguages.map(\.id), ["fr"])
+        XCTAssertEqual(viewModel.selectedChoiceIndex, 0)
+        viewModel.chooseNumber(1)
+        await waitUntil { !client.requests.isEmpty }
+
+        XCTAssertEqual(client.requests.first?.targetLanguage, "fr")
+    }
+
+    @MainActor
+    func testRememberedTargetAppearsFirstAndIsPreselected() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer { defaults.removePersistentDomain(forName: #function) }
+        defaults.set("pl", forKey: PeekPreferenceKey.targetLanguage)
+        let viewModel = PeekViewModel(
+            client: PeekClientSpy(),
+            detector: StubLanguageDetector(code: "en"),
+            defaults: defaults
+        )
+
+        viewModel.open(text: "A short selected sentence.")
+
+        XCTAssertEqual(viewModel.visibleLanguages.first?.id, "pl")
+        XCTAssertEqual(viewModel.selectedChoiceIndex, 0)
+    }
+
+    @MainActor
+    func testCyclingLanguageRunsTheNextTranslationInPlace() async {
+        let defaults = UserDefaults(suiteName: #function)!
+        defer { defaults.removePersistentDomain(forName: #function) }
+        let client = PeekClientSpy()
+        let viewModel = PeekViewModel(
+            client: client,
+            detector: StubLanguageDetector(code: "en"),
+            defaults: defaults
+        )
+        viewModel.open(text: "A short selected sentence.")
+        viewModel.chooseNumber(1)
+        await waitUntil { viewModel.loadState == .loaded }
+
+        viewModel.cycleLanguage()
+        await waitUntil { client.requests.count > 1 }
+
+        XCTAssertEqual(client.requests.map(\.targetLanguage), ["uk", "pl"])
+        XCTAssertEqual(viewModel.targetLanguageName, "Polski")
+    }
+
+    @MainActor
     func testThirdInlineTranslationChoiceRunsImmediately() async {
         let client = PeekClientSpy()
         let viewModel = PeekViewModel(client: client, detector: StubLanguageDetector(code: "en"))

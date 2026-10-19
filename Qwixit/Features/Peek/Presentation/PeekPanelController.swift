@@ -11,6 +11,7 @@ final class PeekPanelController {
     private var outsideMonitor: Any?
     private var activeSelection: PeekSelection?
     private var stateObserver: AnyCancellable?
+    private var queryObserver: AnyCancellable?
 
     init(viewModel: PeekViewModel, popupDismiss: PopupDismissCoordinator, onUpgrade: @escaping () -> Void) {
         self.viewModel = viewModel
@@ -22,6 +23,13 @@ final class PeekPanelController {
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in self?.resize(for: state) }
+        queryObserver = viewModel.$query
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                resize(for: self.viewModel.loadState)
+            }
     }
 
     var isVisible: Bool { panel?.isVisible == true }
@@ -61,14 +69,14 @@ final class PeekPanelController {
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.isMovableByWindowBackground = true
             panel.keyHandler = { [weak self] event in self?.handle(event) ?? false }
-            panel.contentView = NSHostingView(rootView: PeekView(
-                viewModel: viewModel,
-                onClose: { [weak self] in self?.close() },
-                onTogglePin: { [weak self] in self?.togglePin() },
-                onUpgrade: onUpgrade
-            ))
             self.panel = panel
         }
+        panel?.contentView = NSHostingView(rootView: PeekView(
+            viewModel: viewModel,
+            onClose: { [weak self] in self?.close() },
+            onTogglePin: { [weak self] in self?.togglePin() },
+            onUpgrade: onUpgrade
+        ))
         panel?.setContentSize(size)
         position(size: size)
         panel?.alphaValue = 0
@@ -157,14 +165,30 @@ final class PeekPanelController {
     }
 
     private func preferredSize(for state: PeekLoadState) -> NSSize {
-        if viewModel.isPinned { return NSSize(width: 400, height: 560) }
+        if viewModel.isPinned { return NSSize(width: 360, height: 560) }
         return switch state {
-        case .idle: NSSize(width: 360, height: 185)
-        case .loading, .success: NSSize(width: 400, height: 150)
-        case .loaded: NSSize(width: 400, height: 340)
-        case .limitReached: NSSize(width: 420, height: 232)
-        case .failed(let message): NSSize(width: 380, height: message == "Select some text first." ? 165 : 200)
+        case .idle:
+            let rowCount = max(viewModel.visibleLanguages.count, 1)
+            let height = 2 + 48 + 1 + 20 + rowCount * 41 + max(rowCount - 1, 0) * 6 + 1 + 32
+            NSSize(width: 360, height: CGFloat(height))
+        case .loading, .success: NSSize(width: 360, height: 150)
+        case .loaded: NSSize(width: 360, height: resultHeight)
+        case .limitReached: NSSize(width: 360, height: 300)
+        case .failed(let message): NSSize(width: 360, height: message == "Select some text first." ? 165 : 200)
         }
+    }
+
+    private var resultHeight: CGFloat {
+        guard let result = viewModel.result else { return 150 }
+        let font = NSFont.systemFont(ofSize: 15, weight: .regular)
+        let textSize = (result.plainText as NSString).boundingRect(
+            with: NSSize(width: 326, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font]
+        ).size
+        let paragraphs = result.plainText.components(separatedBy: "\n\n").count
+        let paragraphSpacing = CGFloat(max(paragraphs - 1, 0) * 8)
+        return min(max(2 + 48 + 1 + ceil(textSize.height) + paragraphSpacing + 30 + 1 + 32, 150), 334)
     }
 
     private func appKitRect(_ rect: CGRect) -> CGRect? {
@@ -191,6 +215,7 @@ final class PeekPanelController {
             case 124, 125: viewModel.moveChoice(1)
             case 36: viewModel.submitChoice()
             default:
+                guard viewModel.query.isEmpty else { return false }
                 guard let number = event.charactersIgnoringModifiers.flatMap(Int.init) else { return false }
                 viewModel.chooseNumber(number)
             }
@@ -198,9 +223,10 @@ final class PeekPanelController {
         }
         switch event.keyCode {
         case 53: close()
+        case 48: viewModel.cycleLanguage(step: event.modifierFlags.contains(.shift) ? -1 : 1)
         case 36:
             if case .failed = viewModel.loadState { viewModel.retry() }
-            else { return false }
+            else { viewModel.copyResult() }
         case 18...21:
             guard let number = event.charactersIgnoringModifiers.flatMap(Int.init),
                   (1...viewModel.languages.count).contains(number) else { return false }

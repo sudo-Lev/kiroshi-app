@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -16,6 +17,7 @@ final class PalettePanelController {
     private var actionTask: Task<Void, Never>?
     private var refineTask: Task<Void, Never>?
     private var followUpTask: Task<Void, Never>?
+    private var choicesObserver: AnyCancellable?
 
     init(
         viewModel: PaletteViewModel,
@@ -32,6 +34,10 @@ final class PalettePanelController {
         self.replacementRecovery = replacementRecovery
         self.popupDismiss = popupDismiss
         resultCard = ResultCardController(popupDismiss: popupDismiss)
+        choicesObserver = viewModel.$choices
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.resizeForCurrentChoices() }
         self.hud.onUndo = { [weak self] in Task { @MainActor in await self?.bridge.undo() } }
         resultCard.onHide = { [weak self] in self?.followUpTask?.cancel() }
         self.viewModel.onRun = { [weak self] action in self?.run(action) }
@@ -62,7 +68,7 @@ final class PalettePanelController {
     }
 
     private func show(capture: PaletteCapture) {
-        let size = NSSize(width: 440, height: 190)
+        let size = preferredSize()
         if panel == nil {
             let panel = KeyboardPanel(contentRect: .init(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.level = .popUpMenu
@@ -78,10 +84,7 @@ final class PalettePanelController {
         // A reused NSPanel keeps the old SwiftUI FocusState alive. Rebuild the
         // host on every opening so arrow-key selection and its visual focus are
         // restored just like on the first invocation.
-        panel?.contentView = NSHostingView(rootView: PaletteView(
-            viewModel: viewModel,
-            onClose: { [weak self] in self?.close() }
-        ))
+        panel?.contentView = NSHostingView(rootView: PaletteView(viewModel: viewModel))
         panel?.setContentSize(size)
         position(capture: capture, size: size)
         panel?.alphaValue = 0
@@ -312,6 +315,35 @@ final class PalettePanelController {
             panelSize: size
         ) else { return }
         panel.setFrameOrigin(origin)
+    }
+
+    private func preferredSize() -> NSSize {
+        let rowCount = max(viewModel.choices.count, 1)
+        let dividerCount = viewModel.showsRewriteDivider ? 1 : 0
+        let listGaps = max(rowCount - 1, 0) + dividerCount
+        let height = 2 + 48 + 1 + 20 + rowCount * 41 + listGaps * 6
+            + dividerCount + 1 + 32
+        return NSSize(width: 360, height: CGFloat(height))
+    }
+
+    private func resizeForCurrentChoices() {
+        guard let panel, panel.isVisible else { return }
+        let size = preferredSize()
+        let current = panel.frame
+        guard current.size != size else { return }
+        let visible = (panel.screen ?? NSScreen.main)?.visibleFrame
+        var frame = NSRect(
+            x: current.minX,
+            y: current.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+        if let visible {
+            let inset = ContextPanelPlacement.edgeInset
+            frame.origin.x = min(max(frame.minX, visible.minX + inset), visible.maxX - size.width - inset)
+            frame.origin.y = min(max(frame.minY, visible.minY + inset), visible.maxY - size.height - inset)
+        }
+        panel.setFrame(frame, display: true)
     }
 }
 private final class KeyboardPanel: NSPanel {

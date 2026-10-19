@@ -17,13 +17,16 @@ Use `TokiriUI` for shared appearance and interaction primitives. Feature-specifi
 | Explicit Light/Dark choice | `TokiriUI.ThemePicker` | Segmented, not a boolean toggle. |
 | One of several choices | `TokiriUI.RadioOption` | Compact radio option. |
 | Primary, subtle, compact, and Quit buttons | `TokiriUI.PrimaryButton`, `.SubtleButton`, `.CompactButton`, `.QuitButton` | Primary has filled, soft, and transparent idle appearances; use filled for menu actions and prominent calls to action, and soft for intentionally quieter actions. Compact primary and Quit buttons use 12 pt horizontal padding and a 28 pt minimum height. Quit defaults to soft, matching the menu action row's button size while keeping its warm-to-pink outline; filled is available when a destructive action needs more emphasis. They share their cut corners, highlight, and press trace across appearances. |
+| Lighter popup list selection | `TokiriUI.PopupSelectedButton`, `.PopupPlainRowButton`, and `View.tokiriPopupPanel()` | Shared by Actions and Peek. One selected row uses the dark gradient-edge button; unselected rows stay plain text with only a hover wash. The popup surface uses 12 pt cut corners and adaptive border/divider tokens. |
 | Hotkey badge, dismissible hotkey badge, popup close badge, access badge | `TokiriUI.Shortcut`, `.ShortcutButton`, `.PopupCloseButton`, `.AccessBadge` | The popup close button reuses the shortcut badge and receives its visible binding from `HotkeyCatalog.popupDismiss`; panel controllers own the actual dismissal. The access badge supports an icon-only layout with its status in the accessibility label. |
 | Paywall usage strip | `QwixitPaywallUsageStrip` | Shared 30-action usage state for limit surfaces. |
 | Meaningful icon | `TokiriUI.Icon(.name, size:)` | Decorative by default; label an icon-only parent control. |
 
 Other established primitives in `DesignSystem.swift` (panel modifier, card, mark/lockup, face, keycap) are part of TokiriUI's app-local implementation even where call sites still use their legacy names. Preserve current behavior while migrating them deliberately.
 
-`HotkeyCatalog` in `Infrastructure/Hotkeys/GlobalHotKey.swift` holds the default Fix, Actions, Peek, and popup dismissal bindings. Interactive transient panels show `⌥⌘X` in the shared close button. The app routes that key to the frontmost visible popup before Fix; when Fix is remapped, popup dismissal remains `⌥⌘X`. Click-through processing and success notices have no close control.
+The Actions and Peek pickers use a 360 pt one-column list shell. Light surfaces use the compact popup border and divider colors; dark surfaces resolve to the existing dark line, surface, ink, secondary, and primary-action tokens.
+
+`HotkeyCatalog` in `Infrastructure/Hotkeys/GlobalHotKey.swift` holds the default Fix, Actions, Peek, and popup dismissal bindings. Most interactive transient panels show `⌥⌘X` in the shared close button; the lighter Actions and Peek pick/result shells keep the same global dismissal binding without a visible badge. The app routes that key to the frontmost visible popup before Fix; when Fix is remapped, popup dismissal remains `⌥⌘X`. Click-through processing and success notices have no close control.
 
 The Fix completion notice uses the shared compact status HUD without an additional shortcut badge. `TokiriUI.Shortcut` remains available for controls and settings.
 
@@ -53,7 +56,7 @@ Never substitute a stock symbol for a missing primary product icon without recor
 
 | Gap | Current fallback | Needed before closing |
 |---|---|---|
-| Search/input field and menu/picker styling | Native SwiftUI controls in feature views | Define only after a repeated use with consistent behavior appears. |
+| Search/input field styling | Native SwiftUI `TextField` in feature views | Keep native focus, selection, and text-entry behavior; define shared styling after repeated use establishes a stable pattern. |
 | Developer-only usage scenario selector | Native segmented `Picker` | Decide whether it merits a shared multi-option control; keep native for now. |
 | Feature-local plain/native buttons (for example the menu-bar access badge) | SwiftUI `.plain` or native button behavior | Migrate only when a shared interaction or matching surface is defined; these do not yet use the TokiriUI edge trace. The menu actions use the shared Primary and Quit button styles. |
 | Distinctive utility icons beyond primary product icons | Catalogued SF Symbols for close, arrows, lock, network, status, and platform cues | Curate vector replacements only where repeated use or brand value outweighs the clarity of a familiar macOS symbol. No feature view selects an SF Symbol directly. |

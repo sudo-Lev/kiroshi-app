@@ -102,6 +102,9 @@ enum KColor {
     static let surface = adaptive(light: .white, dark: rgb(0.09, 0.078, 0.122))
     static let surfaceHover = adaptive(light: rgb(0.965, 0.955, 0.992), dark: rgb(0.145, 0.122, 0.19))
     static let line = adaptive(light: hex(0xDCDBE2), dark: hex(0x34323C))
+    static let popupBorder = adaptive(light: hex(0xD6D4DE), dark: hex(0x34323C))
+    static let popupDivider = adaptive(light: hex(0xECEBF0), dark: hex(0x34323C))
+    static let popupMuted = adaptive(light: hex(0x9A97A8), dark: rgb(0.69, 0.67, 0.75))
     static let violet = adaptive(light: rgb(0.427, 0.157, 1), dark: rgb(0.59, 0.38, 1))
     /// Softer violet reserved for the Processing HUD; `violet` stays for primary buttons and focus.
     static let hudTone = adaptive(light: hex(0x7B5CF0), dark: hex(0xA98BFF))
@@ -173,6 +176,22 @@ extension View {
 
     func qwixitPanel(cornerRadius: CGFloat = 14, accent: Color? = nil) -> some View {
         modifier(QwixitPanelModifier(cornerRadius: cornerRadius, accent: accent))
+    }
+
+    func tokiriPopupPanel() -> some View { modifier(TokiriPopupPanelModifier()) }
+}
+
+private struct TokiriPopupPanelModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = QwixitControlShape(cut: 12)
+        content
+            .background(KColor.surface)
+            .clipShape(shape)
+            .overlay {
+                QwixitControlShape(cut: 11.5)
+                    .stroke(KColor.popupBorder, lineWidth: 1)
+                    .padding(0.5)
+            }
     }
 }
 
@@ -1299,6 +1318,65 @@ struct SelectionButtonStyle: ButtonStyle {
             .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.985 : 1)
             .animation(reduceMotion ? nil : .snappy(duration: 0.13), value: configuration.isPressed)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isHovering)
+            .onHover { isHovering = isEnabled && $0 }
+    }
+}
+
+/// The one filled row used by the lighter Actions and Peek pickers.
+struct PopupSelectedButtonStyle: ButtonStyle {
+    var compact = false
+
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        let cut: CGFloat = compact ? 6 : 8
+        let shape = QwixitControlShape(cut: cut)
+        let innerShape = QwixitControlShape(cut: cut - 0.6)
+        let border = LinearGradient(
+            stops: [
+                .init(color: KColor.cyan, location: 0),
+                .init(color: KColor.violet, location: 0.30),
+                .init(color: KColor.violet, location: 0.70),
+                .init(color: KColor.magenta, location: 1)
+            ],
+            startPoint: .bottomLeading,
+            endPoint: .topTrailing
+        )
+        let contentHeight: CGFloat = compact ? 26 : 38
+
+        configuration.label
+            .font(.system(size: compact ? 13 : 14, weight: .bold))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, compact ? 10 : 0)
+            .frame(maxWidth: compact ? nil : .infinity, minHeight: contentHeight, maxHeight: contentHeight)
+            .background(KColor.primaryAction, in: innerShape)
+            .overlay(alignment: .topLeading) {
+                Rectangle()
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: compact ? 10 : 16, height: 1.5)
+                    .offset(x: compact ? 7 : 10, y: compact ? 3 : 4)
+            }
+            .padding(1.5)
+            .background(border, in: shape)
+            .clipShape(shape)
+            .contentShape(shape)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.9 : 1) : 0.45)
+            .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.985 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.13), value: configuration.isPressed)
+    }
+}
+
+/// Plain text rows gain only a quiet hover/press wash; they never acquire a border.
+struct PopupPlainRowButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background((configuration.isPressed || isHovering) ? KColor.surfaceHover : .clear)
+            .contentShape(Rectangle())
+            .opacity(isEnabled ? 1 : 0.45)
             .onHover { isHovering = isEnabled && $0 }
     }
 }
