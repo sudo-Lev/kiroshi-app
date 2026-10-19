@@ -143,11 +143,11 @@ struct MenuBarView: View {
         HStack(spacing: 7) {
             QwixitFaceView(
                 face: settingsViewModel.isUnlimited ? .advanced : .hello,
-                size: 12,
+                size: 13,
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                 color: settingsViewModel.isUnlimited ? KColor.terminalGreen : KColor.ink
             )
-            .frame(width: 72, height: 34)
+            .frame(width: 56, height: 30)
             .accessibilityLabel(settingsViewModel.isUnlimited ? "Advanced plan active" : "Free plan")
             VStack(alignment: .leading, spacing: 2) {
                 Text(billingTitle)
@@ -193,7 +193,7 @@ struct MenuBarView: View {
             )
         }
         .padding(.horizontal, 14)
-        .frame(height: 60)
+        .frame(height: 42)
         .background {
             if settingsViewModel.isUnlimited {
                 LinearGradient(

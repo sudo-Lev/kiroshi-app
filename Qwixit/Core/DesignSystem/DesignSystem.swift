@@ -298,7 +298,7 @@ enum QwixitFace: Int, CaseIterable {
         case .broke: "$_00_$"
         case .empty: "x_x"
         case .upsell: "¬_¬"
-        case .advanced: "$ᴗ$"
+        case .advanced: "$_$"
         case .lost: "?_?"
         case .retry: ">_<"
         case .idle: "#_#"
@@ -309,7 +309,7 @@ enum QwixitFace: Int, CaseIterable {
     var shut: String {
         switch self {
         case .broke: "-_00_-"
-        case .advanced: "$ᴗ$"
+        case .advanced: "$_$"
         default: "-_-"
         }
     }

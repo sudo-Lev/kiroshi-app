@@ -286,7 +286,7 @@ struct OnboardingView: View {
                 cheatRow(HotkeyCatalog.actions.displayString, "Actions", "Rewrite, translate, or change tone.")
             }.frame(width: 520).qwixitPanel()
             HStack(spacing: 12) {
-                HStack(spacing: 8) { TokiriUI.Icon(.wifi, size: 11); QwixitMenuBarLogo().frame(width: 38, height: 15); Text("9:41") }.font(.system(size: 11, weight: .medium)).foregroundStyle(.white).padding(.horizontal, 12).frame(height: 30).background(KColor.ink).clipShape(Capsule())
+                HStack(spacing: 8) { TokiriUI.Icon(.wifi, size: 11); QwixitMenuBarLogo().frame(width: 38, height: 15); Text("9:41") }.font(.system(size: 11, weight: .medium)).foregroundStyle(KColor.surface).padding(.horizontal, 12).frame(height: 30).background(KColor.ink).clipShape(Capsule())
                 Text("Tokiri lives in your menu bar — settings and usage are there.").font(.system(size: 12.5)).foregroundStyle(KColor.secondary)
             }
         }.padding(.top, 14)

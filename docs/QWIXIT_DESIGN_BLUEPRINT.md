@@ -217,7 +217,7 @@ Faces are text, always monospaced, kept on one line, and usually bracketed. They
 | Broke | `[ $_00_$ ]` | Out of tokens |
 | Empty | `[ x_x ]` | 30/30 used |
 | Upsell | `[ ¬_¬ ]` | Advanced plan prompt |
-| Advanced | `[ $ᴗ$ ]` | Advanced plan active; more room to work. It stays visible without blinking to another expression. |
+| Advanced | `[ $_$ ]` | Advanced plan active; more room to work. It stays visible without blinking to another expression. |
 | Lost | `[ ?_? ]` | No network signal |
 | Retry | `[ @_@ ]` | Reconnecting or retrying |
 | Idle | `[ #_# ]` | Offline waiting |
@@ -226,7 +226,7 @@ Faces are text, always monospaced, kept on one line, and usually bracketed. They
 ### Face sizing
 
 - Processing HUD: 13 pt.
-- Menu and small status: 12 pt.
+- Menu and small status: 13 pt, using the cyan/magenta chromatic split.
 - Peek inline states: 12–15 pt.
 - Upgrade card: 14–16 pt.
 - Onboarding guide: 12 pt inside a 58 × 36 container.
@@ -631,6 +631,7 @@ Onboarding is a real interactive rehearsal, not a slideshow.
 - Content maximum width: 660.
 - Footer: 58 pt, horizontal padding 28, top divider.
 - Steps: **Access → Fix → Actions**.
+- Done-step menu-bar callout: use an `ink` capsule with `surface`-colored Wi-Fi, logo, and time so the foreground stays legible in both themes.
 
 ### Step 1: Accessibility access
 
@@ -754,7 +755,7 @@ Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have 
 - Wrapper: `QwixitControlShape` with a 16 pt chamfer on the top-left and bottom-right corners, plus a 1 pt `line` stroke; do not use a rounded outer container.
 - AppKit host: borderless, nonactivating panel with a native shadow; do not expose the system popover bubble or chevron.
 - Utility bar: 26 pt, horizontal padding 12, version left and cyan `Cloud` right.
-- Status row: 60 pt, horizontal padding 14. It contains the plan face, a two-line plan block, a flexible spacer, the shared `⌥⌘X` close badge, and an icon-only access badge. Use 12 pt bold monospace for the plan title and 10.5 pt monospace for its detail. The entire Advanced row has a soft success-green gradient and green divider, with `[ $ᴗ$ ]` and the plan title in a readable green. The entire Free row uses a neutral surface and `[ ^_^ ]` face. The face has no separate badge background. The close badge is a button, not a static shortcut hint.
+- Status row: 42 pt (30% shorter than the previous 60 pt row), horizontal padding 14. It contains the plan face in a 56 × 30 pt slot, a two-line plan block, a flexible spacer, the shared `⌥⌘X` close badge, and an icon-only access badge. Use 12 pt bold monospace for the plan title and 10.5 pt monospace for its detail. The entire Advanced row has a soft success-green gradient and green divider, with `[ $_$ ]` and the plan title in a readable green. The entire Free row uses a neutral surface and `[ ^_^ ]` face. The face has no separate badge background. The close badge is a button, not a static shortcut hint.
 - At the free limit, `Get Advanced` replaces the spacer and the close badge may hide to fit. The popup dismissal shortcut still works.
 - Show a compact `Preview & Approve` switch below the status row, bound to the same preference as Settings. Include a one-line status hint that nothing changes until approval.
 - Bottom actions: two rows with 32 pt buttons and 8 pt gaps. Settings and Quit share the upper row at 50% width each; Onboarding spans the full width below. Use 12 pt horizontal and 9 pt vertical outer padding. Settings and Onboarding use the filled shared `PrimaryButton` style. Quit uses the soft shared `QuitButton` style with a light danger tint and warm-to-pink border. Compact primary and Quit buttons use 12 pt horizontal padding and a 28 pt minimum height. The Settings footer uses the same soft Quit style.
