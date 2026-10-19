@@ -6,7 +6,7 @@ enum PeekMode: String, CaseIterable, Codable, Sendable {
 }
 
 enum PeekInputLimit {
-    static let maxUTF16Units = 8_000
+    static let maxUTF16Units = QwixitAPI.maxTextUTF16Units
 
     static func accepts(_ text: String) -> Bool {
         text.utf16.count <= maxUTF16Units
@@ -25,6 +25,8 @@ struct PeekRequest: Sendable {
     let targetLanguage: String
     let mode: PeekMode
     let length: PeekSummaryLength
+    /// Shared by every retry of the same panel request so the Worker charges it once.
+    let operationID: String
 }
 
 protocol PeekClientProtocol: AnyObject {
@@ -48,7 +50,7 @@ actor PeekClient: PeekClientProtocol {
                 do {
                     var urlRequest = URLRequest(url: OpenAIClient.endpoint)
                     urlRequest.httpMethod = "POST"
-                    try QwixitAPI.prepare(&urlRequest)
+                    try QwixitAPI.prepare(&urlRequest, operationID: request.operationID)
                     urlRequest.httpBody = try makeBody(request)
 
                     let (bytes, response) = try await session.bytes(for: urlRequest)
@@ -57,7 +59,7 @@ actor PeekClient: PeekClientProtocol {
                     guard (200..<300).contains(http.statusCode) else {
                         var body = Data()
                         for try await byte in bytes.prefix(8_192) { body.append(byte) }
-                        throw QwixitAPI.responseError(status: http.statusCode, data: body)
+                        throw QwixitAPI.responseError(http, data: body)
                     }
 
                     var completed = false
@@ -88,49 +90,22 @@ actor PeekClient: PeekClientProtocol {
         }
     }
 
-    private nonisolated func makeBody(_ request: PeekRequest) throws -> Data {
+    /// Only the task and its parameters leave the app; the Worker builds the Peek prompt.
+    nonisolated func makeBody(_ request: PeekRequest) throws -> Data {
         guard PeekInputLimit.accepts(request.text) else { throw PeekClientError.inputTooLong }
-        let schema: [String: Any]
-        switch request.mode {
-        case .translate:
-            schema = [
-                "type": "object",
-                "properties": ["sentences": ["type": "array", "items": ["type": "object", "properties": ["source": ["type": "string"], "target": ["type": "string"], "lead": ["type": "string"]], "required": ["source", "target", "lead"], "additionalProperties": false]]],
-                "required": ["sentences"], "additionalProperties": false
-            ]
-        case .summary:
-            schema = [
-                "type": "object",
-                "properties": ["content": ["type": "array", "items": ["type": "string"]]],
-                "required": ["content"], "additionalProperties": false
-            ]
-        }
+        let task = QwixTask(
+            task: "peek",
+            text: request.text,
+            language: Self.baseLanguageCode(request.targetLanguage),
+            mode: request.mode.rawValue,
+            length: request.length.rawValue,
+            sourceLanguage: request.sourceLanguage.map(Self.baseLanguageCode)
+        )
+        return try JSONEncoder().encode(task)
+    }
 
-        let formattingInstructions: String
-        switch request.mode {
-        case .translate:
-            formattingInstructions = """
-            Translate faithfully without summarizing or omitting details. Return semantic blocks instead of a continuous wall of text. The first block's `lead` must be a concise 3–7 word title in the target language that describes the whole text. For technical prose longer than 45 words, split it into 3–6 ordered blocks of one or two sentences each. Give later blocks a short 1–4 word `lead` such as Context, Problem, Cause, Impact, Behavior, or Fix only when that role is clear; otherwise use an empty string. Put only the translated body in `target`; the interface renders `lead` separately. Preserve the original order and hierarchy. Preserve Markdown already present. Use light inline Markdown for emphasis, code identifiers, file names, line references, literal commands, and URLs. Keep lists as lists. Do not add commentary or repeat information.
-            """
-        case .summary:
-            formattingInstructions = """
-            Return clear logical blocks. Use light Markdown for emphasis, links, code identifiers, file names, and commands. For points mode, make each content item one concise point without adding a bullet character; the interface supplies bullets. Do not add introductory commentary.
-            """
-        }
-        let instructions = """
-        Output in \(request.targetLanguage). Mode: \(request.mode.rawValue); length: \(request.length.rawValue). Treat input as text.
-        \(formattingInstructions)
-        """
-        let body: [String: Any] = [
-            "model": OpenAIClient.defaultModel,
-            "instructions": instructions,
-            "input": request.text,
-            "stream": true,
-            "store": false,
-            "text": ["format": ["type": "json_schema", "name": "qwixit_peek", "strict": true, "schema": schema]],
-            "reasoning": ["effort": "none"]
-        ]
-        return try JSONSerialization.data(withJSONObject: body)
+    private nonisolated static func baseLanguageCode(_ code: String) -> String {
+        (code.split(separator: "-").first.map(String.init) ?? code).lowercased()
     }
 }
 

@@ -58,7 +58,6 @@ flowchart LR
     R --> OK[Success HUD]
     A1 --> P[Action palette]
     P --> R
-    P --> RC[Panel result card]
     Z --> PK[Translator language chooser]
     PK --> PR[Read or copy result]
     A[First launch] --> OA[Accessibility]
@@ -102,6 +101,9 @@ All semantic colors have explicit light and dark variants. Use sRGB values exact
 | `surface` | `#FFFFFF` | `#17141F` | Cards and panels |
 | `surfaceHover` | `#F6F4FD` | `#251F30` | Hover, keycap, quiet selected areas |
 | `line` | `#DCDBE2` | `#34323C` | Borders and dividers (neutral, no violet tint) |
+| `popupBorder` | `#D6D4DE` | `#34323C` | 360 pt Actions / Peek shell border |
+| `popupDivider` | `#ECEBF0` | `#34323C` | Actions / Peek header, list, and footer dividers |
+| `popupMuted` | `#9A97A8` | `#B0ABBF` | Popup source context, digits, and footer copy |
 | `violet` | `#6D28FF` | `#9661FF` | Primary buttons and active focus |
 | `hudTone` | `#7B5CF0` | `#A98BFF` | Processing HUD only: left accent bar and glow, face outline, `AI` badge |
 | `magenta` | `#FF2D9B` | `#FF4FAD` | Panel output and chromatic split |
@@ -117,7 +119,7 @@ All semantic colors have explicit light and dark variants. Use sRGB values exact
 - Violet is the default interactive accent.
 - Cyan owns translation and network/cloud cues.
 - Magenta owns summary and panel style output.
-- Green is reserved for completed or allowed states. In the Fix HUD, the green chip marks the completed request and posted paste; the note above it explains the clipboard backup.
+- Green is reserved for completed or allowed states. In the Fix HUD, the green chip marks the completed request and posted paste.
 - Warning and danger appear only when the user needs to act or an action failed.
 - Cyan and magenta may appear together only for the chromatic face split, scan line, or processing sweep.
 - Strong accent backgrounds use white foreground text.
@@ -144,11 +146,12 @@ The app has an explicit Light/Dark preference. It sets both the SwiftUI color sc
 | Display | 30 pt, Black, Rounded, tracking `-0.8` | Onboarding headline |
 | Demo text | 24 pt, Bold, Rounded | Selected onboarding sample |
 | Card title | 16 pt, Bold, Sans | Access and limit cards |
-| Reading body | 11.5 pt, Medium, line spacing `2.5` | Peek translation content |
+| Reading body | 15 pt, Regular, line height about `22` | Peek translation content |
 | Compact body | 13 pt, Regular or Semibold | Result cards, notices |
 | Control title | 12 pt, Bold | Settings rows and buttons |
 | Operational title | 11 pt, Bold Mono | HUD and compact modes |
 | Control mono | 10 pt, Bold Mono | Actions, key hints, context |
+| Popup mono | 11 pt, Medium Mono | Actions / Peek context and quiet footer |
 | Label | 9 pt, Bold Mono, tracking `0.35` | Section labels and metadata |
 | Micro status | 8 pt, Bold Mono, tracking `0.8–1.1` | HUD badges and detail |
 
@@ -217,7 +220,7 @@ Faces are text, always monospaced, kept on one line, and usually bracketed. They
 | Broke | `[ $_00_$ ]` | Out of tokens |
 | Empty | `[ x_x ]` | 30/30 used |
 | Upsell | `[ ¬_¬ ]` | Advanced plan prompt |
-| Advanced | `[ $^_^$ ]` | Advanced plan active; more room to work |
+| Advanced | `[ $_$ ]` | Advanced plan active; more room to work. It stays visible without blinking to another expression. |
 | Lost | `[ ?_? ]` | No network signal |
 | Retry | `[ @_@ ]` | Reconnecting or retrying |
 | Idle | `[ #_# ]` | Offline waiting |
@@ -226,7 +229,7 @@ Faces are text, always monospaced, kept on one line, and usually bracketed. They
 ### Face sizing
 
 - Processing HUD: 13 pt.
-- Menu and small status: 12 pt.
+- Menu and small status: 13 pt, using the cyan/magenta chromatic split.
 - Peek inline states: 12–15 pt.
 - Upgrade card: 14–16 pt.
 - Onboarding guide: 12 pt inside a 58 × 36 container.
@@ -364,7 +367,7 @@ Quick panels are borderless, nonactivating AppKit panels with transparent window
 - Quick panels do not become main application windows.
 - Click outside closes an unpinned palette or Peek panel.
 - Escape closes the current layer; where a nested step exists it goes back first.
-- Interactive transient panels use the same cut-corner close badge with `⌥⌘X`. Click and shortcut call the panel's existing dismissal path. The shortcut closes the frontmost visible popup before it can start Fix; with no popup open it remains the Fix shortcut. This includes pinned Peek, preview, result cards, limit cards, and the menu-bar panel.
+- Interactive transient panels use the shared `⌥⌘X` dismissal path. Surfaces that show a close badge keep the cut-corner badge; the lighter Actions and Peek picker/result states omit it and close with Escape, outside click, or the global popup shortcut. The shortcut closes the frontmost visible popup before it can start Fix; with no popup open it remains the Fix shortcut.
 - Processing, retry, success, and short automatic notices remain click-through and do not show a close badge. Settings and Onboarding retain native macOS window closing; onboarding keeps its Fix practice shortcut.
 - Restore focus to the originating application before changing selected text.
 - Never repeatedly recreate/show a visible panel in response to its own state updates. Resize or replace content in place to prevent blinking.
@@ -407,7 +410,7 @@ The one press fix flow uses a compact processing/success/error HUD beside the se
 - Headline: SUCCESS in `terminalGreen`.
 - Detail: RESULT READY in 8 pt mono.
 - Badge: OK.
-- Behind the box, place a 17 pt tall neutral note tab reading **NOT HERE?** with a compact `⌘V` keycap. Its right edge extends 5 pt past the box, and its top sits 14 pt above the box so the box overlaps it by 3 pt. Its 5 pt top-left cut and open bottom border join it visually to the box. Use the exact light/dark tab colors and JetBrains Mono ExtraBold sizes (7 pt label, 8 pt keycap) from the paste-chip specification. The Fix result stays on the system clipboard after the automatic paste attempt.
+- The Fix result stays on the system clipboard after the automatic paste attempt.
 - Success marks a completed Fix request and posted paste event; it does not prove that the editor accepted the paste. If the result is missing, the user can press ⌘V.
 - Default one press duration: 1.25 seconds.
 
@@ -459,50 +462,42 @@ When Preview & Approve is enabled, the processing HUD transitions to an interact
 
 ## 10. Action palette: Option + Command + A
 
-This surface uses compact, explicit cards so each action can be understood before it runs without turning the palette into a dashboard.
+This surface is a compact one-column chooser. The active action uses the same dark button language as Settings; every other row stays plain text so the current choice is the only strong shape.
 
 ### Window
 
-- Size: **440 × 190**.
-- Panel radius: 14.
+- Width: **360 pt**; height follows the visible rows.
+- Outer shell: 1 pt `#D6D4DE` border in Light, adaptive dark line in Dark; 12 pt cuts at top-left and bottom-right.
 - Entrance: 140 ms alpha fade; 80 ms with Reduce Motion.
-- Header: 44 pt high, `canvasRaised`, bottom divider.
-- Footer: 34 pt high, `canvasRaised`.
-- Grid padding: 8 horizontal, 6 vertical; maximum content height 380.
+- Header: 48 pt, horizontal padding 16, bottom divider `#ECEBF0` in Light and adaptive line in Dark.
+- Footer: 32 pt with the same divider and horizontal padding.
+- List padding: 10 pt; row gap: 6 pt; maximum content height 380.
 
 ### Header
 
-- Qwixit mark: 27 pt in a 28 pt slot.
-- Search field: 13 pt Bold Mono. It filters actions and matches a target language name; it never sends free-form instructions to the model.
-- Placeholder: `Search actions…`.
-- Optional context label: 9 pt Bold Mono, tracking 1.5.
-- No large face, explanatory paragraph, or redundant shortcut legend.
+- No logo or close badge.
+- Violet caret and `Search…` field on the left.
+- Trailing context: the detected source language as a full name and the selected-text word count, for example `Indonesian · 9 words`, in 11 pt Mono Medium.
+- No language codes, explanatory paragraph, or shortcut legend.
 
-### Action cards
+### Action rows
 
-- Two equal columns with a 6 pt gap.
-- Card height: 46.
-- Horizontal card padding: 8.
-- Action title: 13 pt Bold.
-- Hint: 10.5 pt Regular.
-- Number keycap: 20 × 20.
+- One column. Translation targets appear first, followed by a 1 pt divider inset 4 pt, then rewrite actions. No section labels.
+- Row height: 41 pt. Labels are 14 pt system Bold; right-side digits are 12 pt Mono Bold.
+- The selected row is the only shape: 38 pt inner height plus 1.5 pt gradient edge (`#00ABC7 → #6D28FF → #6D28FF → #FF2D9B`, 100°), 8 pt cut corners, `#16131F` fill, and a 16 × 1.5 pt white highlight at x 10 / y 4. In Dark, use the existing dark Settings button fill and adaptive TokiriUI colors.
+- Unselected rows have no border or fill at rest; hover uses a quiet inset wash (`#F6F4FD` in Light, the existing dark surface-hover token) with 6 pt cut corners and 6 / 3 pt horizontal / vertical insets.
+- Selected row shows `↵`; other rows show plain digits. No boxed keycaps, subtitles, or per-action colors.
 - No leading icon or face. Keep the text edge aligned and let the title carry recognition.
-- Translation cards use a delicate border inspired by the target language: blue/yellow for Ukrainian, soft white/red for Polish, blue/soft white/red for French, and blue/red for English.
-- Slack style uses a quiet cyan/yellow/red/green border. Make formal uses the neutral system treatment.
-- Semantic color is supplementary: titles and hints must identify every action without relying on color.
-- Resting border opacity: 34%; hover: 58%; selected: 82%.
-- Selected fill: the first semantic color at 10%.
-- Selected radius: 8.
 
 ### Actions
 
-1–2. **Translate to…** — one card per useful target language; target-language border; replaces selection.
-3. **Slack style** — clear, concise, human; quiet four-color product border; replaces selection.
-4. **Make formal** — polished professional tone; neutral system border; replaces selection.
+1–2. **Translate** — one row per useful target language; replaces selection.
+Then a divider, followed by **Slack style** and **Make formal**; both replace selection.
+- The last-used supported choice is preselected and appears first within its section.
+- Typing filters visible language names and action names. If an Actions search has no matches, show "No matching action"; Return does nothing. Actions never sends typed text to the model as an instruction.
+- Footer: `Replaces selection · ⌘Z undo`.
 
-### Refinement state
-
-If an action asks quick questions, keep them inside the same panel. Focused question fill is violet at 6%. Answer chips are 24 pt high, radius 6, with the selected answer at 16% accent fill and 72% border. While questions load, reuse the compact branded `PROCESSING` chip; never show a generic system spinner or skeleton.
+Actions has no quick-questions step and no panel output. Every preset (translate, Slack style, make formal) replaces the selection; its prompt lives in the Worker. A selection over 2 pages (6 000 characters) shows the `TOO LONG` error chip instead of opening the palette.
 
 ### Keyboard map
 
@@ -511,11 +506,9 @@ If an action asks quick questions, keep them inside the same panel. Focused ques
 | Up / Down | Move selection |
 | Tab / Shift Tab | Move forward/back |
 | Return | Run selected action |
-| 1–9 | Run corresponding visible action when query is empty |
-| Escape | Back one layer, then close |
-| Left | Back when available |
+| 1–4 | Run corresponding visible row when query is empty |
+| Escape | Close |
 | Command Z | Undo the latest text replacement |
-| Left / Right in refinement | Change answer |
 
 Mouse clicking a row performs the same action as Return. Clicking outside closes the palette.
 
@@ -529,13 +522,12 @@ Option + Command + Z is a dedicated read-only translator. It never replaces the 
 
 | State | Size |
 |---|---:|
-| Initial chooser | 360 × 185 |
-| Loading or success | 400 × 150 |
-| Loaded | 400 × 340 |
-| Pinned | 400 × 560 |
-| Limit | 380 × 200 |
-| Subscription activation | 420 × 190 |
-| Failure | 380 × 200 |
+| Four-row chooser | 360 × 286 |
+| Loading or success | 360 × 150 |
+| Loaded | 360 pt wide, height follows the result up to 360 pt |
+| Pinned | 360 × 560 |
+| Limit | 360 × 300 |
+| Failure | 360 × 165 without a selection, otherwise 360 × 200 |
 
 - Entrance: 150 ms alpha fade; 80 ms with Reduce Motion.
 - State resize: 180 ms ease out with the top edge fixed.
@@ -544,30 +536,25 @@ Option + Command + Z is a dedicated read-only translator. It never replaces the 
 
 ### Header
 
-- Height: 42.
-- Qwixit mark: 20 × 20.
-- Awaiting choice title: `Translate to…`, 12 pt Semibold Sans.
-- Result header: source code, arrow, then `UA PL FR EN` as compact text buttons. Both compact buttons and chooser cards use the same target-language accent borders as Actions.
-- Close control: `×`, 17 pt.
+- Pick header: 48 pt, no logo or close badge. Violet caret and `Search…` field on the left; full source language and word count (for example `Indonesian · 9 words`) on the right.
+- Result header: full source language and arrow, the selected target as a small dark button, and `⇥ next` on the right. No language codes.
 
 ### Initial chooser
 
-- Use a 2 × 2 grid with 4 pt gaps and 8 pt outer padding.
-- Languages, in order: Українська, Polski, Français, English.
-- Language card: 44 pt high, radius 7, horizontal padding 8.
-- Native language name: 13 pt Bold Sans.
-- English description: 10 pt Regular Sans. The remembered target adds `· last used`.
-- Numeric keycap: 20 × 20, radius 5, 9 pt Bold Mono.
-- Selected card: violet fill at 7% and 1.5 pt violet border.
-- Footer: 32 pt. Left shows source word count. Right shows `1–4 or ↵ to translate` and `Esc`.
-- Clicking a card or pressing 1–4 starts translation immediately.
+- Use a single column, 10 pt padding, 6 pt row gaps, and 41 pt rows.
+- Language names only; no codes, English-description subtitles, or `last used` suffix.
+- The remembered target appears first and is preselected. Search filters by the visible name and its full English name.
+- Use the same selected dark row and plain digits as Actions. Clicking a row or pressing 1–4 starts translation immediately.
+- No-match search shows a quiet `No language matches` row.
+- Footer: `Preview only · nothing is replaced`.
 
 ### Translation result
 
 - There is no secondary control strip; the result begins directly below the header.
-- Translation body: 11.5 pt Medium Sans with 2.5 pt line spacing.
-- Body padding: 14 horizontal and 12 vertical.
+- Translation body: 15 pt Regular Sans with 22 pt line spacing.
+- Body padding: 14 pt top, 16 pt horizontal, 16 pt bottom.
 - Loaded body maximum height: 250 unpinned, 500 pinned.
+- Tab runs the next language in place; Shift-Tab runs the previous one. Return and Command-C copy the translation. The footer line is clickable for mouse copy.
 
 ### Markdown reading format
 
@@ -582,37 +569,37 @@ Translation results use a compact Markdown renderer:
 - inline Markdown supports emphasis, strong text, links, and code spans;
 - all rendered result text remains selectable.
 
-The translation request returns logical semantic blocks rather than one item per sentence. The first block always supplies a concise 3–7 word title in the target language. For technical input longer than 45 words, produce 3–6 ordered blocks of one or two sentences without omitting content. Later blocks may have short bold lead-ins such as Context, Problem, Cause, Impact, Behavior, or Fix when that role is clear. Preserve paragraphs, headings, lists, quotes, fenced code, existing Markdown, file names, line references, commands, and code identifiers. Do not add commentary or repeat information.
+The translation request returns `{ "paragraphs": [string] }`: one item per paragraph of the input, in order, with each list, code block, or heading as its own item. It never repeats the original text, so output stays roughly the size of the translation alone. It adds no titles or section labels. Preserve headings, lists, quotes, fenced code, existing Markdown, file names, line references, commands, and code identifiers. Do not add commentary. Empty items are dropped; the copy action joins paragraphs with blank lines.
 
 ### Loading and state content
 
 - Loading reuses the standard compact cyber status chip with the scanning face, animated `PROCESSING` label, moving trace, and `AI` badge.
-- Completion changes the same chip to the green ready face, `READY`, `RESULT READY`, and `OK` for 520 ms before revealing the result.
-- The chip respects Reduce Motion; the state remains readable without its trace, sweep, or pulse.
-- No selection, offline, and request failures show the existing error/status chip inside Peek's body. The embedded chip fills the available width and relies on Peek's header close badge, so it does not add a second close control. No selection keeps the panel compact; recoverable failures retain Retry.
+- As soon as the translation is ready, show it in the same panel. The processing chip remains for the active request and respects Reduce Motion.
+- No selection, offline, and request failures show the existing error/status chip inside Peek's body. The embedded chip fills the available width; Escape and the global popup shortcut still close the panel. No selection keeps the panel compact; recoverable failures retain Retry.
 - Limit uses `[ ^o^ ]` at 14 pt and a compact upgrade button.
 - Offline uses `[ ?_? ]` or `[ #_# ]` with concise unchanged text.
 
 ### Footer
 
-- Height: 34, `canvasRaised`, horizontal padding 14.
-- Left: source word count and `Esc`.
-- Right: Pin/Unpin and violet `Copy ⌘C` button.
-- Button height: 25, radius 5, text 9 pt Bold Mono.
+- Height: 32 pt with a quiet 11 pt Mono Medium line.
+- Pick: `Preview only · nothing is replaced`.
+- Result: `↵ copy · Esc close`; click the line to copy. Command-C remains available. Pin/Unpin remains on `P` and in the header context menu.
 
 ### Keyboard map
 
 | Context | Key | Action |
 |---|---|---|
-| Chooser | Arrow keys or Tab | Move choice |
+| Chooser | Up / Down or Tab | Move choice |
 | Chooser | Return | Submit choice |
 | Chooser | 1–4 | Translate to numbered language |
-| Loaded | 1–4 | Translate to another language |
+| Result | Tab / Shift-Tab | Run the next / previous language in place |
+| Result | Return | Copy translation |
+| Result | 1–4 | Translate to the numbered language |
 | Any | P | Pin or unpin |
 | Loaded | Command C | Copy result |
 | Any | Escape | Close |
 
-All language, Pin, Copy, and Close controls are clickable.
+Language rows, `⇥ next`, the copy footer, Pin, and Close remain reachable with mouse or keyboard.
 
 ---
 
@@ -626,10 +613,12 @@ Onboarding is a real interactive rehearsal, not a slideshow.
 - Standard titled, closable macOS window with transparent title bar.
 - Header: 62 pt, horizontal padding 24.
 - Qwixit lockup: 90 × 30.
+- On Welcome, the center visual is a large `[ ^_- ]` face instead of a second lockup. The wink is magenta; the rest uses the theme's ink color.
 - Main title: 30 pt Black Rounded.
 - Content maximum width: 660.
 - Footer: 58 pt, horizontal padding 28, top divider.
 - Steps: **Access → Fix → Actions**.
+- Done-step menu-bar callout: use an `ink` capsule with `surface`-colored Wi-Fi, logo, and time so the foreground stays legible in both themes.
 
 ### Step 1: Accessibility access
 
@@ -660,7 +649,7 @@ Guide copy must clearly say `PRESS ENTER TO CONTINUE` whenever Return advances t
 - Selected sample: `yo can u send me the file asap pls`.
 - User presses Option + Command + A once.
 - Open the onboarding palette immediately.
-- The palette is **440 × 190** and uses the same compact cards as the live Actions surface.
+- The palette is **360 pt wide** and uses the same single-column rows as the live Actions surface.
 - Choices: two useful translation targets, Slack style, and Make formal.
 - Arrow keys move selection; Return chooses; 1–4 chooses directly; Escape closes.
 - Show processing and type the chosen result.
@@ -720,6 +709,7 @@ Key press state changes use a 160 ms snappy transition. Stop the demonstration w
 - Subtitle: 10 pt Sans.
 - Scroll content padding: 18; section gap: 14.
 - Footer: 54 pt, horizontal padding 18, `canvasRaised`.
+- Footer Quit uses the shared red cut-corner button with a power icon in both themes.
 
 ### Sections
 
@@ -751,42 +741,23 @@ Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have 
 - Background: `canvas`.
 - Wrapper: `QwixitControlShape` with a 16 pt chamfer on the top-left and bottom-right corners, plus a 1 pt `line` stroke; do not use a rounded outer container.
 - AppKit host: borderless, nonactivating panel with a native shadow; do not expose the system popover bubble or chevron.
-- Utility bar: 28 pt, horizontal padding 12, version left and cyan `Cloud` right.
-- Brand header: 68 pt, horizontal padding 14, lockup 108 × 34.
-- Show the shared `⌥⌘X` close badge and compact access badge in the brand header. The close badge is a button, not a static shortcut hint.
-- Show a compact `Preview & Approve` switch below the brand header, bound to the same preference as Settings. Include a one-line status hint that nothing changes until approval.
-- Optional billing row: 34 pt; 44 pt when an upgrade button is visible.
-- Bottom action row: 43 pt with three equal actions: Settings, Onboarding, Quit.
-- Use 1 pt vertical dividers of height 24.
-- Quit uses `danger`; other actions use `secondary`.
+- Utility bar: 26 pt, horizontal padding 12, version left and cyan `Cloud` right.
+- Status row: 42 pt (30% shorter than the previous 60 pt row), horizontal padding 14. It contains the plan face in a 56 × 30 pt slot, a two-line plan block, a flexible spacer, the shared `⌥⌘X` close badge, and an icon-only access badge. Use 12 pt bold monospace for the plan title and 10.5 pt monospace for its detail. The entire Advanced row has a soft success-green gradient and green divider, with `[ $_$ ]` and the plan title in a readable green. The entire Free row uses a neutral surface and `[ ^_^ ]` face. The face has no separate badge background. The close badge is a button, not a static shortcut hint.
+- At the free limit, `Get Advanced` replaces the spacer and the close badge may hide to fit. The popup dismissal shortcut still works.
+- Show a compact `Preview & Approve` switch below the status row, bound to the same preference as Settings. Include a one-line status hint that nothing changes until approval.
+- Bottom actions: two rows with 32 pt buttons and 8 pt gaps. Settings and Quit share the upper row at 50% width each; Onboarding spans the full width below. Use 12 pt horizontal and 9 pt vertical outer padding. Settings and Onboarding use the filled shared `PrimaryButton` style. Quit uses the soft shared `QuitButton` style with a light danger tint and warm-to-pink border. Compact primary and Quit buttons use 12 pt horizontal padding and a 28 pt minimum height. The Settings footer uses the same soft Quit style.
+- The four sections are the utility strip, status row, review row, and actions row, separated by single horizontal dividers.
 
 Usage may be shown here as persistent plan information. It must not generate a separate 29/30 notification. At 30/30, show the upgrade action.
 
 ---
 
-## 15. Panel result card
-
-Actions configured for panel output use a larger result card.
-
-- Window: **480 × 360**.
-- Standard 14 pt panel surface.
-- Header: 16 pt padding, 10 pt Bold Mono.
-- Action title uses magenta diamond and action name.
-- State copy says `Text unchanged` because panel mode does not replace the source.
-- Result: selectable 13 pt body with 5 pt line spacing and 18 pt padding.
-- Footer input area: 14 pt padding.
-- Follow up field placeholder: `Ask about this text…`.
-- Controls: Copy and magenta Insert below.
-- Loading uses a small magenta progress control and `Qwixing…`.
-
----
-
-## 16. Content and copy rules
+## 15. Content and copy rules
 
 - Write short, direct, calm sentences.
 - Operational UI may be terse: `READY`, `AI`, `OK`, `ERR`, `Esc`, `Copy ⌘C`.
 - Explanations use normal sentence case.
-- Fix may show SUCCESS after Tokiri prepares the result and posts Command V; it does not claim the target editor accepted the text. The `NOT HERE? ⌘V` note points to the clipboard backup.
+- Fix may show SUCCESS after Tokiri prepares the result and posts Command V; it does not claim the target editor accepted the text.
 - Avoid generic AI language such as “magic,” “assistant is thinking,” or long model explanations.
 - Keep technical implementation details out of product copy.
 - Error titles explain the outcome; the detail explains the recovery action.
@@ -794,7 +765,7 @@ Actions configured for panel output use a larger result card.
 
 ---
 
-## 17. Accessibility and input
+## 16. Accessibility and input
 
 - Every icon-only control has an accessibility label.
 - Face text exposes a useful state label such as `Scanning` rather than each animation frame.
@@ -810,13 +781,13 @@ Actions configured for panel output use a larger result card.
 
 ---
 
-## 18. State and acceptance checklist
+## 17. State and acceptance checklist
 
 ### Visual
 
-- [ ] Correct supplied logo asset is used for the active theme.
+- [ ] Actions and Peek popups contain no logo; other brand surfaces use the supplied logo asset for the active theme.
 - [ ] All colors come from semantic tokens.
-- [ ] Panels use the correct fixed dimensions and radii.
+- [ ] Actions and Peek use 360 pt width, the 12 pt cut-corner shell, and the correct adaptive colors.
 - [ ] Faces use JetBrains Mono ExtraBold or the heavy monospaced fallback.
 - [ ] Faces stay small and sharp; spacing inside brackets never shifts.
 - [ ] Cyan/magenta splits appear only in approved cyber effects.
@@ -825,9 +796,9 @@ Actions configured for panel output use a larger result card.
 ### Interaction
 
 - [ ] One press fixes selected text and shows the processing HUD.
-- [ ] Option-Command-A opens the 520 × 270 action palette.
-- [ ] Option + Command + Z opens the four-language translator chooser.
-- [ ] Arrow keys, Tab, Return, Escape, and number keys work as specified.
+- [ ] Option-Command-A opens the one-column Actions list.
+- [ ] Option + Command + Z opens the four-language Peek chooser.
+- [ ] Arrow keys, Tab, Return, Escape, number keys, and result-language cycling work as specified.
 - [ ] Every visible action also responds to a mouse click.
 - [ ] Context panels do not cover the selected text when an adjacent position exists.
 - [ ] Panels do not blink, reopen, or loop their entrance animation during state updates.
@@ -857,15 +828,15 @@ Actions configured for panel output use a larger result card.
 
 ---
 
-## 19. Design handoff prompt
+## 18. Design handoff prompt
 
 Paste the following together with this document:
 
-> Design Qwixit for macOS from the attached normative blueprint. Reproduce its tokens, fixed window sizes, keyboard behavior, state hierarchy, face system, and motion timings exactly. Use the supplied Qwixit assets without redrawing them. Treat the Option-Command-X feedback HUD, Option-Command-A action palette, dedicated Option-Command-Z translator, onboarding, Settings, menu bar popover, and result card as one coherent system. Keep quick actions clear and keyboard first. Do not add generic AI chat patterns, large mascot art, glassmorphism, new gradients, new actions, or internal design annotations. Provide light and dark variants, all loading/success/error/limit states, and static Reduced Motion variants. Show interaction specifications for mouse, arrows, Tab, Return, Escape, and number keys. Validate every screen against the acceptance checklist before presenting it.
+> Design Qwixit for macOS from the attached normative blueprint. Reproduce its tokens, fixed window sizes, keyboard behavior, state hierarchy, face system, and motion timings exactly. Use the supplied Qwixit assets without redrawing them. Treat the Option-Command-X feedback HUD, Option-Command-A action palette, dedicated Option-Command-Z translator, onboarding, Settings, and menu bar popover as one coherent system. Keep quick actions clear and keyboard first. Do not add generic AI chat patterns, large mascot art, glassmorphism, new gradients, new actions, or internal design annotations. Provide light and dark variants, all loading/success/error/limit states, and static Reduced Motion variants. Show interaction specifications for mouse, arrows, Tab, Return, Escape, and number keys. Validate every screen against the acceptance checklist before presenting it.
 
 ---
 
-## 20. Implementation references
+## 19. Implementation references
 
 These files are the final authority if a numeric or behavioral ambiguity remains:
 
@@ -875,7 +846,6 @@ These files are the final authority if a numeric or behavioral ambiguity remains
 - `Qwixit/Features/Palette/Presentation/PaletteView.swift`
 - `Qwixit/Features/Palette/Presentation/PalettePanelController.swift`
 - `Qwixit/Features/Palette/Presentation/ResultHUDController.swift`
-- `Qwixit/Features/Palette/Presentation/ResultCardController.swift`
 - `Qwixit/Features/Peek/Presentation/PeekView.swift`
 - `Qwixit/Features/Peek/Presentation/PeekPanelController.swift`
 - `Qwixit/Features/Settings/Presentation/OnboardingView.swift`

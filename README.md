@@ -27,7 +27,7 @@ The project targets macOS 14 and has App Sandbox disabled because global Accessi
 - Focused settings for feedback and Accessibility access
 - Reduced-motion-compatible SwiftUI animations
 
-Tokiri includes 30 free AI actions per installation each calendar month. Qwixit Advanced is $10/month and removes the monthly action cap while keeping the same careful Fix quality bar. Every model request is counted server-side, including Quick Fix, palette actions, Peek translation/summary, and AI-generated refinement questions.
+Tokiri includes 30 free AI actions per installation each calendar month. Qwixit Advanced is $10/month and gives more room to work (fair use: 300 actions per day, 3 000 per month) while keeping the same careful Fix quality bar. Every user action is counted once server-side, however many retries it takes, including Quick Fix, palette actions, and Peek translation/summary. A Fix that finds nothing to change, and a result the service fails or rejects, does not use an action. Selections are limited to about 2 pages (6 000 characters).
 
 Requests go through the Cloudflare Worker at `qwixit-api.levmisiliuk.workers.dev`; users do not configure or receive an OpenAI API key. The app keeps a random installation identity in macOS Keychain. A Durable Object atomically enforces the monthly quota, while signed Paddle webhooks are the only way to activate Advanced access. OpenAI requests use `store: false`.
 

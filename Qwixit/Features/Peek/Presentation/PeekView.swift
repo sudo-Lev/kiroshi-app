@@ -1,150 +1,171 @@
 import SwiftUI
 
 private enum PeekPalette {
-    static let canvas = KColor.surface
-    static let raised = KColor.canvasRaised
     static let text = KColor.ink
     static let muted = KColor.secondary
     static let line = KColor.line
+    static let popupDivider = KColor.popupDivider
 }
 
 struct PeekView: View {
     @ObservedObject var viewModel: PeekViewModel
     let onClose: () -> Void
     let onTogglePin: () -> Void
+    let onUpgrade: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            Rectangle().fill(PeekPalette.popupDivider).frame(height: 1)
             if viewModel.loadState == .limitReached {
                 paywallContent
+                Rectangle().fill(PeekPalette.popupDivider).frame(height: 1)
+                footer
             } else {
-                Divider().overlay(PeekPalette.line)
                 if viewModel.isAwaitingChoice {
                     choiceContent
                 } else {
                     bodyContent
-                    Divider().overlay(PeekPalette.line)
+                    Rectangle().fill(PeekPalette.popupDivider).frame(height: 1)
                     footer
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(width: 360, alignment: .top)
+        .frame(maxHeight: .infinity, alignment: .top)
         .foregroundStyle(PeekPalette.text)
-        .qwixitPanel()
+        .tokiriPopupPanel()
         .qwixitTheme()
     }
 
     private var accent: Color { KColor.cyan }
 
     private var header: some View {
-        HStack(spacing: 7) {
-            QwixitLockup()
-                .frame(width: 86, height: 34, alignment: .leading)
+        Group {
             if viewModel.loadState == .limitReached {
-                Text("Peek")
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                Spacer()
-            } else if viewModel.isAwaitingChoice {
-                Text("Translate to…")
-                    .font(.system(size: 12, weight: .semibold))
-                Spacer()
-            } else {
-                Text(viewModel.sourceLanguage?.code.uppercased() ?? "AUTO")
-                    .foregroundStyle(PeekPalette.muted)
-                Text("→")
-                    .foregroundStyle(PeekPalette.muted)
-                ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { index, language in
-                    Button(language.code) { viewModel.runTranslation(at: index) }
-                        .buttonStyle(QwixitSemanticCompactButtonStyle(
-                            accent: .language(language.id),
-                            isSelected: viewModel.targetLanguage == language.id
-                        ))
+                HStack {
+                    Text("Peek")
+                        .font(.system(size: 14, weight: .bold))
+                    Spacer(minLength: 0)
+                    Text(viewModel.contextLabel)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(KColor.popupMuted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                 }
-                Spacer()
+                .padding(.horizontal, 16)
+            } else if viewModel.isAwaitingChoice || viewModel.sourceText.isEmpty {
+                HStack(spacing: 10) {
+                    Rectangle().fill(KColor.violet).frame(width: 1.5, height: 18)
+                    TextField(
+                        "",
+                        text: $viewModel.query,
+                        prompt: Text("Search…").foregroundColor(KColor.popupMuted)
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(PeekPalette.text)
+                    .focused($searchFocused)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(viewModel.contextLabel)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(KColor.popupMuted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .padding(.horizontal, 16)
+                .onAppear { searchFocused = true }
+                .onChange(of: viewModel.wordCount) { _, _ in searchFocused = true }
+            } else {
+                HStack(spacing: 10) {
+                    Text("\(viewModel.sourceLanguage?.displayName ?? "Unknown language") →")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(KColor.popupMuted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Button(viewModel.targetLanguageName) { viewModel.cycleLanguage() }
+                        .buttonStyle(TokiriUI.PopupSelectedButton(compact: true))
+                        .help("Next language")
+                        .accessibilityLabel("Target language: \(viewModel.targetLanguageName). Switch to next language.")
+                    Spacer(minLength: 0)
+                    Button(action: onClose) {
+                        TokiriUI.Icon(.close, size: 10)
+                    }
+                    .buttonStyle(TokiriUI.IconButton(accent: KColor.popupMuted))
+                    .help("Close Peek")
+                    .accessibilityLabel("Close Peek")
+                }
+                .padding(.leading, 16)
+                .padding(.trailing, 10)
             }
-            TokiriUI.PopupCloseButton(
-                shortcut: HotkeyCatalog.popupDismiss.presentation,
-                label: "Close Peek",
-                action: onClose
-            )
         }
-        .padding(.horizontal, 12)
-        .frame(height: 42)
+        .frame(height: 48)
         .contentShape(Rectangle())
-        .background(PeekPalette.raised)
+        .contextMenu {
+            Button(viewModel.isPinned ? "Unpin Peek" : "Pin Peek", action: onTogglePin)
+        }
     }
 
     private var choiceContent: some View {
         VStack(spacing: 0) {
-            LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: 4), GridItem(.flexible())],
-                spacing: 4
-            ) {
-                ForEach(Array(viewModel.languages.enumerated()), id: \.element.id) { index, language in
-                    languageCard(language, index: index)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 6) {
+                        if viewModel.visibleLanguages.isEmpty {
+                            Text("No language matches \"\(viewModel.query)\"")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(PeekPalette.muted)
+                                .frame(maxWidth: .infinity, minHeight: 41, alignment: .leading)
+                        } else {
+                            ForEach(Array(viewModel.visibleLanguages.enumerated()), id: \.element.id) { index, language in
+                                languageRow(language, index: index)
+                            }
+                        }
+                    }
+                    .padding(10)
                 }
+                .frame(maxHeight: 380)
+                .onChange(of: viewModel.selectedChoiceIndex) { _, value in proxy.scrollTo(value, anchor: .center) }
             }
-            .padding(8)
-
-            Divider().overlay(PeekPalette.line)
-
-            HStack {
-                Text("\(viewModel.wordCount) words")
-                Spacer()
-                Text("1–4 or ↵ to translate")
-                Text("Esc")
-            }
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundStyle(PeekPalette.muted)
-            .padding(.horizontal, 14)
-            .frame(height: 32)
+            Rectangle().fill(PeekPalette.popupDivider).frame(height: 1)
+            footer
         }
     }
 
-    private func languageCard(_ language: TranslationLanguage, index: Int) -> some View {
+    @ViewBuilder
+    private func languageRow(_ language: TranslationLanguage, index: Int) -> some View {
         let selected = viewModel.selectedChoiceIndex == index
-        return Button { viewModel.runTranslation(at: index) } label: {
-            HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(language.name)
-                        .font(.system(size: 13, weight: .bold))
-                    Text(languageDetail(language))
-                        .font(.system(size: 10))
-                        .foregroundStyle(PeekPalette.muted)
-                }
-                Spacer()
-                Text("\(index + 1)")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .frame(width: 20, height: 20)
-                    .background(KColor.surface, in: QwixitControlShape(cut: 4))
-                    .overlay(QwixitControlShape(cut: 4).stroke(PeekPalette.line))
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 44)
+        let label = HStack(spacing: 10) {
+            Text(language.name)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(selected ? Color.white : PeekPalette.text)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Text(selected ? "↵" : "\(index + 1)")
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundStyle(selected ? Color.white : KColor.popupMuted)
+                .fixedSize()
         }
-        .buttonStyle(QwixitSemanticCardButtonStyle(
-            accent: .language(language.id),
-            isSelected: selected,
-            cut: 5
-        ))
-        .help("Translate to \(language.name)")
-    }
+        .padding(.leading, 14)
+        .padding(.trailing, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
-    private func languageDetail(_ language: TranslationLanguage) -> String {
-        let englishName = switch language.id {
-        case "uk": "Ukrainian"
-        case "pl": "Polish"
-        case "fr": "French"
-        case "en": sourceBaseLanguage == "en" ? "Clean up English" : "English"
-        default: language.code
+        if selected {
+            Button { viewModel.chooseLanguage(at: index) } label: { label }
+                .buttonStyle(TokiriUI.PopupSelectedButton())
+                .accessibilityLabel("Translate to \(language.name), Return")
+                .accessibilityAddTraits(.isSelected)
+                .id(index)
+        } else {
+            Button { viewModel.chooseLanguage(at: index) } label: { label }
+                .frame(height: 41)
+                .buttonStyle(TokiriUI.PopupPlainRowButton())
+                .accessibilityLabel("Translate to \(language.name), shortcut \(index + 1)")
+                .id(index)
         }
-        return viewModel.targetLanguage == language.id ? "\(englishName) · last used" : englishName
-    }
-
-    private var sourceBaseLanguage: String {
-        viewModel.sourceLanguage?.code.split(separator: "-").first.map(String.init)?.lowercased() ?? ""
     }
 
     private var bodyContent: some View {
@@ -155,20 +176,8 @@ struct PeekView: View {
                     EmptyView()
                 case .loading:
                     statusChip(.processing)
-                case .success:
-                    statusChip(.success, successDetail: "RESULT READY")
-                case .loaded:
-                    VStack(alignment: .leading, spacing: 12) {
-                        if QwixitUsage.remaining == 0 {
-                            HStack(spacing: 7) {
-                                QwixitFaceView(face: .pay, size: 12)
-                                Text(QwixitFace.pay.line)
-                            }
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(KColor.violet)
-                        }
-                        resultContent
-                    }
+                case .success, .loaded:
+                    resultContent
                 case .limitReached:
                     EmptyView()
                 case .failed(let message):
@@ -176,8 +185,9 @@ struct PeekView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 16)
         }
         .frame(maxHeight: viewModel.isPinned ? 500 : 250)
     }
@@ -203,9 +213,7 @@ struct PeekView: View {
             Spacer(minLength: 10)
 
             HStack(spacing: 9) {
-                Button {
-                    _ = PaddleCheckoutOpener().openStarterCheckout()
-                } label: {
+                Button(action: onUpgrade) {
                     Text("Get Advanced · $10")
                         .frame(maxWidth: .infinity)
                 }
@@ -245,8 +253,8 @@ struct PeekView: View {
                 PeekMarkdownText(
                     markdown: result.plainText,
                     accent: KColor.cyan,
-                    baseSize: 11.5,
-                    baseWeight: .medium
+                    baseSize: 15,
+                    baseWeight: .regular
                 )
             case .summary(let blocks):
                 VStack(alignment: .leading, spacing: 13) {
@@ -295,29 +303,34 @@ struct PeekView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 12) {
-            Text("\(viewModel.wordCount) words · Esc")
-            Spacer()
-            Button(viewModel.isPinned ? "Unpin" : "Pin") { onTogglePin() }
-                .buttonStyle(CompactButtonStyle(
-                    accent: viewModel.isPinned ? KColor.magenta : PeekPalette.muted,
-                    isSelected: viewModel.isPinned
-                ))
-            if viewModel.result != nil {
+        Group {
+            if viewModel.isAwaitingChoice {
+                footerLabel("Preview only · nothing is replaced")
+            } else if viewModel.result != nil {
                 Button { viewModel.copyResult() } label: {
-                    HStack(spacing: 4) {
-                        Text(viewModel.copied ? "Copied" : "Copy ⌘C")
-                        if viewModel.copied { TokiriUI.Icon(.check, size: 11) }
-                    }
+                    footerLabel(viewModel.copied ? "Copied · Esc close" : "↵ copy · Esc close")
                 }
-                .buttonStyle(CompactButtonStyle(accent: KColor.violet, prominent: true))
+                .buttonStyle(.plain)
+                .help("Copy translation")
+                .accessibilityLabel(viewModel.copied ? "Copied" : "Copy translation. Press Return.")
+            } else if case .failed = viewModel.loadState, viewModel.sourceText.isEmpty == false {
+                footerLabel("↵ retry · Esc close")
+            } else {
+                footerLabel("Esc close")
             }
         }
-        .font(.system(size: 9, weight: .bold, design: .monospaced))
-        .foregroundStyle(PeekPalette.muted)
-        .padding(.horizontal, 14)
-        .frame(height: 34)
-        .background(PeekPalette.raised)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 32)
+    }
+
+    private func footerLabel(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .foregroundStyle(KColor.popupMuted)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
 }
@@ -348,7 +361,7 @@ private struct PeekMarkdownText: View {
         switch block.kind {
         case .paragraph(let text):
             inline(text, size: baseSize, weight: baseWeight)
-                .lineSpacing(2.5)
+                .lineSpacing(baseSize >= 15 ? 4 : 2.5)
 
         case .heading(let level, let text):
             inline(

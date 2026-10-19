@@ -108,6 +108,62 @@ private final class OnboardingAccessibilityStub: AccessibilityServicing {
     func fallbackPoint() -> CGPoint { .zero }
 }
 
+@MainActor
+final class SettingsBillingTests: XCTestCase {
+    func testCheckoutPollSurvivesRefreshUntilSubscriptionBecomesActive() async throws {
+        let suiteName = "SettingsBillingTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let billing = BillingSequenceStub(statuses: [
+            BillingStatus(plan: "free", subscriptionStatus: "none", remaining: 0, period: "2026-10"),
+            BillingStatus(plan: "free", subscriptionStatus: "none", remaining: 0, period: "2026-10"),
+            BillingStatus(plan: "advanced", subscriptionStatus: "active", remaining: nil, period: "2026-10"),
+        ])
+        let model = SettingsViewModel(
+            accessibility: OnboardingAccessibilityStub(),
+            checkout: SuccessfulCheckoutStub(),
+            billingStatus: billing,
+            billingPollInterval: .milliseconds(100),
+            defaults: defaults
+        )
+        defer { model.stop() }
+
+        model.openStarterCheckout()
+        for _ in 0..<100 where await billing.fetchCount() == 0 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        model.refreshUsage()
+
+        for _ in 0..<100 where !model.isAdvanced {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(model.isAdvanced)
+        let fetchCount = await billing.fetchCount()
+        XCTAssertEqual(fetchCount, 3)
+    }
+}
+
+private struct SuccessfulCheckoutStub: CheckoutOpening {
+    func openStarterCheckout() -> Bool { true }
+}
+
+private actor BillingSequenceStub: BillingStatusChecking {
+    private let statuses: [BillingStatus]
+    private var count = 0
+
+    init(statuses: [BillingStatus]) {
+        self.statuses = statuses
+    }
+
+    func fetchStatus() async throws -> BillingStatus {
+        count += 1
+        return statuses[min(count - 1, statuses.count - 1)]
+    }
+
+    func fetchCount() -> Int { count }
+}
+
 final class QwixitUsageTests: XCTestCase {
     func testOlderResponseCannotMoveUsageCountBackwardsWithinSamePeriod() throws {
         let defaults = makeDefaults()

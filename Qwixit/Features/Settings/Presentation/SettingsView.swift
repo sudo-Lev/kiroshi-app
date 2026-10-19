@@ -163,7 +163,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var billingControl: some View {
-        if viewModel.isUnlimited {
+        if viewModel.isAdvanced {
             HStack(spacing: 4) {
                 TokiriUI.Icon(.statusSuccess, size: 10)
                 Text("Active")
@@ -178,16 +178,16 @@ struct SettingsView: View {
     }
 
     private var billingIconColor: Color {
-        viewModel.isUnlimited ? KColor.success : KColor.violet
+        viewModel.isAdvanced ? KColor.success : KColor.violet
     }
 
     private var billingTitle: String {
-        if viewModel.isUnlimited { return "Tokiri Advanced" }
+        if viewModel.isAdvanced { return "Tokiri Advanced" }
         return "30 free AI actions / month"
     }
 
     private var billingDetail: String {
-        if viewModel.isUnlimited { return "Active — no monthly action cap. The same careful Fix quality applies." }
+        if viewModel.isAdvanced { return "Active — more room to work. The same careful Fix quality applies." }
         return "Get Advanced for $10/month. More room to work, same quality bar. Sandbox test payments only."
     }
 
@@ -243,9 +243,14 @@ struct SettingsView: View {
                 .tracking(0.3)
                 .foregroundStyle(KColor.secondary)
             Spacer()
-            Button("Quit Tokiri") { onQuit() }
-                .buttonStyle(SubtleButtonStyle())
-                .foregroundStyle(KColor.danger)
+            Button(action: onQuit) {
+                HStack(spacing: 7) {
+                    TokiriUI.Icon(.quit, size: 13)
+                    Text("Quit")
+                }
+            }
+            .buttonStyle(TokiriUI.QuitButton(appearance: .soft))
+            .accessibilityLabel("Quit Tokiri")
         }
         .padding(.horizontal, 18)
         .frame(height: 54)

@@ -51,7 +51,7 @@ Do not launch an additional app process casually during automated verification: 
 
 Fix and Actions use one replacement path in every app: capture the selected text and source focus, restore the source app and focused element, put the fresh text on the clipboard, then post ⌘V. AX is used to read the selection and restore focus; it never writes the replacement or decides whether a paste succeeded. Actions' insert mode sends Right Arrow first to collapse the selection at its end, then uses the same paste path.
 
-ReplacementAttemptReport contains only three transient steps: clipboard write, optional caret move, and ⌘V event. isSubmitted means the clipboard write completed and the required keyboard events were posted. Fix shows “Success” with a `NOT HERE? ⌘V` note; this marks a completed request and posted event, not proof that another app consumed the paste. If Tokiri cannot prepare the clipboard or post the required event, it offers the fresh text and a manual copy button. Fix leaves the correction on the system clipboard as a manual paste backup after a successful clipboard write; Actions restores the previous clipboard. Neither selected nor generated text is logged or stored in Qwixit data.
+ReplacementAttemptReport contains only three transient steps: clipboard write, optional caret move, and ⌘V event. isSubmitted means the clipboard write completed and the required keyboard events were posted. Fix shows “Success”; this marks a completed request and posted event, not proof that another app consumed the paste. If Tokiri cannot prepare the clipboard or post the required event, it offers the fresh text and a manual copy button. Fix leaves the correction on the system clipboard as a manual paste backup after a successful clipboard write; Actions restores the previous clipboard. Neither selected nor generated text is logged or stored in Qwixit data.
 
 Unit tests cover the clipboard, paste-event, and caret-move requirements for a submitted status, plus recovery when a paste event cannot be posted. Clipboard archive tests verify that Fix keeps the correction, Actions restores rich clipboard contents, and newer clipboard content is preserved. These tests do not measure delivery to real editors. Before claiming a replacement success rate, use controlled, unsent drafts in a native text control and browser editors such as Slack and GitHub, plus representative spreadsheet and messaging apps. Exercise single-line, multiline, and repeated selections; Fix, Actions replace, and Actions insert. Confirm that manual ⌘V pastes the Fix result and that Actions restores the previous clipboard. Record only pass/fail and editor category. A 99.5% delivery claim requires a sufficiently large real-editor trial; unit tests alone cannot support it.
 
@@ -68,9 +68,12 @@ npm run check
 
 It proxies model requests, enforces monthly usage atomically with a Durable Object, exposes billing state, receives signed Paddle webhooks, and hosts the checkout and activation pages.
 
+The webhook updates the installation ledger when Paddle delivers a subscription event. The macOS app checks `/billing/status` on launch, after returning to the foreground, and whenever the menu opens. After opening checkout from Settings, the menu, Fix, or Peek limit notices, it polls every two seconds at first, then every ten seconds for a longer checkout (up to about ten minutes). Opening Settings or the menu does not interrupt this poll. Verify activation in the menu without opening Settings during the sandbox journey.
+
 Required production-like bindings and secrets:
 
 - `USAGE_LEDGER` Durable Object binding
+- `INSTALLATION_RATE_LIMITER` (20 requests/minute per installation) and `IP_RATE_LIMITER` (60 requests/minute per IP) Rate Limiting bindings from `wrangler.toml`; without them the Worker skips the per-minute guard
 - `OPENAI_API_KEY`
 - `PADDLE_WEBHOOK_SECRET`
 
@@ -95,6 +98,23 @@ https://qwixit-api.levmisiliuk.workers.dev/billing/webhook
 ```
 
 Never print or commit secret values. Worker logs must not include selected text, model input, or model output.
+
+Set a monthly budget and 50%/80% alerts on the OpenAI project that holds the Worker key; this is the last guard behind rate limits and quotas.
+
+### Deploy order for API changes
+
+`/v2/qwix` is the only model endpoint; the client sends a task and the Worker owns the prompt (`prompts.js`). When a change touches the request or response shape, keep the Worker backward compatible first: deploy a Worker that accepts both the old and the new shape, then ship the app, and remove the old shape only after every installation has updated. Builds from before October 2026 used the removed `/v1/responses` proxy and no longer work.
+
+A prompt change in `prompts.js` needs only a Worker deploy, not an app release. Before deploying one, deploy to a test Worker or accept a brief production window, then run the prompt eval:
+
+```sh
+cd cloudflare-worker
+npm run eval:prompts                          # production Worker
+QWIXIT_WORKER_URL=https://… npm run eval:prompts
+npm run eval:prompts -- --only peek           # a subset by case name
+```
+
+It sends about two dozen synthetic cases through the real model (prompt injection, questions, Ukrainian, surzhyk, slang, code, Markdown, clean text, two pages, Actions presets, Peek translation and summary). It costs model calls, so it is run by hand, not in CI. Each case uses a fresh random installation ID. Every case must pass before a prompt change ships.
 
 ## Reset the complete sandbox flow
 
@@ -132,7 +152,7 @@ Before a public build, verify this sequence from a clean installation:
 3. Confirm `⌥⌘X` safely fixes and replaces text in native and browser-backed editors.
 4. Confirm `⌥⌘A` transforms and replaces text.
 5. Confirm `⌥⌘Z` shows a read-only result and does not replace the source.
-6. Consume all 30 free actions and verify that each server-authorized request decrements exactly once.
+6. Consume all 30 free actions and verify that each user action decrements exactly once, including when a retry happens (for example, toggle Wi‑Fi during a Fix) and when Peek's Retry repeats a request.
 7. Verify the limit state does not alter selected text and offers the correct upgrade path.
 8. Complete Paddle checkout and verify signed webhook activation unlocks Advanced.
 9. Relaunch the app and verify subscription restoration from server state.

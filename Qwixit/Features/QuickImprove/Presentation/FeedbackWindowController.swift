@@ -5,10 +5,12 @@ import AppKit
 final class FeedbackWindowController: FeedbackPresenting {
     private let state = FeedbackWindowState()
     private let popupDismiss: PopupDismissCoordinator
+    private let onUpgrade: () -> Void
     private var panel: NSPanel?
 
-    init(popupDismiss: PopupDismissCoordinator) {
+    init(popupDismiss: PopupDismissCoordinator, onUpgrade: @escaping () -> Void) {
         self.popupDismiss = popupDismiss
+        self.onUpgrade = onUpgrade
     }
 
     func show(
@@ -25,7 +27,6 @@ final class FeedbackWindowController: FeedbackPresenting {
         if phase == .limitReached { size = .init(width: 420, height: 232) }
         else if isError { size = .init(width: 400, height: 72) }
         else if phase == .offline { size = .init(width: 360, height: 56) }
-        else if phase == .pasteSent { size = .init(width: 216, height: 67) }
         else if isCyberStatus { size = .init(width: 216, height: 50) }
         else if phase == .permissionDenied { size = .init(width: 326, height: 86) }
         else if phase == .noSelection { size = .init(width: 306, height: 82) }
@@ -41,7 +42,8 @@ final class FeedbackWindowController: FeedbackPresenting {
             panel.contentView = NSHostingView(
                 rootView: FeedbackHost(
                     state: state,
-                    onClose: { [weak self] in self?.hide() }
+                    onClose: { [weak self] in self?.hide() },
+                    onUpgrade: onUpgrade
                 )
             )
             self.panel = panel
@@ -103,13 +105,15 @@ private final class FeedbackWindowState: ObservableObject {
 private struct FeedbackHost: View {
     @ObservedObject var state: FeedbackWindowState
     let onClose: () -> Void
+    let onUpgrade: () -> Void
 
     var body: some View {
         ZStack {
             FeedbackPill(
                 phase: state.phase,
                 reduceMotion: state.reduceMotion,
-                onClose: onClose
+                onClose: onClose,
+                onUpgrade: onUpgrade
             )
                 .id(phaseKey)
                 .transition(
@@ -129,6 +133,7 @@ private struct FeedbackHost: View {
         case .processing: "processing"
         case .success: "success"
         case .pasteSent: "paste-sent"
+        case .alreadyClean: "already-clean"
         case .noSelection: "no-selection"
         case .permissionDenied: "permission"
         case .limitReached: "limit-reached"

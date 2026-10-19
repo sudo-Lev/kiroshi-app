@@ -16,12 +16,9 @@ struct MenuBarView: View {
         ZStack(alignment: .topTrailing) {
             VStack(spacing: 0) {
                 utilityBar
-                brandHeader
+                statusRow
                 reviewModeRow
-                if showsBillingStatus {
-                    billingStatusRow
-                }
-                actionArea
+                actionsRow
             }
 
             if isEnvironmentMenuPresented {
@@ -48,7 +45,6 @@ struct MenuBarView: View {
         .qwixitTheme()
         .onAppear {
             settingsViewModel.refreshAccessibility()
-            settingsViewModel.refreshUsage()
         }
     }
 
@@ -143,23 +139,53 @@ struct MenuBarView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private var brandHeader: some View {
+    private var statusRow: some View {
         HStack(spacing: 7) {
-            QwixitLockup()
-                .frame(width: 108, height: 34, alignment: .leading)
-            Spacer(minLength: 2)
-            TokiriUI.PopupCloseButton(
-                shortcut: HotkeyCatalog.popupDismiss.presentation,
-                label: "Close Tokiri menu",
-                action: onClose
+            QwixitFaceView(
+                face: settingsViewModel.isAdvanced ? .advanced : .hello,
+                size: 13,
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                color: settingsViewModel.isAdvanced ? KColor.terminalGreen : KColor.ink
             )
+            .frame(width: 56, height: 30)
+            .accessibilityLabel(settingsViewModel.isAdvanced ? "Advanced plan active" : "Free plan")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(billingTitle)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundStyle(settingsViewModel.isAdvanced ? KColor.terminalGreen : KColor.ink)
+                Text(billingDetail)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(KColor.secondary)
+            }
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+
+            if showsCheckoutAction {
+                Button("Get Advanced") {
+                    settingsViewModel.openStarterCheckout()
+                }
+                .buttonStyle(TokiriUI.PrimaryButton(compact: true))
+                .help("Open the Paddle sandbox checkout for Advanced · $10/month")
+                .accessibilityLabel("Subscribe to Tokiri Advanced for ten dollars per month")
+            } else {
+                Spacer(minLength: 0)
+                TokiriUI.PopupCloseButton(
+                    shortcut: HotkeyCatalog.popupDismiss.presentation,
+                    label: "Close Tokiri menu",
+                    action: onClose
+                )
+            }
             Button(action: onOpenSettings) {
-                AccessStatusBadge(
+                TokiriUI.AccessBadge(
                     granted: settingsViewModel.accessibilityGranted,
-                    compact: true
+                    compact: true,
+                    iconOnly: true
                 )
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(settingsViewModel.accessibilityGranted
+                ? "Accessibility access allowed. Open Settings"
+                : "Accessibility access required. Open Settings")
             .help(
                 settingsViewModel.accessibilityGranted
                     ? "Tokiri can read and replace selected text"
@@ -167,38 +193,81 @@ struct MenuBarView: View {
             )
         }
         .padding(.horizontal, 14)
-        .frame(height: 60)
-        .background(KColor.canvasRaised)
-        .overlay(alignment: .bottom) { Rectangle().fill(KColor.line).frame(height: 1) }
+        .frame(height: 42)
+        .background {
+            if settingsViewModel.isAdvanced {
+                LinearGradient(
+                    colors: [KColor.success.opacity(0.18), KColor.success.opacity(0.07)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else {
+                KColor.surface
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(settingsViewModel.isAdvanced ? KColor.success.opacity(0.38) : KColor.line)
+                .frame(height: 1)
+        }
     }
 
-    private var actionArea: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                CompactMenuAction(icon: .settings, title: "Settings") { onOpenSettings() }
-                CompactMenuAction(icon: .quit, title: "Quit", destructive: true) { onQuit() }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .frame(height: 40)
+    private var actionsRow: some View {
+        GeometryReader { geometry in
+            let contentWidth = geometry.size.width - 24
+            let halfWidth = (contentWidth - 8) / 2
 
-#if DEBUG
-            // Testing-only controls. Keep this block DEBUG-gated so Release builds
-            // expose only the user-facing Settings and Quit actions.
-            HStack(spacing: 6) {
-                CompactMenuAction(icon: .onboarding, title: "Onboarding", compact: true) { onShowOnboarding() }
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    actionCell(icon: .settings, title: "Settings", action: onOpenSettings)
+                        .frame(width: halfWidth, height: 28)
+                    quitActionCell
+                        .frame(width: halfWidth, height: 28)
+                }
+
+                actionCell(icon: .onboarding, title: "Onboarding", action: onShowOnboarding)
+                    .frame(width: contentWidth, height: 28)
             }
             .padding(.horizontal, 12)
-            .padding(.bottom, 5)
-            .frame(height: 35)
-            .background(KColor.canvas)
-            .overlay(alignment: .top) {
-                Rectangle().fill(KColor.line.opacity(0.7)).frame(height: 1)
-            }
-#endif
+            .padding(.vertical, 7)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .frame(height: 76)
         .background(KColor.canvasRaised)
-        .overlay(alignment: .top) { Rectangle().fill(KColor.line).frame(height: 1) }
+    }
+
+    private func actionCell(
+        icon: TokiriUI.IconName,
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                TokiriUI.Icon(icon, size: 11)
+                Text(title)
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .buttonStyle(TokiriUI.PrimaryButton(compact: true, appearance: .filled))
+        .contentShape(Rectangle())
+        .accessibilityLabel(title)
+    }
+
+    private var quitActionCell: some View {
+        Button(action: onQuit) {
+            HStack(spacing: 5) {
+                TokiriUI.Icon(.quit, size: 11)
+                Text("Quit")
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .buttonStyle(TokiriUI.QuitButton(compact: true, appearance: .soft))
+        .contentShape(Rectangle())
+        .accessibilityLabel("Quit Tokiri")
     }
 
     private var reviewModeRow: some View {
@@ -227,61 +296,19 @@ struct MenuBarView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(KColor.line).frame(height: 1) }
     }
 
-    private var billingStatusRow: some View {
-        HStack(spacing: 9) {
-            QwixitFaceView(
-                face: billingFace,
-                size: 12,
-                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            )
-            Text(billingTitle)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-            Spacer()
-            if showsCheckoutAction {
-                Button("Get Advanced") {
-                    settingsViewModel.openStarterCheckout()
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .help("Open the Paddle sandbox checkout for Advanced · $10/month")
-                .accessibilityLabel("Subscribe to Tokiri Advanced for ten dollars per month")
-            } else {
-                Text(billingDetail)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(KColor.secondary)
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(height: showsCheckoutAction ? 44 : 34)
-        .background(billingColor.opacity(0.055))
-        .overlay(alignment: .top) { Rectangle().fill(billingColor.opacity(0.22)).frame(height: 1) }
-    }
-
     private var showsCheckoutAction: Bool {
         settingsViewModel.remainingActions == 0
-            && !settingsViewModel.isUnlimited
-    }
-
-    private var showsBillingStatus: Bool {
-        settingsViewModel.isUnlimited
-            || settingsViewModel.remainingActions != nil
-    }
-
-    private var billingFace: QwixitFace {
-        if settingsViewModel.isUnlimited { return .advanced }
-        return usedActions == 30 ? .pay : .hello
+            && !settingsViewModel.isAdvanced
     }
 
     private var billingTitle: String {
-        settingsViewModel.isUnlimited ? "Advanced active" : "\(usedActions) / 30 used"
+        settingsViewModel.isAdvanced ? "Advanced" : "Free"
     }
 
     private var billingDetail: String {
-        if settingsViewModel.isUnlimited { return "no monthly cap" }
-        return remainingActions == 0 ? "free plan complete" : "\(remainingActions) free left"
-    }
-
-    private var billingColor: Color {
-        settingsViewModel.isUnlimited ? KColor.success : KColor.ink
+        if settingsViewModel.isAdvanced { return "more room to work" }
+        guard settingsViewModel.remainingActions != nil else { return "30 free / month" }
+        return "\(usedActions) / 30 used"
     }
 
     private var remainingActions: Int {
@@ -290,35 +317,4 @@ struct MenuBarView: View {
 
     private var usedActions: Int { 30 - remainingActions }
 
-}
-
-private struct CompactMenuAction: View {
-    let icon: TokiriUI.IconName
-    let title: String
-    var destructive = false
-    var compact = false
-    let action: () -> Void
-
-    @ViewBuilder
-    var body: some View {
-        let label = HStack(spacing: 7) {
-            TokiriUI.Icon(icon, size: 11)
-            Text(title)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-        }
-        .frame(maxWidth: .infinity)
-
-        if compact {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(CompactButtonStyle(accent: destructive ? KColor.danger : KColor.violet))
-        } else {
-            Button(action: action) {
-                label
-            }
-            .buttonStyle(PrimaryButtonStyle(compact: true))
-        }
-    }
 }

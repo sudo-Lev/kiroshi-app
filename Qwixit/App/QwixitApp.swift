@@ -47,10 +47,19 @@ final class AppContainer {
         LegacyMigration.run(isAccessibilityTrusted: accessibility.isTrusted)
         let improver = TextImprovementService()
         let peekViewModel = PeekViewModel(client: PeekClient(), detector: LanguageDetector())
-        feedback = FeedbackWindowController(popupDismiss: popupDismiss)
+        let settings = SettingsViewModel(accessibility: accessibility)
+        settingsViewModel = settings
+        feedback = FeedbackWindowController(
+            popupDismiss: popupDismiss,
+            onUpgrade: { settings.openStarterCheckout() }
+        )
         review = ReviewPanelController(popupDismiss: popupDismiss)
         replacementRecovery = ReplacementRecoveryPanelController(popupDismiss: popupDismiss)
-        peekPanel = PeekPanelController(viewModel: peekViewModel, popupDismiss: popupDismiss)
+        peekPanel = PeekPanelController(
+            viewModel: peekViewModel,
+            popupDismiss: popupDismiss,
+            onUpgrade: { settings.openStarterCheckout() }
+        )
         palettePanel = PalettePanelController(
             viewModel: PaletteViewModel(registry: ActionRegistry(), detector: LanguageDetector()),
             bridge: AXTextBridge(),
@@ -59,7 +68,6 @@ final class AppContainer {
             replacementRecovery: replacementRecovery,
             popupDismiss: popupDismiss
         )
-        settingsViewModel = SettingsViewModel(accessibility: accessibility)
         quickImproveViewModel = QuickImproveViewModel(
             accessibility: accessibility,
             improver: improver,
@@ -108,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let settings = container.settingsViewModel
+        settings.refreshUsage()
         if !settings.hasCompletedOnboarding || settings.needsRenamePermission {
             // Upgrading users only need the permission step again.
             if settings.hasCompletedOnboarding { settings.onboarding.step = 1 }
@@ -244,6 +253,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if menuPopover.isShown {
             menuPopover.close()
         } else if let button = statusItem.button {
+            container.settingsViewModel.refreshAccessibility()
+            container.settingsViewModel.refreshUsage()
             menuPopover.show(relativeTo: button)
         }
     }

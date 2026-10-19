@@ -11,33 +11,13 @@ enum PeekLoadState: Equatable {
     case failed(String)
 }
 
-struct PeekSentence: Codable, Equatable, Identifiable {
-    var id: String { source + "\u{0}" + target }
-    let source: String
-    let target: String
-    let lead: String?
-
-    init(source: String, target: String, lead: String? = nil) {
-        self.source = source
-        self.target = target
-        self.lead = lead
-    }
-}
-
 enum PeekResult: Equatable {
-    case translation([PeekSentence])
+    case translation([String])
     case summary([String])
 
     var plainText: String {
         return switch self {
-        case .translation(let sentences): sentences.enumerated().map { index, sentence in
-            let lead = sentence.lead?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let cleanLead = lead.trimmingCharacters(in: .punctuationCharacters)
-            guard !cleanLead.isEmpty else { return sentence.target }
-            return index == 0
-                ? "# \(cleanLead)\n\n\(sentence.target)"
-                : "**\(cleanLead):** \(sentence.target)"
-        }.joined(separator: "\n\n")
+        case .translation(let paragraphs): paragraphs.joined(separator: "\n\n")
         case .summary(let content): content.joined(separator: "\n\n")
         }
     }
@@ -69,6 +49,9 @@ final class PeekViewModel: ObservableObject {
     @Published var mode: PeekMode = .translate
     @Published var summaryLength: PeekSummaryLength = .points
     @Published var targetLanguage: String
+    @Published var query = "" {
+        didSet { selectedChoiceIndex = 0 }
+    }
     @Published var isPinned = false
     @Published private(set) var selectedChoiceIndex = 0
 
@@ -76,6 +59,8 @@ final class PeekViewModel: ObservableObject {
     private let detector: LanguageDetecting
     private let defaults: UserDefaults
     private var cache: [PeekCacheKey: PeekResult] = [:]
+    /// One operation per panel request, reused by Retry so a repeat is not charged again.
+    private var operationIDs: [PeekCacheKey: String] = [:]
     private var requestTask: Task<Void, Never>?
     private var prefetchTasks: [Task<Void, Never>] = []
     private var copyResetTask: Task<Void, Never>?
@@ -84,7 +69,7 @@ final class PeekViewModel: ObservableObject {
 
     var isAwaitingChoice: Bool { loadState == .idle }
     var languages: [TranslationLanguage] { TranslationLanguages.targets(for: sourceLanguage?.code) }
-    var choiceCount: Int { languages.count }
+    var choiceCount: Int { visibleLanguages.count }
 
     init(
         client: PeekClientProtocol,
@@ -101,6 +86,25 @@ final class PeekViewModel: ObservableObject {
         sourceText.split(whereSeparator: \.isWhitespace).count
     }
 
+    var orderedLanguages: [TranslationLanguage] {
+        guard let target = languages.first(where: { $0.id == targetLanguage }) else { return languages }
+        return [target] + languages.filter { $0.id != target.id }
+    }
+
+    var visibleLanguages: [TranslationLanguage] {
+        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        guard !value.isEmpty else { return orderedLanguages }
+        return orderedLanguages.filter { language in
+            searchNames(for: language).contains { name in
+                name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                    .localizedCaseInsensitiveContains(value)
+            }
+        }
+    }
+
+    var contextLabel: String { "\(sourceLanguage?.displayName ?? "Unknown language") · \(wordCount) words" }
+
     var footerText: String {
         if isManualMode, let result {
             let outputCount = result.plainText.split(whereSeparator: \.isWhitespace).count
@@ -111,11 +115,13 @@ final class PeekViewModel: ObservableObject {
     }
 
     var targetLanguageName: String {
-        Locale.current.localizedString(forLanguageCode: targetLanguage)?.uppercased() ?? targetLanguage.uppercased()
+        languages.first(where: { $0.id == targetLanguage })?.name ?? "English"
     }
 
     func open(text: String) {
         cancelAll()
+        query = ""
+        operationIDs.removeAll()
         guard PeekInputLimit.accepts(text) else {
             sourceText = ""
             sourceLanguage = nil
@@ -136,7 +142,7 @@ final class PeekViewModel: ObservableObject {
             : Self.translationTarget(for: sourceLanguage?.code)
         summaryLength = rememberedLength()
         mode = .translate
-        selectedChoiceIndex = languages.firstIndex { $0.id == targetLanguage } ?? 0
+        selectedChoiceIndex = 0
         isManualMode = false
         result = nil
         receivedFirstToken = false
@@ -153,8 +159,10 @@ final class PeekViewModel: ObservableObject {
 
     func close() {
         cancelAll()
+        query = ""
         isRetrying = false
         cache.removeAll()
+        operationIDs.removeAll()
         sourceText = ""
         sourceLanguage = nil
         result = nil
@@ -182,13 +190,11 @@ final class PeekViewModel: ObservableObject {
         selectMode(modes[(index + step + modes.count) % modes.count])
     }
 
-    func cycleLanguage() {
+    func cycleLanguage(step: Int = 1) {
         let codes = languages.map(\.id)
         guard !codes.isEmpty else { return }
         let index = codes.firstIndex(of: targetLanguage) ?? 0
-        targetLanguage = codes[(index + 1) % codes.count]
-        defaults.set(targetLanguage, forKey: PeekPreferenceKey.targetLanguage)
-        resetChoiceIfNeeded()
+        runTranslation(at: (index + step + codes.count) % codes.count)
     }
 
     func changeLength(step: Int) {
@@ -208,21 +214,32 @@ final class PeekViewModel: ObservableObject {
 
     func chooseNumber(_ number: Int) {
         guard (1...choiceCount).contains(number) else { return }
-        selectedChoiceIndex = number - 1
+        chooseLanguage(at: number - 1)
+    }
+
+    func chooseLanguage(at visibleIndex: Int) {
+        guard visibleLanguages.indices.contains(visibleIndex) else { return }
+        selectedChoiceIndex = visibleIndex
         submitChoice()
     }
 
     func submitChoice() {
-        guard languages.indices.contains(selectedChoiceIndex) else { return }
-        runTranslation(at: selectedChoiceIndex)
+        guard visibleLanguages.indices.contains(selectedChoiceIndex),
+              let index = languages.firstIndex(where: { $0.id == visibleLanguages[selectedChoiceIndex].id }) else { return }
+        runTranslation(at: index)
     }
 
     func runTranslation(at index: Int) {
         guard languages.indices.contains(index) else { return }
+        runTranslation(language: languages[index])
+    }
+
+    private func runTranslation(language: TranslationLanguage) {
         cancelAll()
-        selectedChoiceIndex = index
+        query = ""
         mode = .translate
-        targetLanguage = languages[index].id
+        targetLanguage = language.id
+        selectedChoiceIndex = 0
         defaults.set(targetLanguage, forKey: PeekPreferenceKey.targetLanguage)
         result = nil
         receivedFirstToken = false
@@ -282,7 +299,7 @@ final class PeekViewModel: ObservableObject {
         switch mode {
         case .translate:
             let value = try JSONDecoder().decode(TranslationEnvelope.self, from: data)
-            return .translation(value.sentences.filter { !$0.target.isEmpty })
+            return .translation(value.paragraphs.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         case .summary:
             return .summary(try JSONDecoder().decode(SummaryEnvelope.self, from: data).content)
         }
@@ -336,7 +353,7 @@ final class PeekViewModel: ObservableObject {
         requestTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let value = try await fetch(mode: requestedMode, length: summaryLength)
+                let value = try await fetch(mode: requestedMode, length: summaryLength, operationID: operationID(for: key))
                 try Task.checkCancellation()
                 guard mode == requestedMode else { return }
                 cache[key] = value
@@ -366,7 +383,14 @@ final class PeekViewModel: ObservableObject {
         }
     }
 
-    private func fetch(mode: PeekMode, length: PeekSummaryLength) async throws -> PeekResult {
+    private func operationID(for key: PeekCacheKey) -> String {
+        if let existing = operationIDs[key] { return existing }
+        let created = QwixitOperation.makeID()
+        operationIDs[key] = created
+        return created
+    }
+
+    private func fetch(mode: PeekMode, length: PeekSummaryLength, operationID: String) async throws -> PeekResult {
         let responseLanguage = mode == .translate
             ? targetLanguage
             : sourceLanguage?.code ?? targetLanguage
@@ -375,7 +399,8 @@ final class PeekViewModel: ObservableObject {
             sourceLanguage: sourceLanguage?.code,
             targetLanguage: responseLanguage,
             mode: mode,
-            length: length
+            length: length,
+            operationID: operationID
         )
         var json = ""
         for try await delta in client.stream(request) {
@@ -408,6 +433,16 @@ final class PeekViewModel: ObservableObject {
         }
     }
 
+    private func searchNames(for language: TranslationLanguage) -> [String] {
+        switch language.id {
+        case "uk": [language.name, "Ukrainian"]
+        case "pl": [language.name, "Polish"]
+        case "fr": [language.name, "French"]
+        case "en": [language.name, "English"]
+        default: [language.name]
+        }
+    }
+
     private func resetChoiceIfNeeded() {
         guard loadState != .idle else { return }
         cancelAll()
@@ -417,5 +452,5 @@ final class PeekViewModel: ObservableObject {
     }
 }
 
-private struct TranslationEnvelope: Decodable { let sentences: [PeekSentence] }
+private struct TranslationEnvelope: Decodable { let paragraphs: [String] }
 private struct SummaryEnvelope: Decodable { let content: [String] }

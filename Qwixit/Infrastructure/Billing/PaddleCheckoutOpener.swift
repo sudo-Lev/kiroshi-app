@@ -27,7 +27,7 @@ struct BillingStatus: Decodable, Equatable {
     let remaining: Int?
     let period: String?
 
-    var isUnlimited: Bool { plan == "unlimited" }
+    var isAdvanced: Bool { QwixitUsage.isAdvancedPlan(plan) }
 
     enum CodingKeys: String, CodingKey {
         case plan, remaining, period

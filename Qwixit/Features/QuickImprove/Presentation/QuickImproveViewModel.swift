@@ -59,7 +59,7 @@ final class QuickImproveViewModel: ObservableObject {
         phase = .ready
     }
 
-    func improveSelection(instruction: String? = nil) {
+    func improveSelection() {
         runID = UUID()
         let currentRun = runID
         improvementTask?.cancel()
@@ -72,11 +72,11 @@ final class QuickImproveViewModel: ObservableObject {
         feedback.hide()
         phase = .ready
         improvementTask = Task { [weak self] in
-            await self?.runImprovement(instruction: instruction, runID: currentRun)
+            await self?.runImprovement(runID: currentRun)
         }
     }
 
-    private func runImprovement(instruction: String?, runID currentRun: UUID) async {
+    private func runImprovement(runID currentRun: UUID) async {
         guard runID == currentRun, !Task.isCancelled else { return }
         activeSelectionBounds = nil
         activeFallbackPoint = accessibility.fallbackPoint()
@@ -111,12 +111,17 @@ final class QuickImproveViewModel: ObservableObject {
             if !Task.isCancelled { show(.noSelection, duration: 2.4) }
             return
         }
+        // Long selections never reach the network, so nothing is charged and nothing changes.
+        guard QwixitAPI.accepts(selection) else {
+            show(.error(QwixitAPIError.textTooLong.localizedDescription), duration: 4)
+            return
+        }
         scheduleProcessingFeedback()
 
         do {
-            let improved = try await NetworkRetry.perform(
+            let outcome = try await NetworkRetry.perform(
                 operation: {
-                    try await improver.improve(selection, instruction: instruction)
+                    try await improver.improve(selection)
                 },
                 onRetry: { [weak self] attempt, total in
                     guard let self,
@@ -131,6 +136,12 @@ final class QuickImproveViewModel: ObservableObject {
             guard runID == currentRun else { return }
             processingFeedbackTask?.cancel()
             processingFeedbackTask = nil
+
+            // Nothing to fix: no replacement, no clipboard write, and no review to approve.
+            guard case .fixed(let improved) = outcome else {
+                show(.alreadyClean, duration: 1.6)
+                return
+            }
 
             if wantsReview, let snapshot, let review {
                 pendingReview = PendingReview(snapshot: snapshot, proposed: improved)

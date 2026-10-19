@@ -48,7 +48,7 @@ Qwixit remains a native SwiftUI/AppKit macOS menu-bar application while demand i
 
 **Status:** provisional
 
-The app currently offers 30 free AI actions per installation per calendar month and $10/month Qwixit Advanced. Advanced removes the monthly action cap; it keeps the same careful Fix quality bar.
+The app currently offers 30 free AI actions per installation per calendar month and $10/month Qwixit Advanced. Advanced gives more room to work, not unlimited use: a proposed fair-use ceiling of 300 actions per UTC day and 3 000 per month keeps $10 above model cost. It keeps the same careful Fix quality bar.
 
 **Why:** this supports repeated usage, exposes limit behavior, and tests willingness to pay for speed. The numbers may change with evidence.
 
@@ -104,6 +104,14 @@ Fix and Actions capture selected text and source focus, restore that focus, and 
 
 **Status:** accepted
 
-After Fix posts ⌘V, leave the generated replacement on the system clipboard. Show the green success chip for the completed Fix request, with a small `NOT HERE? ⌘V` note above it. Success does not assert that the destination editor consumed the paste. Selection-copy fallbacks and Actions continue restoring the previous clipboard, and a newer clipboard change is never overwritten.
+After Fix posts ⌘V, leave the generated replacement on the system clipboard. Show the compact green success chip for the completed Fix request. Success does not assert that the destination editor consumed the paste. Selection-copy fallbacks and Actions continue restoring the previous clipboard, and a newer clipboard change is never overwritten.
 
 **Why:** some editors miss a synthetic paste event. The user can press ⌘V immediately without reopening Tokiri or losing the generated correction.
+
+## D014 — The Worker owns prompts; one action costs one attempt
+
+**Status:** accepted
+
+The app sends `/v2/qwix` a task (`fix`, `action`, `peek`), the selected text, and enumerated parameters. It never sends instructions. Prompts live in `cloudflare-worker/prompts.js`, so a prompt fix ships with a Worker deploy. Every retry of one user action carries the same operation ID, and the ledger charges it once. Confirmed service failures, rejected results, and a Fix with nothing to change return the action, each capped per day. Actions has no quick-questions step and no free-form panel follow-up.
+
+**Why:** any client-built prompt can be replayed with arbitrary instructions, turning the free allowance into a free general-purpose chatbot. Charging per HTTP request made flaky networks cost users several actions for one result.
