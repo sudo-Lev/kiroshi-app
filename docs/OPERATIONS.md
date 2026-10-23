@@ -68,13 +68,15 @@ npm run check
 
 It proxies model requests, enforces monthly usage atomically with a Durable Object, exposes billing state, receives signed Paddle webhooks, and hosts the checkout and activation pages.
 
-The webhook updates the installation ledger when Paddle delivers a subscription event. The macOS app checks `/billing/status` on launch, after returning to the foreground, and whenever the menu opens. After opening checkout from Settings, the menu, Fix, or Peek limit notices, it polls every two seconds at first, then every ten seconds for a longer checkout (up to about ten minutes). Opening Settings or the menu does not interrupt this poll. Verify activation in the menu without opening Settings during the sandbox journey.
+The signed Paddle webhook updates the installation ledger independently of the macOS app. The app reads that ledger through `/billing/status` on launch, after returning to the foreground, and whenever the menu opens. After checkout is opened from Settings, the menu, Fix, or Peek limit notices, the app polls every two seconds at first, then every ten seconds for a longer checkout (up to about ten minutes). The success page also polls the same status endpoint. Returning to the app or opening the menu/Settings triggers an immediate status check and restarts the same checkout poll. Verify activation in the menu without opening Settings during the sandbox journey. Paddle's sandbox can deliver or retry webhook events later than the checkout completion callback, so the success page and app can briefly show a syncing state.
 
 Required production-like bindings and secrets:
 
 - `USAGE_LEDGER` Durable Object binding
-- `INSTALLATION_RATE_LIMITER` (20 requests/minute per installation) and `IP_RATE_LIMITER` (60 requests/minute per IP) Rate Limiting bindings from `wrangler.toml`; without them the Worker skips the per-minute guard
+- `INSTALLATION_RATE_LIMITER` (20 requests/minute per installation) and `IP_RATE_LIMITER` (60 requests/minute per IP) Rate Limiting bindings from `wrangler.toml`; without them the Worker skips the per-minute guard. A configured limiter error returns `503` before usage is charged or a model is called.
 - `OPENAI_API_KEY`
+- `CLAUDE_API_SECRET` (needed only when Claude Haiku 5.5 is selected)
+- `ANALYTICS_DASHBOARD_SECRET` (admin-only API key for the internal dashboard)
 - `PADDLE_WEBHOOK_SECRET`
 
 Development reset additionally needs:
@@ -87,9 +89,22 @@ Development reset additionally needs:
 ```sh
 cd cloudflare-worker
 npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put CLAUDE_API_SECRET
+npx wrangler secret put ANALYTICS_DASHBOARD_SECRET
 npx wrangler secret put PADDLE_WEBHOOK_SECRET
 npm run deploy
 ```
+
+The Worker retry for rejected Fix output and Claude Actions truncated at `max_tokens`, plus the analytics collector, take effect only after this deployment. Claude Actions get an 8,192-token output ceiling on the first request and a 16,384-token ceiling on the single truncation retry. The dashboard is a separate static Cloudflare Pages project; its default origin is `https://tokiri-analytics.pages.dev` in `wrangler.toml`. If Pages uses another production hostname, update `ANALYTICS_DASHBOARD_ORIGIN` before deploying the Worker.
+
+Deploy the dashboard after the Worker:
+
+```sh
+npx wrangler pages project create tokiri-analytics --production-branch main
+npx wrangler pages deploy analytics-dashboard --project-name tokiri-analytics
+```
+
+The page asks for the dashboard key at runtime and keeps it in the current browser tab session. Protect the Pages project with Cloudflare Access for the owner's account. The API still checks the separate Worker secret and the exact configured origin. The dashboard is owner diagnostics for the current single user: it shows Action request errors with a plain-language cause, the model/provider or Worker source, and the Worker processing stage; app response time, an estimated combined network/app overhead for Fix and Actions, model-provider time, Worker/ledger time, p95 latency buckets, maximum duration, and requests still active after 10 seconds grouped by whether they are waiting on the provider or Worker/ledger. Only fixed reason and stage codes are retained; raw exception text, selected text, prompts, and model output are not recorded. The app reports only elapsed time and fixed provider/task labels, without text or installation IDs. App-side timing appears after a build containing the reporter. The network estimate is app duration minus Worker duration, so it includes both network directions and local app overhead; it cannot isolate one-way arrival time. Network retries count as separate Worker requests, so one user action can appear more than once. Peek timing is tracked through stream completion. Slow-request counts are recorded at the 10-second threshold while the request is still pending; other timing summaries are recorded when the response completes. The dashboard has no request log or device-level drilldown.
 
 Paddle must deliver `subscription.created`, `subscription.updated`, and `subscription.canceled` to:
 
@@ -97,13 +112,13 @@ Paddle must deliver `subscription.created`, `subscription.updated`, and `subscri
 https://qwixit-api.levmisiliuk.workers.dev/billing/webhook
 ```
 
-Never print or commit secret values. Worker logs must not include selected text, model input, or model output.
+Never print or commit secret values. Worker logs must not include selected text, model input, or model output. Output validation failures may log only the provider, task, and a fixed reason code.
 
-Set a monthly budget and 50%/80% alerts on the OpenAI project that holds the Worker key; this is the last guard behind rate limits and quotas.
+Set a monthly budget and 50%/80% alerts on each model-provider account used by the Worker; this is the last guard behind rate limits and quotas.
 
 ### Deploy order for API changes
 
-`/v2/qwix` is the only model endpoint; the client sends a task and the Worker owns the prompt (`prompts.js`). When a change touches the request or response shape, keep the Worker backward compatible first: deploy a Worker that accepts both the old and the new shape, then ship the app, and remove the old shape only after every installation has updated. Builds from before October 2026 used the removed `/v1/responses` proxy and no longer work.
+`/v2/qwix` is the only model endpoint; the client sends a task, selected provider (`openai` or `anthropic`), and enumerated parameters. The Worker owns the prompt (`prompts.js`) and both provider credentials. Provider is optional for old clients and defaults to OpenAI. When a change touches the request or response shape, keep the Worker backward compatible first: deploy a Worker that accepts both the old and the new shape, then ship the app, and remove the old shape only after every installation has updated. Builds from before October 2026 used the removed `/v1/responses` proxy and no longer work.
 
 A prompt change in `prompts.js` needs only a Worker deploy, not an app release. Before deploying one, deploy to a test Worker or accept a brief production window, then run the prompt eval:
 

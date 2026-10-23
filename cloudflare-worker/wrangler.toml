@@ -3,6 +3,12 @@ main = "worker.js"
 compatibility_date = "2026-10-03"
 preview_urls = false
 
+[secrets]
+required = ["CLAUDE_API_SECRET", "ANALYTICS_DASHBOARD_SECRET"]
+
+[vars]
+ANALYTICS_DASHBOARD_ORIGIN = "https://tokiri-analytics.pages.dev"
+
 [observability.logs]
 enabled = true
 

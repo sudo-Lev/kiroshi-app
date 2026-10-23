@@ -64,7 +64,7 @@ The current interface is close to the intended product. Improvements should poli
 
 **Status:** accepted
 
-Anonymous operational telemetry may be considered only when it excludes user text, avoids new macOS permissions, and does not create surprising consent or disclosure requirements. Any telemetry provider or SDK requires explicit approval.
+The owner approved first-party Worker diagnostics on 2026-10-23. Tokiri currently has one user. The Worker stores daily aggregate counts by provider, task, outcome, fixed error reason, and requests still pending after 10 seconds grouped by current phase, plus model-attempt counts, automatic Fix retries, Worker duration, provider duration, and fixed-bucket latency distributions for `/v2/qwix` requests. The app reports only its elapsed request time plus fixed provider/task labels; the Worker stores those as daily aggregates. For Fix and Actions, app time minus Worker time estimates the combined network trip and app overhead, not a one-way latency. Peek's provider duration and Worker duration cover its streamed response; its end-to-end app time is reported after the stream ends. App-side measurements begin with builds containing the reporter. No installation IDs, IP addresses, selected text, prompts, model output, or text-derived hashes are stored; aggregates expire after 365 days. No third-party SDK or new macOS permission is introduced. Per-installation views and other product-event families require a separate decision.
 
 **Why:** observability is useful, but not at the expense of the anonymity and low-friction promise.
 
@@ -84,13 +84,13 @@ When Preview & Approve is enabled, an unavailable selection snapshot leaves the 
 
 **Why:** both behaviors make the apparent user action match what actually happens to the selected text.
 
-## D011 — One close shortcut for interactive popups
+## D011 — Shared dismissal for interactive popups
 
 **Status:** accepted
 
-Interactive transient panels show the same TokiriUI close badge and close with `⌥⌘X`. Dismissal takes priority over Fix only while such a popup is visible. The binding is central and remains `⌥⌘X` when the user changes the Fix shortcut. Closing a preview cancels it without replacing text; click-through status notices and standard macOS windows keep their current behavior.
+Interactive transient panels use the shared TokiriUI close badge and close with `⌥⌘X`. That binding remains reserved when the user changes the Fix shortcut, so Actions and Peek cannot be assigned it. The menu-bar popover is the exception: its close badge shows the configured Fix shortcut, and pressing Fix closes that popover while it is open. The three feature shortcuts must stay unique. Closing a preview cancels it without replacing text; click-through status notices and standard macOS windows keep their current behavior.
 
-**Why:** one visible gesture makes every popup predictable while preserving the normal Fix shortcut when the user returns to their work.
+**Why:** transient panels keep a predictable shared dismissal gesture, while the menu-bar popover's shortcut badge stays in sync with the user's Fix setting.
 
 ## D012 — Use one paste path across apps
 
@@ -112,6 +112,6 @@ After Fix posts ⌘V, leave the generated replacement on the system clipboard. S
 
 **Status:** accepted
 
-The app sends `/v2/qwix` a task (`fix`, `action`, `peek`), the selected text, and enumerated parameters. It never sends instructions. Prompts live in `cloudflare-worker/prompts.js`, so a prompt fix ships with a Worker deploy. Every retry of one user action carries the same operation ID, and the ledger charges it once. Confirmed service failures, rejected results, and a Fix with nothing to change return the action, each capped per day. Actions has no quick-questions step and no free-form panel follow-up.
+The app sends `/v2/qwix` a task (`fix`, `action`, `peek`), the selected text, the user's enumerated provider choice, and task parameters. It never sends instructions or provider credentials. The Worker owns provider routing and prompts in `cloudflare-worker/prompts.js`, so prompt or provider changes ship with a Worker deploy. Every retry of one user action carries the same operation ID, and the ledger charges it once. Confirmed service failures, rejected results, and a Fix with nothing to change return the action, each capped per day. Actions has no quick-questions step and no free-form panel follow-up.
 
 **Why:** any client-built prompt can be replayed with arbitrary instructions, turning the free allowance into a free general-purpose chatbot. Charging per HTTP request made flaky networks cost users several actions for one result.

@@ -2,24 +2,37 @@
  * Qwixit API and billing gateway.
  *
  * Required encrypted secrets: OPENAI_API_KEY (or the legacy
- * qwixit-cloudflare-key during migration) and PADDLE_WEBHOOK_SECRET.
+ * qwixit-cloudflare-key during migration), CLAUDE_API_SECRET,
+ * ANALYTICS_DASHBOARD_SECRET, and PADDLE_WEBHOOK_SECRET.
  * Required binding: USAGE_LEDGER -> UsageLedger Durable Object.
  */
 
 import { ACTIONS, PEEK_LENGTHS, PEEK_MODES, actionPrompt, fixPrompt, peekPrompt, wrapSelectedText } from "./prompts.js";
 
 const OPENAI_URL = "https://api.openai.com/v1/responses";
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "gpt-5.6-luna";
+const ANTHROPIC_MODEL = "claude-haiku-5-5";
+const ANTHROPIC_ACTION_SCHEMA = {
+  type: "object",
+  properties: { text: { type: "string" } },
+  required: ["text"],
+  additionalProperties: false,
+};
 const FREE_ACTIONS_PER_MONTH = 30;
 const MAX_BODY_BYTES = 64 * 1024;
+const MAX_WEBHOOK_BODY_BYTES = 256 * 1024;
 const INSTALLATION_ID_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const OPERATION_ID_PATTERN = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
 const MAX_ATTEMPTS_PER_OPERATION = 3;
 const OPERATION_LIFETIME_MS = 15 * 60 * 1000;
 const OPERATION_RETENTION_MS = 60 * 60 * 1000;
+const ANALYTICS_RETENTION_DAYS = 365;
 const MAX_REFUNDS_PER_DAY = 20;
 const MAX_CLEAN_PER_DAY = 20;
-// Advanced is "more room to work", not unlimited: these keep $10 above OpenAI cost.
+const ANALYTICS_SLOW_REQUEST_THRESHOLD_MS = 10_000;
+const ANALYTICS_DURATION_BUCKETS_MS = [100, 250, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 30_000, 60_000, 120_000, 300_000];
+// Advanced is "more room to work", not unlimited: these keep $10 above model-provider costs.
 const ADVANCED_ACTIONS_PER_DAY = 300;
 const ADVANCED_ACTIONS_PER_MONTH = 3_000;
 const MAX_TEXT_CHARACTERS = 6_000;
@@ -27,12 +40,31 @@ const LANGUAGE_PATTERN = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
 const RATE_LIMIT_RETRY_AFTER_SECONDS = 60;
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
 const RESETTABLE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due", "paused"]);
+const ANALYTICS_PROVIDERS = new Set(["openai", "anthropic", "unknown"]);
+const ANALYTICS_TASKS = new Set(["fix", "action", "peek", "unknown"]);
+const ANALYTICS_PHASES = new Set(["model", "worker"]);
+const ANALYTICS_STAGES = new Set([
+  "request_validation", "request_protection", "worker_configuration", "usage_check",
+  "provider_request", "provider_response", "output_check", "response_handling", "unknown",
+]);
+const ANALYTICS_OUTCOMES = new Set([
+  "success", "output_rejected", "upstream_error", "rate_limited",
+  "quota_blocked", "client_error", "service_error", "worker_error",
+]);
+const ANALYTICS_REASONS = new Set([
+  "none", "max_tokens", "provider_refusal", "incomplete_response",
+  "invalid_fix_json", "invalid_fix_verdict", "empty_output", "selected_text_marker",
+  "invalid_action_json", "malformed_response", "implausible_length", "upstream_failed", "provider_not_configured", "rate_limited",
+  "free_limit_reached", "daily_limit", "monthly_limit", "other",
+]);
+const ANTHROPIC_ACTION_OUTPUT_TOKENS = 8_192;
+const ANTHROPIC_ACTION_RETRY_OUTPUT_TOKENS = 16_384;
 const PADDLE_SANDBOX_API_ORIGIN = "https://sandbox-api.paddle.com";
 const PADDLE_SANDBOX_CLIENT_TOKEN = "test_30d92b2b51bf80a52edcb3bb6ea";
 const PADDLE_SANDBOX_ADVANCED_PRICE_ID = "pri_01m4135bkhzgwp4y51nf8wjkgp";
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, executionContext) {
     const url = new URL(request.url);
 
     if (url.pathname === "/billing/checkout") {
@@ -60,12 +92,290 @@ export default {
       if (request.method !== "POST") return errorResponse(405, "Method not allowed.", {}, { Allow: "POST" });
       return handleDevelopmentReset(request, env);
     }
-    if (url.pathname === "/v2/qwix") return handleQwix(request, env);
+    if (url.pathname === "/v2/qwix") return handleQwix(request, env, executionContext);
+    if (url.pathname === "/internal/client-timing") return handleClientTiming(request, env);
+    if (url.pathname === "/internal/analytics") return handleAnalyticsDashboard(request, env);
     return request.headers.get("accept")?.includes("text/html")
       ? notFoundPage()
       : errorResponse(404, "Not found.");
   },
 };
+
+async function handleAnalyticsDashboard(request, env) {
+  const origin = request.headers.get("origin");
+  const allowedOrigin = env.ANALYTICS_DASHBOARD_ORIGIN;
+  const corsHeaders = origin && origin === allowedOrigin
+    ? { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Headers": "Authorization", "Access-Control-Allow-Methods": "GET, OPTIONS", "Vary": "Origin" }
+    : {};
+
+  if (request.method === "OPTIONS") {
+    if (!origin || origin !== allowedOrigin) return errorResponse(403, "Dashboard origin is not allowed.");
+    return new Response(null, { status: 204, headers: securityHeaders(corsHeaders) });
+  }
+  if (request.method !== "GET") return errorResponse(405, "Method not allowed.", {}, { ...corsHeaders, Allow: "GET, OPTIONS" });
+  if (!env.ANALYTICS_DASHBOARD_SECRET) return errorResponse(404, "Not found.", {}, corsHeaders);
+  if (origin && origin !== allowedOrigin) return errorResponse(403, "Dashboard origin is not allowed.");
+  if (env.ANALYTICS_DASHBOARD_SECRET.length < 32) {
+    return errorResponse(503, "Dashboard access key is not configured securely.", {}, corsHeaders);
+  }
+  const clientIP = request.headers.get("cf-connecting-ip");
+  if (env.IP_RATE_LIMITER && clientIP) {
+    try {
+      const limit = await env.IP_RATE_LIMITER.limit({ key: `dashboard:${clientIP}` });
+      if (!limit.success) return errorResponse(429, "Too many dashboard requests.", {}, corsHeaders);
+    } catch {
+      return errorResponse(503, "Dashboard request protection is unavailable.", {}, corsHeaders);
+    }
+  }
+  const authorization = request.headers.get("authorization") ?? "";
+  if (!constantTimeEqual(authorization, `Bearer ${env.ANALYTICS_DASHBOARD_SECRET}`)) {
+    return errorResponse(401, "Dashboard access key is invalid.", {}, corsHeaders);
+  }
+  if (!env.USAGE_LEDGER) return errorResponse(503, "Analytics storage is not configured.", {}, corsHeaders);
+
+  const days = Math.min(90, Math.max(1, Number(new URL(request.url).searchParams.get("days")) || 30));
+  const analyticsID = env.USAGE_LEDGER.idFromName("tokiri-analytics-global-v1");
+  const response = await env.USAGE_LEDGER.get(analyticsID).fetch(`https://analytics.tokiri/analytics/query?days=${days}`);
+  return new Response(response.body, {
+    status: response.status,
+    headers: securityHeaders({ "Content-Type": "application/json; charset=utf-8", ...corsHeaders }),
+  });
+}
+
+async function handleClientTiming(request, env) {
+  if (request.method !== "POST") return errorResponse(405, "Method not allowed.", {}, { Allow: "POST" });
+  const clientIP = request.headers.get("cf-connecting-ip");
+  if (env.IP_RATE_LIMITER && clientIP) {
+    try {
+      const limit = await env.IP_RATE_LIMITER.limit({ key: `client-timing:${clientIP}` });
+      if (!limit.success) return errorResponse(429, "Too many timing reports.");
+    } catch {
+      return errorResponse(503, "Timing report protection is unavailable.");
+    }
+  }
+  const event = await readOptionalJSON(request);
+  if (!isAnalyticsClientTiming(event)) return errorResponse(400, "Invalid client timing report.");
+  if (!env.USAGE_LEDGER) return errorResponse(503, "Analytics storage is not configured.");
+  const analyticsID = env.USAGE_LEDGER.idFromName("tokiri-analytics-global-v1");
+  return env.USAGE_LEDGER.get(analyticsID).fetch("https://analytics.tokiri/analytics/client-timing", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+  });
+}
+
+async function handleQwix(request, env, executionContext) {
+  const metrics = { provider: "unknown", task: "unknown", outcome: "worker_error", reason: "other", stage: "request_validation", modelAttempts: 0, retries: 0, modelDurationMs: 0, modelPhaseActive: false, modelStreamStartedAt: null, startedAt: Date.now() };
+  const finishSlowWatch = watchSlowRequest(env, metrics, executionContext);
+  let response;
+  try {
+    response = await handleQwixRequest(request, env, metrics);
+    metrics.outcome = await analyticsOutcome(response, metrics);
+  } catch (error) {
+    finishSlowWatch();
+    await recordAnalytics(env, metrics, executionContext);
+    throw error;
+  }
+
+  if (metrics.task === "peek" && response.status === 200 && response.body) {
+    const observed = observeResponseBody(response);
+    const finalize = observed.completion.then(async () => {
+      if (metrics.modelStreamStartedAt !== null) {
+        metrics.modelDurationMs += Date.now() - metrics.modelStreamStartedAt;
+        metrics.modelPhaseActive = false;
+      }
+      finishSlowWatch();
+      await recordAnalytics(env, metrics, null);
+    });
+    if (executionContext && typeof executionContext.waitUntil === "function") executionContext.waitUntil(finalize);
+    else void finalize;
+    return observed.response;
+  }
+
+  finishSlowWatch();
+  await recordAnalytics(env, metrics, executionContext);
+  return response;
+}
+
+function observeResponseBody(response) {
+  const reader = response.body.getReader();
+  let resolveCompletion;
+  let finished = false;
+  const completion = new Promise((resolve) => { resolveCompletion = resolve; });
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    resolveCompletion();
+  };
+  const body = new ReadableStream({
+    async pull(controller) {
+      try {
+        const result = await reader.read();
+        if (result.done) {
+          controller.close();
+          finish();
+        } else {
+          controller.enqueue(result.value);
+        }
+      } catch (error) {
+        controller.error(error);
+        finish();
+      }
+    },
+    async cancel(reason) {
+      try { await reader.cancel(reason); } finally { finish(); }
+    },
+  });
+  return {
+    response: new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers }),
+    completion,
+  };
+}
+
+function watchSlowRequest(env, metrics, executionContext) {
+  if (!executionContext || typeof executionContext.waitUntil !== "function") return () => {};
+  let completed = false;
+  let resolveWatch;
+  const watch = new Promise((resolve) => { resolveWatch = resolve; });
+  const timer = setTimeout(async () => {
+    if (completed) return resolveWatch();
+    try {
+      if (!env.USAGE_LEDGER) return;
+      const event = {
+        provider: ANALYTICS_PROVIDERS.has(metrics.provider) ? metrics.provider : "unknown",
+        task: ANALYTICS_TASKS.has(metrics.task) ? metrics.task : "unknown",
+        phase: metrics.modelPhaseActive ? "model" : "worker",
+      };
+      const analyticsID = env.USAGE_LEDGER.idFromName("tokiri-analytics-global-v1");
+      await env.USAGE_LEDGER.get(analyticsID).fetch("https://analytics.tokiri/analytics/slow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(event),
+      });
+    } catch {
+      console.warn("Slow request could not be recorded.");
+    } finally {
+      resolveWatch();
+    }
+  }, ANALYTICS_SLOW_REQUEST_THRESHOLD_MS);
+  executionContext.waitUntil(watch);
+  return () => {
+    completed = true;
+    clearTimeout(timer);
+    resolveWatch();
+  };
+}
+
+async function analyticsOutcome(response, metrics) {
+  if (response.status === 200) {
+    metrics.reason = "none";
+    return "success";
+  }
+  let code = "";
+  try { code = (await response.clone().json())?.error?.code ?? ""; } catch { /* response may be streaming */ }
+  if (code === "output_rejected") {
+    if (!ANALYTICS_REASONS.has(metrics.reason) || metrics.reason === "none") metrics.reason = "other";
+    return "output_rejected";
+  }
+  metrics.reason = ANALYTICS_REASONS.has(code) ? code : "other";
+  if (code === "upstream_failed") return "upstream_error";
+  if (code === "rate_limited") return "rate_limited";
+  if (code === "provider_not_configured" || response.status >= 500) return "service_error";
+  if (["free_limit_reached", "daily_limit", "monthly_limit"].includes(code)) return "quota_blocked";
+  return "client_error";
+}
+
+function recordAnalytics(env, metrics, executionContext) {
+  const event = {
+    provider: ANALYTICS_PROVIDERS.has(metrics.provider) ? metrics.provider : "unknown",
+    task: ANALYTICS_TASKS.has(metrics.task) ? metrics.task : "unknown",
+    outcome: ANALYTICS_OUTCOMES.has(metrics.outcome) ? metrics.outcome : "worker_error",
+    reason: ANALYTICS_REASONS.has(metrics.reason) ? metrics.reason : "other",
+    stage: ANALYTICS_STAGES.has(metrics.stage) ? metrics.stage : "unknown",
+    modelAttempts: Math.max(0, Math.min(4, Math.trunc(metrics.modelAttempts || 0))),
+    retries: Math.max(0, Math.min(4, Math.trunc(metrics.retries || 0))),
+    durationMs: Math.max(0, Math.min(600_000, Date.now() - metrics.startedAt)),
+    modelDurationMs: Math.max(0, Math.min(600_000, Math.trunc(metrics.modelDurationMs || 0))),
+  };
+  const write = (async () => {
+    try {
+      if (!env.USAGE_LEDGER) return;
+      const analyticsID = env.USAGE_LEDGER.idFromName("tokiri-analytics-global-v1");
+      await env.USAGE_LEDGER.get(analyticsID).fetch("https://analytics.tokiri/analytics/record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(event),
+      });
+    } catch {
+      // Telemetry is best-effort and never affects the user's request.
+      console.warn("Analytics event could not be recorded.");
+    }
+  })();
+  if (executionContext && typeof executionContext.waitUntil === "function") {
+    executionContext.waitUntil(write);
+    return;
+  }
+  return write;
+}
+
+function isAnalyticsEvent(event) {
+  return event && typeof event === "object"
+    && ANALYTICS_PROVIDERS.has(event.provider)
+    && ANALYTICS_TASKS.has(event.task)
+    && ANALYTICS_OUTCOMES.has(event.outcome)
+    && ANALYTICS_REASONS.has(event.reason)
+    && ANALYTICS_STAGES.has(event.stage)
+    && Number.isInteger(event.modelAttempts) && event.modelAttempts >= 0 && event.modelAttempts <= 4
+    && Number.isInteger(event.retries) && event.retries >= 0 && event.retries <= 4
+    && Number.isInteger(event.durationMs) && event.durationMs >= 0 && event.durationMs <= 600_000
+    && Number.isInteger(event.modelDurationMs) && event.modelDurationMs >= 0 && event.modelDurationMs <= 600_000;
+}
+
+function isAnalyticsClientTiming(event) {
+  return event && typeof event === "object"
+    && ANALYTICS_PROVIDERS.has(event.provider) && event.provider !== "unknown"
+    && ANALYTICS_TASKS.has(event.task) && event.task !== "unknown"
+    && Number.isInteger(event.durationMs) && event.durationMs >= 0 && event.durationMs <= 600_000;
+}
+
+function isAnalyticsSlowEvent(event) {
+  return event && typeof event === "object"
+    && ANALYTICS_PROVIDERS.has(event.provider)
+    && ANALYTICS_TASKS.has(event.task)
+    && ANALYTICS_PHASES.has(event.phase);
+}
+
+function durationBucketIndex(durationMs) {
+  const index = ANALYTICS_DURATION_BUCKETS_MS.findIndex((upperBound) => durationMs <= upperBound);
+  return index === -1 ? ANALYTICS_DURATION_BUCKETS_MS.length : index;
+}
+
+function incrementDurationBucket(histogram, durationMs) {
+  const index = durationBucketIndex(durationMs);
+  histogram[index] = (histogram[index] ?? 0) + 1;
+}
+
+async function readProviderJSON(response, metrics) {
+  const startedAt = Date.now();
+  try { return await response.json(); } catch { return null; }
+  finally {
+    metrics.modelDurationMs += Date.now() - startedAt;
+    metrics.modelPhaseActive = false;
+  }
+}
+
+async function discardProviderErrorBody(response, metrics) {
+  if (!response.body) {
+    metrics.modelPhaseActive = false;
+    return;
+  }
+  const startedAt = Date.now();
+  try { await response.arrayBuffer(); } catch { /* Provider status remains the useful failure signal. */ }
+  finally {
+    metrics.modelDurationMs += Date.now() - startedAt;
+    metrics.modelPhaseActive = false;
+  }
+}
 
 export class UsageLedger {
   constructor(state) {
@@ -74,6 +384,153 @@ export class UsageLedger {
 
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/analytics/record") {
+      if (request.method !== "POST") return errorResponse(405, "Method not allowed.");
+      const event = await readOptionalJSON(request);
+      if (!isAnalyticsEvent(event)) return errorResponse(400, "Invalid analytics event.");
+      const date = currentUTCDate();
+      const key = `analytics:${date}`;
+      await this.storage.transaction(async (txn) => {
+        const day = (await txn.get(key)) ?? { date, byDimension: {} };
+        const dimension = [event.provider, event.task, event.outcome, event.reason, event.stage].join("|");
+        const row = day.byDimension[dimension] ?? {
+          provider: event.provider,
+          task: event.task,
+          outcome: event.outcome,
+          reason: event.reason,
+          stage: event.stage,
+          count: 0,
+          modelAttempts: 0,
+          retries: 0,
+          latencyCount: 0,
+          modelLatencyCount: 0,
+          totalDurationMs: 0,
+          maxDurationMs: 0,
+          totalModelDurationMs: 0,
+          totalWorkerDurationMs: 0,
+          maxModelDurationMs: 0,
+          maxWorkerDurationMs: 0,
+          durationHistogram: Array(ANALYTICS_DURATION_BUCKETS_MS.length + 1).fill(0),
+          modelDurationHistogram: Array(ANALYTICS_DURATION_BUCKETS_MS.length + 1).fill(0),
+          workerDurationHistogram: Array(ANALYTICS_DURATION_BUCKETS_MS.length + 1).fill(0),
+        };
+        // Older aggregate rows are upgraded in place when the next request arrives.
+        row.latencyCount ??= 0;
+        row.modelLatencyCount ??= 0;
+        row.durationHistogram ??= Array(ANALYTICS_DURATION_BUCKETS_MS.length + 1).fill(0);
+        row.modelDurationHistogram ??= Array(ANALYTICS_DURATION_BUCKETS_MS.length + 1).fill(0);
+        row.workerDurationHistogram ??= Array(ANALYTICS_DURATION_BUCKETS_MS.length + 1).fill(0);
+        row.totalModelDurationMs ??= 0;
+        row.totalWorkerDurationMs ??= 0;
+        row.maxModelDurationMs ??= 0;
+        row.maxWorkerDurationMs ??= 0;
+        row.count += 1;
+        row.modelAttempts += event.modelAttempts;
+        row.retries += event.retries;
+        row.latencyCount += 1;
+        row.totalDurationMs += event.durationMs;
+        row.maxDurationMs = Math.max(row.maxDurationMs, event.durationMs);
+        const modelDurationMs = Math.min(event.modelDurationMs, event.durationMs);
+        const workerDurationMs = event.durationMs - modelDurationMs;
+        row.totalModelDurationMs += modelDurationMs;
+        row.totalWorkerDurationMs += workerDurationMs;
+        row.maxWorkerDurationMs = Math.max(row.maxWorkerDurationMs, workerDurationMs);
+        incrementDurationBucket(row.durationHistogram, event.durationMs);
+        incrementDurationBucket(row.workerDurationHistogram, workerDurationMs);
+        if (event.modelAttempts > 0) {
+          row.modelLatencyCount += 1;
+          row.maxModelDurationMs = Math.max(row.maxModelDurationMs, modelDurationMs);
+          incrementDurationBucket(row.modelDurationHistogram, modelDurationMs);
+        }
+        day.byDimension[dimension] = row;
+        await txn.put(key, day);
+      });
+      await this.scheduleAnalyticsCleanup();
+      return Response.json({ recorded: true }, { headers: securityHeaders() });
+    }
+
+    if (url.pathname === "/analytics/client-timing") {
+      if (request.method !== "POST") return errorResponse(405, "Method not allowed.");
+      const event = await readOptionalJSON(request);
+      if (!isAnalyticsClientTiming(event)) return errorResponse(400, "Invalid client timing report.");
+      const date = currentUTCDate();
+      const key = `analytics:${date}`;
+      await this.storage.transaction(async (txn) => {
+        const day = (await txn.get(key)) ?? { date, byDimension: {} };
+        day.clientByDimension ??= {};
+        const dimension = [event.provider, event.task].join("|");
+        const row = day.clientByDimension[dimension] ?? {
+          provider: event.provider,
+          task: event.task,
+          count: 0,
+          totalDurationMs: 0,
+          maxDurationMs: 0,
+          durationHistogram: Array(ANALYTICS_DURATION_BUCKETS_MS.length + 1).fill(0),
+        };
+        row.count += 1;
+        row.totalDurationMs += event.durationMs;
+        row.maxDurationMs = Math.max(row.maxDurationMs, event.durationMs);
+        incrementDurationBucket(row.durationHistogram, event.durationMs);
+        day.clientByDimension[dimension] = row;
+        await txn.put(key, day);
+      });
+      await this.scheduleAnalyticsCleanup();
+      return Response.json({ recorded: true }, { headers: securityHeaders() });
+    }
+
+    if (url.pathname === "/analytics/slow") {
+      if (request.method !== "POST") return errorResponse(405, "Method not allowed.");
+      const event = await readOptionalJSON(request);
+      if (!isAnalyticsSlowEvent(event)) return errorResponse(400, "Invalid slow analytics event.");
+      const date = currentUTCDate();
+      const key = `analytics:${date}`;
+      await this.storage.transaction(async (txn) => {
+        const day = (await txn.get(key)) ?? { date, byDimension: {} };
+        day.slowByDimension ??= {};
+        const dimension = [event.provider, event.task, event.phase].join("|");
+        const row = day.slowByDimension[dimension] ?? {
+          provider: event.provider,
+          task: event.task,
+          phase: event.phase,
+          count: 0,
+        };
+        row.count += 1;
+        day.slowByDimension[dimension] = row;
+        await txn.put(key, day);
+      });
+      await this.scheduleAnalyticsCleanup();
+      return Response.json({ recorded: true }, { headers: securityHeaders() });
+    }
+
+    if (url.pathname === "/analytics/query") {
+      if (request.method !== "GET") return errorResponse(405, "Method not allowed.");
+      const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days")) || 30));
+      const cutoff = new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+      const stored = await this.storage.list({ prefix: "analytics:" });
+      const events = [...stored.values()]
+        .filter((day) => day.date >= cutoff)
+        .flatMap((day) => Object.values(day.byDimension).map((row) => ({ date: day.date, ...row })))
+        .sort((left, right) => left.date.localeCompare(right.date)
+          || left.provider.localeCompare(right.provider)
+          || left.task.localeCompare(right.task)
+          || left.outcome.localeCompare(right.outcome)
+          || (left.stage ?? "unknown").localeCompare(right.stage ?? "unknown"));
+      const slowEvents = [...stored.values()]
+        .filter((day) => day.date >= cutoff)
+        .flatMap((day) => Object.values(day.slowByDimension ?? {}).map((row) => ({ date: day.date, ...row })))
+        .sort((left, right) => left.date.localeCompare(right.date)
+          || left.provider.localeCompare(right.provider)
+          || left.task.localeCompare(right.task)
+          || left.phase.localeCompare(right.phase));
+      const clientTimings = [...stored.values()]
+        .filter((day) => day.date >= cutoff)
+        .flatMap((day) => Object.values(day.clientByDimension ?? {}).map((row) => ({ date: day.date, ...row })))
+        .sort((left, right) => left.date.localeCompare(right.date)
+          || left.provider.localeCompare(right.provider)
+          || left.task.localeCompare(right.task));
+      return Response.json({ days, retentionDays: ANALYTICS_RETENTION_DAYS, events, slowEvents, clientTimings }, { headers: securityHeaders() });
+    }
 
     if (url.pathname === "/status") {
       if (request.method !== "GET") return errorResponse(405, "Method not allowed.");
@@ -200,12 +657,28 @@ export class UsageLedger {
     const operations = await this.storage.list({ prefix: "op:" });
     const expired = [...operations].filter(([, operation]) => operation.createdAt < cutoff).map(([key]) => key);
     if (expired.length > 0) await this.storage.delete(expired);
+    const analyticsCutoff = new Date(Date.now() - ANALYTICS_RETENTION_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const analytics = await this.storage.list({ prefix: "analytics:" });
+    const oldAnalytics = [...analytics]
+      .filter(([, day]) => day.date < analyticsCutoff)
+      .map(([key]) => key);
+    if (oldAnalytics.length > 0) await this.storage.delete(oldAnalytics);
     if (operations.size > expired.length) await this.storage.setAlarm(Date.now() + OPERATION_RETENTION_MS);
+    else if (analytics.size > oldAnalytics.length) await this.storage.setAlarm(nextAnalyticsCleanupTime());
   }
 
   async scheduleCleanup(now) {
     if ((await this.storage.getAlarm()) === null) await this.storage.setAlarm(now + OPERATION_RETENTION_MS);
   }
+
+  async scheduleAnalyticsCleanup() {
+    if ((await this.storage.getAlarm()) === null) await this.storage.setAlarm(nextAnalyticsCleanupTime());
+  }
+}
+
+function nextAnalyticsCleanupTime() {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 5);
 }
 
 async function chargeAction(txn) {
@@ -311,7 +784,7 @@ async function isRateLimited(env, installationID, request) {
     return (await Promise.all(checks)).some((result) => !result.success);
   } catch (error) {
     console.error("Rate limiter failed", error instanceof Error ? error.message : "unknown error");
-    return false;
+    return null;
   }
 }
 
@@ -337,9 +810,9 @@ class TaskError extends Error {
 export function parseQwixTask(source) {
   if (!isObject(source)) throw new TaskError(400, "invalid_task", "Request body must be a JSON object.");
   const allowed = {
-    fix: ["task", "text", "priority"],
-    action: ["task", "text", "priority", "action", "language"],
-    peek: ["task", "text", "mode", "length", "language", "sourceLanguage"],
+    fix: ["task", "text", "priority", "provider"],
+    action: ["task", "text", "priority", "provider", "action", "language"],
+    peek: ["task", "text", "provider", "mode", "length", "language", "sourceLanguage"],
   }[source.task];
   if (!allowed) throw new TaskError(400, "invalid_task", "Unknown task.");
   const unknown = Object.keys(source).find((key) => !allowed.includes(key));
@@ -353,13 +826,17 @@ export function parseQwixTask(source) {
   if (source.priority !== undefined && typeof source.priority !== "boolean") {
     throw new TaskError(400, "invalid_task", "priority must be a boolean.");
   }
+  const provider = source.provider ?? "openai";
+  if (provider !== "openai" && provider !== "anthropic") {
+    throw new TaskError(400, "invalid_task", "Unknown AI provider.");
+  }
   const language = (value, field, required) => {
     if (value === undefined && !required) return undefined;
     if (typeof value !== "string" || !LANGUAGE_PATTERN.test(value)) throw new TaskError(400, "invalid_task", `Invalid ${field}.`);
     return value;
   };
 
-  const task = { task: source.task, text: source.text, priority: source.priority === true };
+  const task = { task: source.task, text: source.text, priority: source.priority === true, provider };
   if (source.task === "action") {
     if (!ACTIONS.has(source.action)) throw new TaskError(400, "invalid_task", "Unknown action.");
     task.action = source.action;
@@ -397,12 +874,172 @@ export function buildQwixRequest(task, { priority = false } = {}) {
   return body;
 }
 
+/** Builds an Anthropic Messages request while keeping prompts and output schemas server-owned. */
+export function buildAnthropicQwixRequest(task) {
+  const prompt = task.task === "fix"
+    ? fixPrompt()
+    : task.task === "action"
+      ? actionPrompt(task.action, task.language)
+      : peekPrompt(task.mode, task.length, task.language, task.sourceLanguage);
+  const instructions = task.task === "action"
+    ? `${prompt.instructions}\n\nReturn a JSON object with one string field named "text" containing the complete result.`
+    : prompt.instructions;
+  const body = {
+    model: ANTHROPIC_MODEL,
+    system: instructions,
+    messages: [{ role: "user", content: wrapSelectedText(task.text) }],
+    max_tokens: anthropicQwixOutputTokens(task),
+    // These are short transformations; reserve the output budget for the
+    // requested result instead of model reasoning.
+    ...(task.task === "fix" || task.task === "action" ? { thinking: { type: "disabled" } } : {}),
+    output_config: {
+      format: {
+        type: "json_schema",
+        schema: prompt.format?.schema ?? ANTHROPIC_ACTION_SCHEMA,
+      },
+    },
+  };
+  if (task.task === "peek") body.stream = true;
+  return body;
+}
+
+function normalizeAnthropicResponse(payload, task) {
+  if (!payload || !Array.isArray(payload.content) || typeof payload.stop_reason !== "string") {
+    return { status: "incomplete", stopReason: "malformed_response", output: [] };
+  }
+  if (payload.content.some((block) => block?.type === "text" && typeof block.text !== "string")) {
+    return { status: "incomplete", stopReason: "malformed_response", output: [] };
+  }
+  const stopReason = payload?.stop_reason ?? "unknown";
+  const status = stopReason === "end_turn" || stopReason === "stop_sequence"
+    ? "completed"
+    : "incomplete";
+  if (status !== "completed") return { status, stopReason, output: [] };
+  let text = payload.content
+    .filter((block) => block?.type === "text")
+    .map((block) => typeof block?.text === "string" ? block.text : "")
+    .join("");
+  if (task.task === "action") {
+    try {
+      const decoded = JSON.parse(text);
+      if (!decoded || typeof decoded !== "object" || typeof decoded.text !== "string") {
+        return { status: "completed", stopReason, output: [], formatError: "invalid_action_json" };
+      }
+      text = decoded.text;
+    } catch {
+      return { status: "completed", stopReason, output: [], formatError: "invalid_action_json" };
+    }
+  }
+  return {
+    status,
+    stopReason,
+    output: [{ type: "message", content: [{ type: "output_text", text }] }],
+  };
+}
+
+/** Adapts Anthropic SSE to the event names already consumed by PeekClient. */
+export function anthropicStreamAsResponses(source) {
+  const encoder = new TextEncoder();
+  if (!source) {
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"type":"response.failed"}\n\n'));
+        controller.close();
+      },
+    });
+  }
+  const reader = source.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let pendingBlocks = [];
+  let stopReason;
+  let terminal = false;
+  let ended = false;
+
+  const eventChunk = (type, extra = {}) => encoder.encode(`data: ${JSON.stringify({ type, ...extra })}\n\n`);
+  const processBlock = (block, controller) => {
+    const data = block.split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n");
+    if (!data || data === "[DONE]") return false;
+    let event;
+    try { event = JSON.parse(data); } catch { return false; }
+    if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && typeof event.delta.text === "string") {
+      controller.enqueue(eventChunk("response.output_text.delta", { delta: event.delta.text }));
+    } else if (event.type === "message_delta") {
+      stopReason = event.delta?.stop_reason ?? stopReason;
+    } else if (event.type === "message_stop") {
+      controller.enqueue(eventChunk(stopReason === "end_turn" || stopReason === "stop_sequence" ? "response.completed" : "response.incomplete"));
+      return true;
+    } else if (event.type === "error") {
+      controller.enqueue(eventChunk("response.failed"));
+      return true;
+    }
+    return false;
+  };
+
+  return new ReadableStream({
+    async pull(controller) {
+      if (terminal) {
+        controller.close();
+        return;
+      }
+      try {
+        while (true) {
+          while (pendingBlocks.length > 0) {
+            if (processBlock(pendingBlocks.shift(), controller)) {
+              terminal = true;
+              await reader.cancel();
+              controller.close();
+              return;
+            }
+            if (controller.desiredSize <= 0) return;
+          }
+          if (ended) {
+            if (buffer.trim() && processBlock(buffer, controller)) terminal = true;
+            buffer = "";
+            controller.close();
+            return;
+          }
+          const { value, done } = await reader.read();
+          if (done) {
+            buffer += decoder.decode();
+            ended = true;
+            if (buffer.includes("\n\n") || buffer.includes("\r\n\r\n")) {
+              pendingBlocks = buffer.split(/\r?\n\r?\n/);
+              buffer = pendingBlocks.pop() ?? "";
+            }
+            continue;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split(/\r?\n\r?\n/);
+          buffer = blocks.pop() ?? "";
+          pendingBlocks.push(...blocks);
+        }
+      } catch {
+        controller.enqueue(eventChunk("response.failed"));
+        controller.close();
+        terminal = true;
+      }
+    },
+    async cancel(reason) {
+      await reader.cancel(reason);
+    },
+  });
+}
+
 function qwixOutputTokens(task) {
   // Rough server-side estimate: two characters per token errs high for Cyrillic and English.
   const estimate = Math.ceil(task.text.length / 2);
   if (task.task === "peek") return 4_096;
   if (task.task === "action" && task.action === "translate") return Math.min(Math.ceil(estimate * 1.6) + 128, 6_144);
   return Math.min(Math.ceil(estimate * 1.3) + 128, 4_096);
+}
+
+function anthropicQwixOutputTokens(task) {
+  if (task.task === "action") return ANTHROPIC_ACTION_OUTPUT_TOKENS;
+  return qwixOutputTokens(task);
 }
 
 function normalizedForComparison(text) {
@@ -422,8 +1059,22 @@ export function plausibleOutputLength(task, input, output) {
 
 /** Decides what a completed, non-streamed model response means for the client and the quota. */
 export function evaluateQwixOutput(task, payload) {
-  if (payload?.status !== "completed") return { kind: "rejected" };
-  const output = (payload.output ?? [])
+  if (ANALYTICS_REASONS.has(payload?.formatError)) return { kind: "rejected", reason: payload.formatError };
+  if (!payload || typeof payload !== "object" || typeof payload.status !== "string") {
+    return { kind: "rejected", reason: "malformed_response" };
+  }
+  if (payload?.status !== "completed") {
+    const reason = payload?.stopReason === "max_tokens"
+      ? "max_tokens"
+      : payload?.stopReason === "refusal"
+        ? "provider_refusal"
+        : payload?.stopReason === "malformed_response"
+          ? "malformed_response"
+          : "incomplete_response";
+    return { kind: "rejected", reason };
+  }
+  if (!Array.isArray(payload.output)) return { kind: "rejected", reason: "malformed_response" };
+  const output = payload.output
     .flatMap((item) => item?.content ?? [])
     .filter((content) => content?.type === "output_text")
     .map((content) => content.text ?? "")
@@ -434,19 +1085,20 @@ export function evaluateQwixOutput(task, payload) {
     try {
       ({ verdict, text } = JSON.parse(output));
     } catch {
-      return { kind: "rejected" };
+      return { kind: "rejected", reason: "invalid_fix_json" };
     }
     if (verdict === "clean") return { kind: "clean" };
-    if (verdict !== "fixed" || typeof text !== "string") return { kind: "rejected" };
+    if (verdict !== "fixed" || typeof text !== "string") return { kind: "rejected", reason: "invalid_fix_verdict" };
     if (text.trim() && normalizedForComparison(text) === normalizedForComparison(task.text)) return { kind: "clean" };
   }
-  if (!text.trim() || /<\/?\s*selected_text\s*>/i.test(text) || !plausibleOutputLength(task, task.text, text)) {
-    return { kind: "rejected" };
-  }
+  if (!text.trim()) return { kind: "rejected", reason: "empty_output" };
+  if (/<\/?\s*selected_text\s*>/i.test(text)) return { kind: "rejected", reason: "selected_text_marker" };
+  if (!plausibleOutputLength(task, task.text, text)) return { kind: "rejected", reason: "implausible_length" };
   return { kind: "text", text };
 }
 
-async function handleQwix(request, env) {
+async function handleQwixRequest(request, env, metrics) {
+  metrics.stage = "request_validation";
   if (request.method !== "POST") return errorResponse(405, "Method not allowed.", {}, { Allow: "POST" });
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     return errorResponse(415, "Content-Type must be application/json.");
@@ -460,17 +1112,21 @@ async function handleQwix(request, env) {
     return errorResponse(400, "A valid operation identity is required.", { code: "invalid_operation" });
   }
   if (!env.USAGE_LEDGER) {
+    metrics.stage = "worker_configuration";
     console.error("Missing USAGE_LEDGER Durable Object binding");
     return errorResponse(500, "Worker usage storage is not configured.");
   }
-  if (await isRateLimited(env, installationID, request)) return rateLimitedResponse();
+  metrics.stage = "request_protection";
+  const rateLimit = await isRateLimited(env, installationID, request);
+  if (rateLimit === null) {
+    return errorResponse(503, "Request protection is temporarily unavailable.", { code: "rate_limiter_unavailable" });
+  }
+  if (rateLimit) return rateLimitedResponse();
 
   let task;
   try {
-    const declaredLength = Number(request.headers.get("content-length") ?? "0");
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) throw new TaskError(413, "text_too_long", "Request body is too large.");
-    const rawBody = await request.arrayBuffer();
-    if (rawBody.byteLength > MAX_BODY_BYTES) throw new TaskError(413, "text_too_long", "Request body is too large.");
+    const rawBody = await readLimitedBody(request, MAX_BODY_BYTES);
+    if (rawBody === null) throw new TaskError(413, "text_too_long", "Request body is too large.");
     let source;
     try { source = JSON.parse(new TextDecoder().decode(rawBody)); } catch { throw new TaskError(400, "invalid_task", "Request body must be valid JSON."); }
     task = parseQwixTask(source);
@@ -479,13 +1135,24 @@ async function handleQwix(request, env) {
     throw error;
   }
 
-  const apiKey = env.OPENAI_API_KEY ?? env["qwixit-cloudflare-key"];
+  const provider = task.provider ?? "openai";
+  metrics.provider = provider;
+  metrics.task = task.task;
+  const apiKey = provider === "anthropic"
+    ? env.CLAUDE_API_SECRET
+    : env.OPENAI_API_KEY ?? env["qwixit-cloudflare-key"];
   if (!apiKey) {
+    metrics.stage = "worker_configuration";
+    if (provider === "anthropic") {
+      console.error("Missing CLAUDE_API_SECRET secret");
+      return errorResponse(422, "Claude is not configured on this service yet.", { code: "provider_not_configured" });
+    }
     console.error("Missing OPENAI_API_KEY secret (or legacy qwixit-cloudflare-key)");
     return errorResponse(500, "Worker is not configured.");
   }
 
   let quota;
+  metrics.stage = "usage_check";
   try {
     quota = await authorizeUsage(env, installationID, operationID);
   } catch (error) {
@@ -505,46 +1172,122 @@ async function handleQwix(request, env) {
   }
 
   // Priority processing costs more, so only Advanced may request it.
-  const body = buildQwixRequest(task, { priority: task.priority && quota.advanced });
+  const priority = task.priority && quota.advanced;
+  const body = provider === "anthropic"
+    ? buildAnthropicQwixRequest(task)
+    : buildQwixRequest(task, { priority });
+  const sendToProvider = async (requestBody) => {
+    metrics.stage = "provider_request";
+    metrics.modelAttempts += 1;
+    metrics.modelPhaseActive = true;
+    const startedAt = Date.now();
+    try {
+      return await fetch(provider === "anthropic" ? ANTHROPIC_URL : OPENAI_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(provider === "anthropic"
+            ? { "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
+            : {
+                Authorization: `Bearer ${apiKey}`,
+                "User-Agent": "Qwixit-Worker/1.0",
+                "X-Client-Request-Id": operationID,
+              }),
+        },
+        body: JSON.stringify(requestBody),
+      });
+    } finally {
+      metrics.modelDurationMs += Date.now() - startedAt;
+    }
+  };
   let upstream;
   try {
-    upstream = await fetch(OPENAI_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "User-Agent": "Qwixit-Worker/1.0",
-        "X-Client-Request-Id": operationID,
-      },
-      body: JSON.stringify(body),
-    });
+    upstream = await sendToProvider(body);
   } catch (error) {
-    console.error("OpenAI request failed", error instanceof Error ? error.message : "unknown error");
+    metrics.modelPhaseActive = false;
+    console.error(`${provider} request failed`, error instanceof Error ? error.message : "unknown error");
     return upstreamFailure(env, installationID, operationID, quota);
   }
   if (!upstream.ok) {
-    console.error("OpenAI request failed", upstream.status);
+    metrics.stage = "provider_response";
+    await discardProviderErrorBody(upstream, metrics);
+    console.error(`${provider} request failed`, upstream.status);
     return upstreamFailure(env, installationID, operationID, quota);
   }
 
   if (task.task === "peek") {
-    // Peek keeps streaming; the client accepts the result only after response.completed.
-    const headers = securityHeaders({ "Content-Type": upstream.headers.get("content-type") ?? "text/event-stream", ...qwixHeaders(quota) });
+    metrics.stage = "response_handling";
+    // Peek keeps streaming; normalize Anthropic's event names to the app's existing SSE contract.
+    const body = provider === "anthropic" ? anthropicStreamAsResponses(upstream.body) : upstream.body;
+    if (body) metrics.modelStreamStartedAt = Date.now();
+    else metrics.modelPhaseActive = false;
+    const headers = securityHeaders({ "Content-Type": "text/event-stream", ...qwixHeaders(quota) });
     copyHeader(upstream.headers, headers, "x-request-id");
-    return new Response(upstream.body, { status: 200, headers });
+    return new Response(body, { status: 200, headers });
   }
 
-  let payload = null;
-  try { payload = await upstream.json(); } catch { /* treated as a rejected result below */ }
-  const outcome = evaluateQwixOutput(task, payload);
+  metrics.stage = "output_check";
+  let payload = await readProviderJSON(upstream, metrics);
+  if (provider === "anthropic") payload = normalizeAnthropicResponse(payload, task);
+  let outcome = evaluateQwixOutput(task, payload);
+  metrics.reason = outcome.kind === "rejected" && ANALYTICS_REASONS.has(outcome.reason) ? outcome.reason : "none";
+
+  // Retry rejected Fix output once, and retry Claude Actions when its output
+  // explicitly reaches max_tokens.
+  const shouldRetryRejectedOutput = outcome.kind === "rejected" && (
+    (task.task === "fix" && outcome.reason !== "provider_refusal") ||
+    (provider === "anthropic" && task.task === "action" && outcome.reason === "max_tokens")
+  );
+  if (shouldRetryRejectedOutput) {
+    metrics.retries += 1;
+    console.warn("Retrying rejected model output", provider, task.task, outcome.reason);
+    const retryInstruction = task.task === "fix"
+      ? "Return a complete, minimally edited correction that matches the required JSON schema. Preserve the full selection; do not summarize or omit anything."
+      : "Return the complete requested result in the required JSON schema. Preserve all content needed for the action; do not stop mid-sentence.";
+    const retryBody = {
+      ...body,
+      ...(provider === "anthropic"
+        ? {
+            max_tokens: task.task === "action" ? ANTHROPIC_ACTION_RETRY_OUTPUT_TOKENS : 8_192,
+            system: [body.system, retryInstruction].join("\n\n"),
+          }
+        : {
+            max_output_tokens: 4_096,
+            instructions: [body.instructions, retryInstruction].join("\n\n"),
+          }),
+    };
+    try {
+      upstream = await sendToProvider(retryBody);
+    } catch (error) {
+      metrics.modelPhaseActive = false;
+      console.error(`${provider} retry failed`, error instanceof Error ? error.message : "unknown error");
+      return upstreamFailure(env, installationID, operationID, quota);
+    }
+    if (!upstream.ok) {
+      await discardProviderErrorBody(upstream, metrics);
+      console.error(`${provider} retry failed`, upstream.status);
+      return upstreamFailure(env, installationID, operationID, quota);
+    }
+    metrics.stage = "output_check";
+    payload = await readProviderJSON(upstream, metrics);
+    if (provider === "anthropic") payload = normalizeAnthropicResponse(payload, task);
+    outcome = evaluateQwixOutput(task, payload);
+    metrics.reason = outcome.kind === "rejected" && ANALYTICS_REASONS.has(outcome.reason) ? outcome.reason : "none";
+  }
+
   if (outcome.kind === "clean") {
+    metrics.stage = "usage_refund";
     const current = await tryRefund(env, installationID, operationID, quota, "clean");
+    metrics.stage = "response_handling";
     return Response.json({ result: "clean" }, { headers: securityHeaders(qwixHeaders(current)) });
   }
   if (outcome.kind === "rejected") {
+    // Log only provider/task and a fixed reason code; never include selected or generated text.
+    console.warn("Model output rejected", provider, task.task, outcome.reason);
     const current = await tryRefund(env, installationID, operationID, quota, "rejected");
     return errorResponse(422, "The result didn’t pass Qwixit’s checks. Your text is unchanged.", { code: "output_rejected" }, qwixHeaders(current));
   }
+  metrics.stage = "response_handling";
   const result = task.task === "fix" ? { result: "fixed", text: outcome.text } : { text: outcome.text };
   return Response.json(result, { headers: securityHeaders(qwixHeaders(quota)) });
 }
@@ -698,7 +1441,9 @@ async function handlePaddleWebhook(request, env) {
   }
   if (!env.USAGE_LEDGER) return errorResponse(500, "Worker usage storage is not configured.");
 
-  const rawBody = await request.text();
+  const rawBytes = await readLimitedBody(request, MAX_WEBHOOK_BODY_BYTES);
+  if (rawBytes === null) return errorResponse(413, "Webhook body is too large.");
+  const rawBody = new TextDecoder().decode(rawBytes);
   const signature = request.headers.get("paddle-signature") ?? "";
   if (!(await verifyPaddleSignature(rawBody, signature, env.PADDLE_WEBHOOK_SECRET))) {
     return errorResponse(401, "Invalid webhook signature.");
@@ -834,6 +1579,37 @@ function notFoundPage() {
 function currentUTCMonth() { return new Date().toISOString().slice(0, 7); }
 function currentUTCDate() { return new Date().toISOString().slice(0, 10); }
 function isObject(value) { return typeof value === "object" && value !== null && !Array.isArray(value); }
+async function readLimitedBody(request, maximumBytes) {
+  const declaredLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) return null;
+
+  const reader = request.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maximumBytes) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
 function copyHeader(from, to, name) { const value = from.get(name); if (value) to.set(name, value); }
 function securityHeaders(initial = {}) { return new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...initial }); }
 function errorResponse(status, message, details = {}, extraHeaders = {}) {

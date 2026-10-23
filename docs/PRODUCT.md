@@ -30,7 +30,7 @@ This is deliberately founder-led rather than a fabricated broad persona. Wider p
 
 ### 1. Fix — the core
 
-Shortcut: **Option + Command + X**.
+Default shortcut: **Option + Command + X**. The user can change it in Settings.
 
 Fix replaces selected text in place. For the current product stage it should:
 
@@ -42,13 +42,13 @@ Fix replaces selected text in place. For the current product stage it should:
 
 The default Fix behavior remains immediate replacement. An optional **Preview & Approve** setting can keep the original selection unchanged, show the proposed correction with a local diff, and wait for explicit approval before applying it. If preview cannot safely capture the selection, it leaves the text unchanged and explains why.
 
-When an interactive transient popup is open, **Option + Command + X** closes the frontmost popup through its normal dismissal path. With no such popup open, the shortcut runs Fix. Onboarding retains the Fix shortcut for its hands-on practice step.
+The default shortcuts are Fix **Option + Command + X**, Actions **Option + Command + A**, and Peek **Option + Command + Z**. Users can record a different key combination for each action in Settings; combinations must be unique. **Option + Command + X** remains reserved as the shared close shortcut for interactive transient popups. The menu-bar popover's close badge shows the configured Fix shortcut, and that shortcut closes the menu-bar popover while it is open. When Fix keeps its default shortcut, the shared dismissal takes priority while any interactive popup is open. After Fix is remapped, its shortcut closes the menu-bar popover, and **Option + Command + X** remains the shared dismissal shortcut for transient popups. Onboarding teaches the current Fix and Actions shortcuts.
 
 The long-term aspiration is a highly intelligent assistant that understands what the user meant. Until quality can be validated confidently, conservative correction is preferred over ambitious rewriting.
 
 ### 2. Actions — explicit transformations
 
-Shortcut: **Option + Command + A**.
+Default shortcut: **Option + Command + A**. The user can change it in Settings.
 
 Actions handles an intentional transformation and replaces the selected text. The primary example is writing in Ukrainian and translating directly to English. The user explicitly chooses the transformation, so the boundary is clearer than automatic rewriting.
 
@@ -56,7 +56,7 @@ Actions is useful, but it must not make the core Fix path slower or more complic
 
 ### 3. Peek — read without changing
 
-Shortcut: **Option + Command + Z**.
+Default shortcut: **Option + Command + Z**. The user can change it in Settings.
 
 Peek is for text the user is reading and does not understand. It shows a translation or explanation without replacing the source text. Peek is the fast alternative to opening a translator or AI chat while reading.
 
@@ -83,8 +83,9 @@ Qwixit is built around speed and anonymity.
 
 - Selected text and generated output must not be persisted or logged in Qwixit storage. Fix intentionally leaves the generated replacement on the system clipboard so the user can press ⌘V if the automatic paste is missing.
 - OpenAI requests use `store: false`.
+- The app offers GPT-5.6 Luna and Claude Haiku 5.5. It sends the selected text only to the provider the user chose; provider credentials stay in Cloudflare Worker secrets. Claude requests use structured outputs, which Anthropic documents as zero data retention for prompts and responses (the schema may be cached for up to 24 hours).
 - Qwixit currently has no user account. A random device-local installation ID exists only to enforce quota and associate subscription state.
-- Technical telemetry may be considered only if it contains no user text, requires no additional macOS permissions, and creates no unexpected consent burden. Adding any telemetry still requires an explicit product decision.
+- The owner approved internal operational analytics on 2026-10-23. Tokiri currently has one user, so the dashboard is for owner diagnostics: Action request errors, request outcomes, app response time, the combined network/app overhead for Fix and Actions, model-provider time, Worker/ledger time, and requests still pending after 10 seconds. The Worker stores daily aggregates by UTC day, provider, task, outcome, fixed error reason, and slow-request phase; the app reports only elapsed time with fixed provider/task labels. The Fix and Actions network estimate is app time minus Worker time, so it combines both network directions and app overhead; it cannot isolate one-way latency. Peek is streamed, so its app and Worker timings run through stream completion. App-side measurements begin with builds containing the reporter. No installation IDs, IP addresses, selected text, prompts, model output, or text-derived hashes are stored; daily aggregates expire after 365 days. Other event families or per-installation views need a separate product decision.
 
 ## Business model
 

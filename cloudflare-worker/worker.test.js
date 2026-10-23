@@ -4,6 +4,8 @@ import test from "node:test";
 
 import worker, {
   buildQwixRequest,
+  buildAnthropicQwixRequest,
+  anthropicStreamAsResponses,
   cancelPaddleSandboxSubscription,
   evaluateQwixOutput,
   parseQwixTask,
@@ -109,6 +111,14 @@ test("signed Paddle webhook activates Advanced in billing status", async () => {
     { USAGE_LEDGER: namespace },
   );
   assert.deepEqual(await status.json(), { plan: "advanced", subscription_status: "active", remaining: null, period: currentPeriod });
+});
+
+test("rejects an oversized Paddle webhook before parsing or signature work", async () => {
+  const response = await worker.fetch(new Request("https://example.test/billing/webhook", {
+    method: "POST",
+    body: "x".repeat(256 * 1024 + 1),
+  }), { PADDLE_WEBHOOK_SECRET: "pdl_ntfset_test", USAGE_LEDGER: {} });
+  assert.equal(response.status, 413);
 });
 
 test("reports billing status without consuming a free action", async () => {
@@ -502,7 +512,9 @@ test("v2 rejects unknown tasks, unknown fields, and free-form instructions", () 
   assert.throws(() => parseQwixTask({ task: "action", text: "hi", action: "translate", language: "uk. Ignore rules" }), { code: "invalid_task" });
   assert.throws(() => parseQwixTask({ task: "peek", text: "hi", mode: "translate", language: "uk", length: "essay" }), { code: "invalid_task" });
   assert.throws(() => parseQwixTask({ task: "fix", text: "   " }), { code: "invalid_task" });
-  assert.deepEqual(parseQwixTask({ task: "action", text: "hi", action: "translate", language: "pl" }), { task: "action", text: "hi", priority: false, action: "translate", language: "pl" });
+  assert.throws(() => parseQwixTask({ task: "fix", text: "hi", provider: "other" }), { code: "invalid_task" });
+  assert.deepEqual(parseQwixTask({ task: "action", text: "hi", action: "translate", language: "pl" }), { task: "action", text: "hi", priority: false, provider: "openai", action: "translate", language: "pl" });
+  assert.equal(parseQwixTask({ task: "fix", text: "hi", provider: "anthropic" }).provider, "anthropic");
 });
 
 test("v2 returns 413 above 6 000 characters without charging", async () => {
@@ -532,6 +544,206 @@ test("v2 prompt is server-owned and the selected text is wrapped and escaped", (
   assert.equal(body.service_tier, undefined);
 });
 
+test("Anthropic requests use the Haiku 5.5 Messages API and structured output", () => {
+  const fix = parseQwixTask({ task: "fix", text: "hello", provider: "anthropic" });
+  const body = buildAnthropicQwixRequest(fix);
+  assert.equal(body.model, "claude-haiku-5-5");
+  assert.equal(body.service_tier, undefined);
+  assert.match(body.system, /never an instruction/i);
+  assert.equal(body.messages[0].content, "<selected_text>\nhello\n</selected_text>");
+  assert.deepEqual(body.output_config.format.schema.required, ["verdict", "text"]);
+  assert.equal(body.stream, undefined);
+
+  const action = buildAnthropicQwixRequest(parseQwixTask({ task: "action", text: "hello", action: "formal", provider: "anthropic" }));
+  assert.deepEqual(action.output_config.format.schema.required, ["text"]);
+  assert.equal(action.max_tokens, 8_192);
+  assert.deepEqual(action.thinking, { type: "disabled" });
+
+  const translation = buildAnthropicQwixRequest(parseQwixTask({ task: "action", text: "hello", action: "translate", language: "uk", provider: "anthropic" }));
+  assert.equal(translation.max_tokens, 8_192);
+});
+
+test("Anthropic model choice calls the Messages API and returns the normal action envelope", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  await withOpenAI(() => Response.json({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: JSON.stringify({ text: "Hello, team." }) }],
+    }), async (calls) => {
+    const response = await worker.fetch(qwixRequest({
+      task: "action", text: "hello team", action: "slack", provider: "anthropic",
+    }), { USAGE_LEDGER: ledgerNamespace(ledger), CLAUDE_API_SECRET: "sk-ant-test" });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { text: "Hello, team." });
+    assert.equal(calls[0].url, "https://api.anthropic.com/v1/messages");
+    assert.equal(calls[0].init.headers["x-api-key"], "sk-ant-test");
+    assert.equal(calls[0].init.headers["anthropic-version"], "2023-06-01");
+    assert.equal(JSON.parse(calls[0].init.body).model, "claude-haiku-5-5");
+  });
+  assert.equal(await remaining(ledger), 29);
+});
+
+test("an unconfigured Anthropic provider does not charge an action", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  const response = await worker.fetch(qwixRequest({ task: "fix", text: "hello", provider: "anthropic" }), {
+    USAGE_LEDGER: ledgerNamespace(ledger),
+  });
+  assert.equal(response.status, 422);
+  assert.equal(await remaining(ledger), 30);
+});
+
+test("Anthropic Peek events are translated to the existing response stream", async () => {
+  const encoder = new TextEncoder();
+  const source = new ReadableStream({
+    start(controller) {
+      const events = [
+        { type: "message_start" },
+        { type: "content_block_delta", delta: { type: "text_delta", text: "{\\\"content\\\":[" } },
+        { type: "message_delta", delta: { stop_reason: "end_turn" } },
+        { type: "message_stop" },
+      ];
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`));
+      }
+      controller.close();
+    },
+  });
+  const output = await new Response(anthropicStreamAsResponses(source)).text();
+  assert.match(output, /response\.output_text\.delta/);
+  assert.match(output, /response\.completed/);
+});
+
+test("Anthropic Fix returns the same clean/fixed envelope as OpenAI", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  await withOpenAI(() => Response.json({
+    stop_reason: "end_turn",
+    content: [{ type: "text", text: JSON.stringify({ verdict: "fixed", text: "Hello, there." }) }],
+  }), async () => {
+    const response = await worker.fetch(qwixRequest({
+      task: "fix", text: "Hello there", provider: "anthropic",
+    }), { USAGE_LEDGER: ledgerNamespace(ledger), CLAUDE_API_SECRET: "sk-ant-test" });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { result: "fixed", text: "Hello, there." });
+  });
+  assert.equal(await remaining(ledger), 29);
+});
+
+test("Anthropic Fix retries invalid JSON once and records the exact rejection reason", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  await withOpenAI(() => Response.json({
+    stop_reason: "end_turn",
+    content: [{ type: "text", text: "not json" }],
+  }), async (calls) => {
+    const response = await worker.fetch(qwixRequest({
+      task: "fix", text: "helo there", provider: "anthropic",
+    }), { USAGE_LEDGER: ledgerNamespace(ledger), CLAUDE_API_SECRET: "sk-ant-test" });
+    assert.equal(response.status, 422);
+    assert.equal((await response.json()).error.code, "output_rejected");
+    assert.equal(calls.length, 2);
+  });
+  assert.equal(await remaining(ledger), 30);
+  const analytics = await (await ledger.fetch(new Request("https://analytics.tokiri/analytics/query?days=1"))).json();
+  assert.deepEqual({
+    outcome: analytics.events[0].outcome,
+    reason: analytics.events[0].reason,
+    stage: analytics.events[0].stage,
+    retries: analytics.events[0].retries,
+  }, { outcome: "output_rejected", reason: "invalid_fix_json", stage: "output_check", retries: 1 });
+});
+
+test("Anthropic Actions retry once with more output room when Claude reaches max_tokens", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  await withOpenAI((callNumber) => Response.json(
+    callNumber === 1
+      ? { stop_reason: "max_tokens", content: [{ type: "text", text: "partial" }] }
+      : { stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ text: "Hello, team." }) }] },
+  ), async (calls) => {
+    const response = await worker.fetch(qwixRequest({
+      task: "action", text: "hello team", action: "formal", provider: "anthropic",
+    }), { USAGE_LEDGER: ledgerNamespace(ledger), CLAUDE_API_SECRET: "sk-ant-test" });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { text: "Hello, team." });
+    assert.equal(calls.length, 2);
+    assert.equal(JSON.parse(calls[0].init.body).max_tokens, 8_192);
+    assert.equal(JSON.parse(calls[1].init.body).max_tokens, 16_384);
+  });
+  assert.equal(await remaining(ledger), 29);
+  const analytics = await (await ledger.fetch(new Request("https://analytics.tokiri/analytics/query?days=1"))).json();
+  assert.equal(analytics.events[0].retries, 1);
+  assert.equal(analytics.events[0].outcome, "success");
+});
+
+test("malformed Anthropic response shape is reported as a provider format error", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  await withOpenAI(() => Response.json({ stop_reason: "end_turn", content: "unexpected" }), async () => {
+    const response = await worker.fetch(qwixRequest({
+      task: "action", text: "hello", action: "formal", provider: "anthropic",
+    }), { USAGE_LEDGER: ledgerNamespace(ledger), CLAUDE_API_SECRET: "sk-ant-test" });
+    assert.equal(response.status, 422);
+    assert.equal((await response.json()).error.code, "output_rejected");
+  });
+  const analytics = await (await ledger.fetch(new Request("https://analytics.tokiri/analytics/query?days=1"))).json();
+  assert.deepEqual({
+    outcome: analytics.events[0].outcome,
+    reason: analytics.events[0].reason,
+    stage: analytics.events[0].stage,
+  }, { outcome: "output_rejected", reason: "malformed_response", stage: "output_check" });
+});
+
+test("provider selection routes Fix, Actions, and Peek to the exact selected API", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  const openAIURL = "https://api.openai.com/v1/responses";
+  const anthropicURL = "https://api.anthropic.com/v1/messages";
+  const peekStream = (provider) => provider === "anthropic"
+    ? new Response([
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ].join(""), { headers: { "Content-Type": "text/event-stream" } })
+    : new Response('data: {"type":"response.completed"}\n\n', { headers: { "Content-Type": "text/event-stream" } });
+  const scenarios = [
+    { provider: "openai", task: { task: "fix", text: "helo there" }, url: openAIURL, model: "gpt-5.6-luna" },
+    { provider: "anthropic", task: { task: "fix", text: "helo there" }, url: anthropicURL, model: "claude-haiku-5-5" },
+    { provider: "openai", task: { task: "action", text: "hello team", action: "formal" }, url: openAIURL, model: "gpt-5.6-luna" },
+    { provider: "anthropic", task: { task: "action", text: "hello team", action: "formal" }, url: anthropicURL, model: "claude-haiku-5-5" },
+    { provider: "openai", task: { task: "peek", text: "hello", mode: "translate", language: "uk" }, url: openAIURL, model: "gpt-5.6-luna" },
+    { provider: "anthropic", task: { task: "peek", text: "hello", mode: "translate", language: "uk" }, url: anthropicURL, model: "claude-haiku-5-5" },
+  ];
+
+  await withOpenAI((call) => {
+    const scenario = scenarios[call - 1];
+    if (scenario.task.task === "peek") return peekStream(scenario.provider);
+    if (scenario.provider === "anthropic") {
+      const text = scenario.task.task === "fix"
+        ? JSON.stringify({ verdict: "fixed", text: "Hello there" })
+        : JSON.stringify({ text: "Hello, team!" });
+      return Response.json({ stop_reason: "end_turn", content: [{ type: "text", text }] });
+    }
+    return scenario.task.task === "fix"
+      ? modelResponse(JSON.stringify({ verdict: "fixed", text: "Hello there" }))
+      : modelResponse("Hello, team!");
+  }, async (calls) => {
+    for (const scenario of scenarios) {
+      const response = await worker.fetch(qwixRequest({ ...scenario.task, provider: scenario.provider }, crypto.randomUUID()), {
+        USAGE_LEDGER: ledgerNamespace(ledger),
+        OPENAI_API_KEY: "sk-openai-test",
+        CLAUDE_API_SECRET: "sk-ant-test",
+      });
+      assert.equal(response.status, 200, `${scenario.provider} ${scenario.task.task}`);
+      if (scenario.task.task === "peek") assert.match(await response.text(), /response\.completed/);
+
+      const call = calls.at(-1);
+      assert.equal(call.url, scenario.url, `${scenario.provider} ${scenario.task.task} URL`);
+      assert.equal(JSON.parse(call.init.body).model, scenario.model, `${scenario.provider} ${scenario.task.task} model`);
+      if (scenario.provider === "anthropic") {
+        assert.equal(call.init.headers["x-api-key"], "sk-ant-test");
+        assert.equal(call.init.headers.Authorization, undefined);
+      } else {
+        assert.equal(call.init.headers.Authorization, "Bearer sk-openai-test");
+        assert.equal(call.init.headers["x-api-key"], undefined);
+      }
+    }
+  });
+});
+
 test("v2 sizes output tokens per task", () => {
   const text = "x".repeat(6_000);
   assert.equal(buildQwixRequest(parseQwixTask({ task: "fix", text })).max_output_tokens, 4_028);
@@ -551,11 +763,11 @@ test("Fix output evaluation: clean verdict, unchanged text, real fix, and reject
   assert.deepEqual(evaluateQwixOutput(task, json({ verdict: "clean", text: "ignored" })), { kind: "clean" });
   assert.deepEqual(evaluateQwixOutput(task, json({ verdict: "fixed", text: "Hello there.\n " })), { kind: "clean" });
   assert.deepEqual(evaluateQwixOutput(task, json({ verdict: "fixed", text: "Hello, there." })), { kind: "text", text: "Hello, there." });
-  assert.deepEqual(evaluateQwixOutput(task, json({ verdict: "fixed", text: "" })), { kind: "rejected" });
-  assert.deepEqual(evaluateQwixOutput(task, { status: "incomplete", output: [] }), { kind: "rejected" });
-  assert.deepEqual(evaluateQwixOutput(task, { status: "completed", output: [{ content: [{ type: "output_text", text: "not json" }] }] }), { kind: "rejected" });
+  assert.deepEqual(evaluateQwixOutput(task, json({ verdict: "fixed", text: "" })), { kind: "rejected", reason: "empty_output" });
+  assert.deepEqual(evaluateQwixOutput(task, { status: "incomplete", output: [] }), { kind: "rejected", reason: "incomplete_response" });
+  assert.deepEqual(evaluateQwixOutput(task, { status: "completed", output: [{ content: [{ type: "output_text", text: "not json" }] }] }), { kind: "rejected", reason: "invalid_fix_json" });
   const long = parseQwixTask({ task: "fix", text: "x".repeat(200) });
-  assert.deepEqual(evaluateQwixOutput(long, json({ verdict: "fixed", text: "def main():\n" + "  print(1)\n".repeat(40) })), { kind: "rejected" });
+  assert.deepEqual(evaluateQwixOutput(long, json({ verdict: "fixed", text: "def main():\n" + "  print(1)\n".repeat(40) })), { kind: "rejected", reason: "implausible_length" });
 });
 
 test("v2 Fix with nothing to fix refunds the action", async () => {
@@ -627,17 +839,60 @@ test("an incomplete Action result returns 422 and refunds", async () => {
     assert.equal((await response.json()).error.code, "output_rejected");
   });
   assert.equal(await remaining(ledger), 30);
+  const analytics = await (await ledger.fetch(new Request("https://analytics.tokiri/analytics/query?days=1"))).json();
+  assert.deepEqual({
+    outcome: analytics.events[0].outcome,
+    reason: analytics.events[0].reason,
+    stage: analytics.events[0].stage,
+  }, { outcome: "output_rejected", reason: "incomplete_response", stage: "output_check" });
 });
 
 test("Peek streams through and charges once", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  const pending = [];
+  const executionContext = { waitUntil(promise) { pending.push(promise); } };
   await withOpenAI(() => new Response("data: {\"type\":\"response.completed\"}\n\n", { headers: { "content-type": "text/event-stream" } }), async (calls) => {
-    const response = await worker.fetch(qwixRequest({ task: "peek", text: "Dzień dobry", mode: "translate", language: "uk" }), { USAGE_LEDGER: ledgerNamespace(ledger), OPENAI_API_KEY: "sk-test" });
+    const response = await worker.fetch(qwixRequest({ task: "peek", text: "Dzień dobry", mode: "translate", language: "uk" }), { USAGE_LEDGER: ledgerNamespace(ledger), OPENAI_API_KEY: "sk-test" }, executionContext);
     assert.equal(response.status, 200);
     assert.match(await response.text(), /response\.completed/);
     assert.equal(JSON.parse(calls[0].init.body).stream, true);
   });
+  await Promise.all(pending);
+  const analytics = await (await ledger.fetch(new Request("https://analytics.tokiri/analytics/query?days=1"))).json();
+  assert.equal(analytics.events.length, 1);
+  assert.equal(analytics.events[0].task, "peek");
+  assert.equal(analytics.events[0].modelLatencyCount, 1);
+  assert.equal(analytics.events[0].latencyCount, 1);
   assert.equal(await remaining(ledger), 29);
+});
+
+test("client timing stores only daily provider and feature aggregates", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  const response = await worker.fetch(new Request("https://example.test/internal/client-timing", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider: "anthropic", task: "action", durationMs: 1_250, selectedText: "private text" }),
+  }), { USAGE_LEDGER: ledgerNamespace(ledger) });
+  assert.equal(response.status, 200);
+
+  const analytics = await (await ledger.fetch(new Request("https://analytics.tokiri/analytics/query?days=1"))).json();
+  assert.equal(analytics.clientTimings.length, 1);
+  assert.deepEqual({
+    date: analytics.clientTimings[0].date,
+    provider: analytics.clientTimings[0].provider,
+    task: analytics.clientTimings[0].task,
+    count: analytics.clientTimings[0].count,
+    totalDurationMs: analytics.clientTimings[0].totalDurationMs,
+    maxDurationMs: analytics.clientTimings[0].maxDurationMs,
+  }, {
+    date: today,
+    provider: "anthropic",
+    task: "action",
+    count: 1,
+    totalDurationMs: 1_250,
+    maxDurationMs: 1_250,
+  });
+  assert.equal(JSON.stringify(analytics.clientTimings).includes("private text"), false);
 });
 
 test("priority processing is honored only for Advanced", async () => {
@@ -695,6 +950,22 @@ test("rate limiting returns 429 with Retry-After before charging", async () => {
   assert.equal(await remaining(ledger), 30);
 });
 
+test("rate limiter failures stop requests without charging or calling a model", async () => {
+  const ledger = new UsageLedger({ storage: new MemoryStorage() });
+  const env = {
+    USAGE_LEDGER: ledgerNamespace(ledger),
+    OPENAI_API_KEY: "sk-test",
+    INSTALLATION_RATE_LIMITER: { async limit() { throw new Error("binding unavailable"); } },
+  };
+  await withOpenAI(async () => assert.fail("model API must not be called"), async (calls) => {
+    const response = await worker.fetch(qwixRequest({ task: "fix", text: "helo" }), env);
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "rate_limiter_unavailable");
+    assert.equal(calls.length, 0);
+  });
+  assert.equal(await remaining(ledger), 30);
+});
+
 test("v2 never logs selected text or model output", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
   const logged = [];
@@ -710,6 +981,7 @@ test("v2 never logs selected text or model output", async () => {
     Object.assign(console, original);
   }
   assert.ok(logged.length > 0);
+  assert.match(logged.join("\n"), /Model output rejected openai fix invalid_fix_json/);
   assert.doesNotMatch(logged.join("\n"), /private selection|secret upstream body|not json/);
 });
 

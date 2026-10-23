@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f9f8fc">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Tokiri · Activity</title>
+    <link rel="icon" href="/assets/tokiri-mark-light.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Tokiri activity dashboard">
+        <picture>
+          <source srcset="/assets/tokiri-mark-dark.svg" media="(prefers-color-scheme: dark)">
+          <img src="/assets/tokiri-mark-light.svg" width="28" height="28" alt="">
+        </picture>
+        <span>Tokiri</span>
+      </a>
+      <div class="toolbar" aria-label="Dashboard controls">
+        <label class="range-control" for="rangeSelect">
+          <span>Period</span>
+          <select id="rangeSelect" name="range">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </label>
+        <button class="button button-quiet" id="refreshButton" type="button" disabled>Refresh</button>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="page-heading" aria-labelledby="pageTitle">
+        <div>
+          <h1 id="pageTitle">Activity</h1>
+          <p>Requests, errors, and response speed.</p>
+        </div>
+        <div class="connection" id="connectionStatus" data-state="idle" role="status" aria-live="polite">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span id="connectionLabel">Not connected</span>
+        </div>
+      </section>
+
+      <section class="access-panel" id="accessPanel" aria-labelledby="accessTitle">
+        <div class="access-copy">
+          <h2 id="accessTitle">Connect dashboard</h2>
+          <p>Enter the dashboard key to load your activity. It stays in this browser tab.</p>
+        </div>
+        <form class="access-form" id="accessForm">
+          <label for="accessKey">Dashboard key</label>
+          <div class="access-controls">
+            <input id="accessKey" name="accessKey" type="password" autocomplete="off" spellcheck="false" required>
+            <button class="button button-primary" type="submit">Connect</button>
+          </div>
+          <p class="access-message" id="accessMessage" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <div id="dashboardContent" hidden>
+        <section class="summary-grid" aria-label="Activity summary">
+          <div class="summary-item summary-item--requests">
+            <span class="summary-label">Service requests</span>
+            <strong id="totalRequests"></strong>
+            <span class="summary-detail" id="requestRange">in the selected period</span>
+          </div>
+          <div class="summary-item summary-item--failures">
+            <span class="summary-label">Actions with errors</span>
+            <strong id="failedActions"></strong>
+            <span class="summary-detail" id="actionFailureRate"></span>
+          </div>
+          <div class="summary-item summary-item--response">
+            <span class="summary-label">Average response</span>
+            <strong id="endToEndLatency"></strong>
+            <span class="summary-detail" id="endToEndP95"></span>
+          </div>
+          <div class="summary-item summary-item--slow">
+            <span class="summary-label">Responses over 10 seconds</span>
+            <strong id="slowRequests"></strong>
+            <span class="summary-detail" id="slowBreakdown"></span>
+          </div>
+        </section>
+        <p class="latency-coverage" id="latencyCoverage">Network retries count as separate requests.</p>
+
+        <section class="report report--timing timing-report" aria-labelledby="timingTitle">
+          <div class="report-heading">
+            <div>
+              <h2 id="timingTitle">Where the time goes</h2>
+              <p>See whether the network, model provider, or Worker is taking the time.</p>
+            </div>
+          </div>
+          <div class="report-body">
+            <div class="timing-grid">
+              <div class="timing-item timing-item--network">
+                <span class="timing-label">App ↔ Worker · estimate</span>
+                <strong id="appWorkerLatency"></strong>
+                <span class="timing-detail" id="appWorkerDetail"></span>
+              </div>
+              <div class="timing-item timing-item--model">
+                <span class="timing-label">Worker ↔ model provider</span>
+                <strong id="modelLatency"></strong>
+                <span class="timing-detail" id="modelP95"></span>
+              </div>
+              <div class="timing-item timing-item--service">
+                <span class="timing-label">Worker processing</span>
+                <strong id="workerLatency"></strong>
+                <span class="timing-detail" id="workerP95"></span>
+              </div>
+            </div>
+            <p class="timing-note">The network estimate includes both directions and app overhead; a one-way trip to the Worker cannot be measured accurately from one request.</p>
+          </div>
+        </section>
+
+        <section class="report report--trend trend-report" aria-labelledby="trendTitle">
+          <div class="report-heading">
+            <div>
+              <h2 id="trendTitle">Activity over time</h2>
+              <p>Requests and Actions with errors, by day.</p>
+            </div>
+            <div class="chart-legend" aria-label="Chart legend">
+              <span><i class="legend-swatch requests" aria-hidden="true"></i>Requests</span>
+              <span><i class="legend-swatch failures" aria-hidden="true"></i>Actions with errors</span>
+            </div>
+          </div>
+          <div class="report-body">
+            <div class="chart-wrap" id="trendChart" role="img" aria-label="Daily requests and Actions with errors chart">
+              <p class="chart-empty">Connect to load activity.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="report report--models provider-report" aria-labelledby="providerTitle">
+          <div class="report-heading">
+            <div>
+              <h2 id="providerTitle">Models</h2>
+              <p>Requests, errors, and response speed for each model.</p>
+            </div>
+          </div>
+          <div class="report-body">
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th scope="col">Model</th><th scope="col">Requests</th><th scope="col">Errors</th><th scope="col">Average Worker time</th></tr></thead>
+                <tbody id="providerRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="report report--features task-report" aria-labelledby="taskTitle">
+          <div class="report-heading">
+            <div>
+              <h2 id="taskTitle">Features</h2>
+              <p>See which parts of Tokiri you use most.</p>
+            </div>
+          </div>
+          <div class="report-body">
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th scope="col">Feature</th><th scope="col">Requests</th><th scope="col">Errors</th><th scope="col">Average Worker time</th></tr></thead>
+                <tbody id="taskRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="report report--errors error-report" aria-labelledby="errorTitle">
+          <div class="report-heading">
+            <div>
+              <h2 id="errorTitle">Errors to review</h2>
+              <p>See what went wrong and whether it came from the model or Tokiri.</p>
+            </div>
+          </div>
+          <div class="report-body">
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th scope="col">What happened</th><th scope="col">Where</th><th class="error-desktop-column" scope="col">Model</th><th class="error-desktop-column" scope="col">Feature</th><th scope="col">Times</th><th scope="col">Average Worker time</th></tr></thead>
+                <tbody id="errorRows"></tbody>
+              </table>
+            </div>
+            <p class="table-empty" id="errorsEmpty" hidden>No errors in this period.</p>
+          </div>
+        </section>
+
+        <section class="report report--slow slow-report" aria-labelledby="slowTitle">
+          <div class="report-heading">
+            <div>
+              <h2 id="slowTitle">Responses taking over 10 seconds</h2>
+              <p>Where a response was still waiting when it passed 10 seconds.</p>
+            </div>
+          </div>
+          <div class="report-body">
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th scope="col">Date</th><th class="slow-desktop-column" scope="col">Model</th><th class="slow-desktop-column" scope="col">Feature</th><th scope="col">Waiting on</th><th scope="col">Times</th></tr></thead>
+                <tbody id="slowRows"></tbody>
+              </table>
+            </div>
+            <p class="table-empty" id="slowEmpty" hidden>No responses passed 10 seconds in this period.</p>
+          </div>
+        </section>
+
+        <footer class="privacy-note">
+          <span>Daily totals only · no device IDs, selected text, prompts, or model responses</span>
+          <button class="text-button" id="disconnectButton" type="button">Disconnect</button>
+        </footer>
+      </div>
+    </main>
+  </body>
+</html>
