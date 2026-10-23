@@ -32,6 +32,16 @@ enum QwixitAPIError: LocalizedError {
 
 enum QwixitAPI {
     static let endpoint = URL(string: "https://qwixit-api.levmisiliuk.workers.dev/v2/qwix")!
+    private static let clientTimingEndpoint = URL(string: "https://qwixit-api.levmisiliuk.workers.dev/internal/client-timing")!
+    private static let clientTimingSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 5
+        configuration.waitsForConnectivity = false
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
     /// Matches the Worker limit: about two pages. Longer selections are rejected before any request.
     static let maxTextUTF16Units = 6_000
 
@@ -50,6 +60,25 @@ enum QwixitAPI {
         request.setValue(try InstallationIdentity.current(), forHTTPHeaderField: "X-Qwixit-Installation-ID")
         if let operationID {
             request.setValue(operationID, forHTTPHeaderField: "X-Qwixit-Operation-ID")
+        }
+    }
+
+    /// Sends only fixed feature/provider labels and elapsed time. It is best-effort and never delays the result.
+    static func recordClientTiming(provider: String, task: String, durationMs: Int) {
+        guard ["openai", "anthropic"].contains(provider),
+              ["fix", "action", "peek"].contains(task),
+              (0...600_000).contains(durationMs) else { return }
+        var request = URLRequest(url: clientTimingEndpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 5
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "provider": provider,
+            "task": task,
+            "durationMs": durationMs,
+        ])
+        Task.detached(priority: .utility) {
+            _ = try? await clientTimingSession.data(for: request)
         }
     }
 
@@ -260,7 +289,12 @@ actor OpenAIClient {
     }
 
     func improve(_ text: String) async throws -> FixOutcome {
-        let data = try await send(QwixTask(task: "fix", text: text, priority: Self.wantsPriority))
+        let data = try await send(QwixTask(
+            task: "fix",
+            text: text,
+            priority: Self.wantsPriority,
+            provider: AppPreferences().aiProvider.rawValue
+        ))
         guard let decoded = try? JSONDecoder().decode(FixEnvelope.self, from: data) else {
             throw QwixitAPIError.invalidResponse
         }
@@ -282,6 +316,7 @@ actor OpenAIClient {
             task: "action",
             text: text,
             priority: Self.wantsPriority,
+            provider: AppPreferences().aiProvider.rawValue,
             action: action,
             language: language
         ))
@@ -301,13 +336,34 @@ actor OpenAIClient {
         try QwixitAPI.prepare(&request)
         request.httpBody = try JSONEncoder().encode(task)
 
-        let (data, response) = try await session.data(for: request)
+        let timingStartedAt = ProcessInfo.processInfo.systemUptime
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            QwixitAPI.recordClientTiming(
+                provider: task.provider ?? "openai",
+                task: task.task,
+                durationMs: Self.elapsedMilliseconds(since: timingStartedAt)
+            )
+            throw error
+        }
+        QwixitAPI.recordClientTiming(
+            provider: task.provider ?? "openai",
+            task: task.task,
+            durationMs: Self.elapsedMilliseconds(since: timingStartedAt)
+        )
         guard let http = response as? HTTPURLResponse else { throw QwixitAPIError.invalidResponse }
         QwixitUsage.record(http)
         guard (200..<300).contains(http.statusCode) else {
             throw QwixitAPI.responseError(http, data: data)
         }
         return data
+    }
+
+    private static func elapsedMilliseconds(since start: TimeInterval) -> Int {
+        max(0, Int(((ProcessInfo.processInfo.systemUptime - start) * 1_000).rounded()))
     }
 
     /// The Worker ignores priority for Free; the client only asks when Advanced and the setting is on.
@@ -322,6 +378,7 @@ struct QwixTask: Encodable, Sendable {
     let task: String
     let text: String
     var priority: Bool?
+    var provider: String?
     var action: String?
     var language: String?
     var mode: String?

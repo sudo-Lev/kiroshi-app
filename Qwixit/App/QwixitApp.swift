@@ -102,15 +102,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func finishLaunching() {
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
-        registerPeekHotkey(key: container.settingsViewModel.peekShortcutKey)
-        container.settingsViewModel.onPeekShortcutChanged = { [weak self] key in
-            self?.registerPeekHotkey(key: key)
+        registerPeekHotkey(binding: container.settingsViewModel.peekHotkey)
+        container.settingsViewModel.onPeekHotkeyChanged = { [weak self] binding in
+            self?.registerPeekHotkey(binding: binding)
+        }
+        container.settingsViewModel.onActionHotkeyChanged = { [weak self] binding in
+            self?.registerActionHotkey(binding: binding)
         }
         container.settingsViewModel.onAppearanceChanged = { [weak self] appearance in
             self?.updateStatusItemAppearance(appearance)
         }
         registerFixHotkey()
-        registerActionHotkey()
+        registerActionHotkey(binding: container.settingsViewModel.actionsHotkey)
         container.settingsViewModel.onMainHotkeyChanged = { [weak self] _ in
             self?.registerFixHotkey()
         }
@@ -177,10 +180,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         container.peekPanel.toggle(selection: selection)
     }
 
-    private func registerPeekHotkey(key: String) {
-        container.peekHotkey.start(key: key) { [weak self] in
+    private func registerPeekHotkey(binding: HotkeyBinding) {
+        let registered = container.peekHotkey.start(binding: binding) { [weak self] in
             Task { @MainActor in await self?.togglePeek() }
         }
+        container.settingsViewModel.peekHotkeyConflict = !registered
     }
 
     private func registerFixHotkey() {
@@ -198,8 +202,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.mainHotkeyConflict = !registered
     }
 
-    private func registerActionHotkey() {
-        let registered = container.actionHotkey.start { [weak self] in
+    private func registerActionHotkey(binding: HotkeyBinding) {
+        let registered = container.actionHotkey.start(binding: binding) { [weak self] in
             Task { @MainActor in await self?.handleActionHotkey() }
         }
         container.settingsViewModel.actionHotkeyConflict = !registered
@@ -208,6 +212,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleFixHotkey() {
         if onboardingWindowController?.isVisible == true {
             container.settingsViewModel.onboarding.handleMainHotkey()
+            return
+        }
+        if menuPopover.isShown {
+            menuPopover.close()
             return
         }
         if container.settingsViewModel.mainHotkey == HotkeyCatalog.popupDismiss,
@@ -464,6 +472,7 @@ final class OnboardingWindowController {
             let root = OnboardingView(
                 model: viewModel.onboarding,
                 fixShortcut: viewModel.mainHotkey,
+                actionShortcut: viewModel.actionsHotkey,
                 onFinish: { [weak self] in
                     self?.close()
                     self?.onFinish()
@@ -562,7 +571,7 @@ final class OnboardingWindowController {
     }
 
     private func matchesActionHotkey(_ event: NSEvent) -> Bool {
-        matches(event, binding: .actions)
+        matches(event, binding: viewModel.actionsHotkey)
     }
 
     private func matches(_ event: NSEvent, binding: HotkeyBinding) -> Bool {

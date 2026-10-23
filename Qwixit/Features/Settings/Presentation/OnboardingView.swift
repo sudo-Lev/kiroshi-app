@@ -10,15 +10,22 @@ private struct DemoKeys: OptionSet {
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingModel
     let fixShortcut: HotkeyBinding
+    let actionShortcut: HotkeyBinding
     let onFinish: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var demoKeys: DemoKeys = []
     @State private var accessPulse = false
     private let labels = ["Welcome", "Access", "Fix", "Actions", "Done"]
 
-    init(model: OnboardingModel, fixShortcut: HotkeyBinding = .defaultMain, onFinish: @escaping () -> Void) {
+    init(
+        model: OnboardingModel,
+        fixShortcut: HotkeyBinding = .defaultMain,
+        actionShortcut: HotkeyBinding = .actions,
+        onFinish: @escaping () -> Void
+    ) {
         self.model = model
         self.fixShortcut = fixShortcut
+        self.actionShortcut = actionShortcut
         self.onFinish = onFinish
     }
 
@@ -216,7 +223,7 @@ struct OnboardingView: View {
                 Text(practiceTitle).onboardingTitle(27).multilineTextAlignment(.leading)
                 Text(practiceSubtitle).onboardingBody()
                 DemoKeyRow(
-                    binding: model.step == 3 ? HotkeyCatalog.actions : fixShortcut,
+                    binding: model.step == 3 ? actionShortcut : fixShortcut,
                     accent: stepAccent,
                     activeKeys: demoKeys,
                     controlDown: model.controlDown,
@@ -283,7 +290,7 @@ struct OnboardingView: View {
             Text("Two ways to use Tokiri in any app.").onboardingBody()
             VStack(spacing: 0) {
                 cheatRow(fixShortcut.displayString, "Fix", "Correct selected text in place."); Divider().padding(.leading, 150)
-                cheatRow(HotkeyCatalog.actions.displayString, "Actions", "Rewrite, translate, or change tone.")
+                cheatRow(actionShortcut.displayString, "Actions", "Rewrite, translate, or change tone.")
             }.frame(width: 520).qwixitPanel()
             HStack(spacing: 12) {
                 HStack(spacing: 8) { TokiriUI.Icon(.wifi, size: 11); QwixitMenuBarLogo().frame(width: 38, height: 15); Text("9:41") }.font(.system(size: 11, weight: .medium)).foregroundStyle(KColor.surface).padding(.horizontal, 12).frame(height: 30).background(KColor.ink).clipShape(Capsule())
@@ -324,7 +331,7 @@ struct OnboardingView: View {
     private var stepAccent: Color { model.step == 3 ? KColor.magenta : KColor.violet }
     private var mockWindowTitle: String { [2: "Draft — Notes", 3: "Message — Slack"][model.step] ?? "" }
     private var displayedPracticeText: String { model.phase == .typing || model.phase == .done ? model.typed : model.originalText }
-    private var checklist: [String] { model.step == 2 ? ["Text is selected", "Press \(fixShortcut.displayString)", "Fixed text replaces it"] : ["Text is selected", "Press \(HotkeyCatalog.actions.displayString)", "Pick an action — 1–4 or ↵", "Result replaces the text"] }
+    private var checklist: [String] { model.step == 2 ? ["Text is selected", "Press \(fixShortcut.displayString)", "Fixed text replaces it"] : ["Text is selected", "Press \(actionShortcut.displayString)", "Pick an action — 1–4 or ↵", "Result replaces the text"] }
     private var completedChecklistRows: Int { model.phase == .done ? checklist.count : model.phase == .processing || model.phase == .typing ? max(2, checklist.count - 1) : model.phase == .palette ? 2 : 1 }
     private var feedbackPhase: AppPhase? {
         switch model.phase {
@@ -345,7 +352,7 @@ struct OnboardingView: View {
         case (2, _): "Press \(fixShortcut.displayString) once."
         case (3, .palette): "Pick an action — 1–4 or ↵."
         case (3, .done): "Chosen and replaced."
-        case (3, _): "Press \(HotkeyCatalog.actions.displayString) to open Actions."
+        case (3, _): "Press \(actionShortcut.displayString) to open Actions."
         default: "Tokiri is ready in every app."
         }
     }

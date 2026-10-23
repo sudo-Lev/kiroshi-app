@@ -28,12 +28,14 @@ struct PeekCacheKey: Hashable {
     let mode: PeekMode
     let language: String
     let length: PeekSummaryLength
+    let provider: QwixAIProvider
 
-    init(text: String, mode: PeekMode, language: String, length: PeekSummaryLength) {
+    init(text: String, mode: PeekMode, language: String, length: PeekSummaryLength, provider: QwixAIProvider = .openAI) {
         selectionHash = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
         self.mode = mode
         self.language = language
         self.length = length
+        self.provider = provider
     }
 }
 
@@ -353,7 +355,12 @@ final class PeekViewModel: ObservableObject {
         requestTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let value = try await fetch(mode: requestedMode, length: summaryLength, operationID: operationID(for: key))
+                let value = try await fetch(
+                    mode: requestedMode,
+                    length: summaryLength,
+                    operationID: operationID(for: key),
+                    provider: key.provider
+                )
                 try Task.checkCancellation()
                 guard mode == requestedMode else { return }
                 cache[key] = value
@@ -390,7 +397,7 @@ final class PeekViewModel: ObservableObject {
         return created
     }
 
-    private func fetch(mode: PeekMode, length: PeekSummaryLength, operationID: String) async throws -> PeekResult {
+    private func fetch(mode: PeekMode, length: PeekSummaryLength, operationID: String, provider: QwixAIProvider) async throws -> PeekResult {
         let responseLanguage = mode == .translate
             ? targetLanguage
             : sourceLanguage?.code ?? targetLanguage
@@ -400,7 +407,8 @@ final class PeekViewModel: ObservableObject {
             targetLanguage: responseLanguage,
             mode: mode,
             length: length,
-            operationID: operationID
+            operationID: operationID,
+            provider: provider
         )
         var json = ""
         for try await delta in client.stream(request) {
@@ -413,7 +421,13 @@ final class PeekViewModel: ObservableObject {
     }
 
     private func cacheKey(mode: PeekMode) -> PeekCacheKey {
-        PeekCacheKey(text: sourceText, mode: mode, language: targetLanguage, length: summaryLength)
+        PeekCacheKey(
+            text: sourceText,
+            mode: mode,
+            language: targetLanguage,
+            length: summaryLength,
+            provider: AppPreferences(defaults: defaults).aiProvider
+        )
     }
 
     private func cancelAll() {

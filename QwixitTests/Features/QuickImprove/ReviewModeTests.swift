@@ -436,10 +436,24 @@ final class ReviewModeTests: XCTestCase {
         let data = try JSONEncoder().encode(QwixTask(task: "fix", text: "helo"))
         XCTAssertEqual(try JSONSerialization.jsonObject(with: data) as? [String: String], ["task": "fix", "text": "helo"])
 
+        let claudeFix = try JSONEncoder().encode(QwixTask(task: "fix", text: "helo", provider: "anthropic"))
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: claudeFix) as? [String: String],
+            ["task": "fix", "text": "helo", "provider": "anthropic"]
+        )
+
         let action = try JSONEncoder().encode(QwixTask(task: "action", text: "hi", action: "translate", language: "pl"))
         XCTAssertEqual(
             try JSONSerialization.jsonObject(with: action) as? [String: String],
             ["task": "action", "text": "hi", "action": "translate", "language": "pl"]
+        )
+
+        let claudeAction = try JSONEncoder().encode(QwixTask(
+            task: "action", text: "hi", provider: "anthropic", action: "translate", language: "pl"
+        ))
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: claudeAction) as? [String: String],
+            ["task": "action", "text": "hi", "provider": "anthropic", "action": "translate", "language": "pl"]
         )
     }
 

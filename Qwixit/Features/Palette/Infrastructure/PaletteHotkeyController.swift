@@ -6,10 +6,10 @@ final class ActionHotkey {
     }
 
     @discardableResult
-    func start(action: @escaping () -> Void) -> Bool {
+    func start(binding: HotkeyBinding = .actions, action: @escaping () -> Void) -> Bool {
         hotKey.register(
-            keyCode: HotkeyBinding.actions.keyCode,
-            modifiers: HotkeyBinding.actions.modifiers,
+            keyCode: binding.keyCode,
+            modifiers: binding.modifiers,
             action: action
         )
     }

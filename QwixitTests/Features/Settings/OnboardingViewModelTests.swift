@@ -142,6 +142,140 @@ final class SettingsBillingTests: XCTestCase {
         let fetchCount = await billing.fetchCount()
         XCTAssertEqual(fetchCount, 3)
     }
+
+    func testCheckoutPollActivatesAdvancedWithoutASettingsRefresh() async throws {
+        let suiteName = "SettingsBillingPollingTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let billing = BillingSequenceStub(statuses: [
+            BillingStatus(plan: "free", subscriptionStatus: "none", remaining: 0, period: "2026-10"),
+            BillingStatus(plan: "advanced", subscriptionStatus: "active", remaining: nil, period: "2026-10"),
+        ])
+        let model = SettingsViewModel(
+            accessibility: OnboardingAccessibilityStub(),
+            checkout: SuccessfulCheckoutStub(),
+            billingStatus: billing,
+            billingPollInterval: .milliseconds(10),
+            defaults: defaults
+        )
+        defer { model.stop() }
+
+        model.openStarterCheckout()
+        for _ in 0..<100 where !model.isAdvanced {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertTrue(model.isAdvanced)
+        let fetchCount = await billing.fetchCount()
+        XCTAssertEqual(fetchCount, 2)
+    }
+
+    func testRefreshDuringCheckoutImmediatelyChecksStatusAndKeepsPolling() async throws {
+        let suiteName = "SettingsBillingRefreshTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let billing = BillingSequenceStub(statuses: [
+            BillingStatus(plan: "free", subscriptionStatus: "none", remaining: 0, period: "2026-10"),
+            BillingStatus(plan: "advanced", subscriptionStatus: "active", remaining: nil, period: "2026-10"),
+        ])
+        let model = SettingsViewModel(
+            accessibility: OnboardingAccessibilityStub(),
+            checkout: SuccessfulCheckoutStub(),
+            billingStatus: billing,
+            billingPollInterval: .seconds(30),
+            defaults: defaults
+        )
+        defer { model.stop() }
+
+        model.openStarterCheckout()
+        for _ in 0..<100 where await billing.fetchCount() == 0 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        model.refreshUsage()
+        for _ in 0..<100 where !model.isAdvanced {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        XCTAssertTrue(model.isAdvanced)
+        let fetchCount = await billing.fetchCount()
+        XCTAssertEqual(fetchCount, 2)
+    }
+}
+
+@MainActor
+final class SettingsHotkeyTests: XCTestCase {
+    func testAIProviderDefaultsToGPTAndPersistsClaudeChoice() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = makeSettings(defaults: defaults)
+        defer { settings.stop() }
+        XCTAssertEqual(settings.aiProvider, .openAI)
+
+        settings.aiProvider = .anthropic
+
+        XCTAssertEqual(AppPreferences(defaults: defaults).aiProvider, .anthropic)
+        XCTAssertEqual(defaults.string(forKey: AppPreferenceKey.aiProvider), "anthropic")
+    }
+
+    func testAllHotkeysDefaultToCurrentBindingsAndPersistCustomBindings() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = makeSettings(defaults: defaults)
+        defer { settings.stop() }
+        XCTAssertEqual(settings.mainHotkey, .defaultMain)
+        XCTAssertEqual(settings.actionsHotkey, .actions)
+        XCTAssertEqual(settings.peekHotkey, .peek)
+
+        let fix = HotkeyBinding(keyCode: 0x0F, modifiers: [.control, .shift])
+        let actions = HotkeyBinding(keyCode: 0x00, modifiers: [.control, .option])
+        let peek = HotkeyBinding(keyCode: 0x01, modifiers: [.command, .shift])
+        XCTAssertTrue(settings.setHotkey(fix, for: .fix))
+        XCTAssertTrue(settings.setHotkey(actions, for: .actions))
+        XCTAssertTrue(settings.setHotkey(peek, for: .peek))
+
+        let relaunchedSettings = makeSettings(defaults: defaults)
+        defer { relaunchedSettings.stop() }
+        XCTAssertEqual(relaunchedSettings.mainHotkey, fix)
+        XCTAssertEqual(relaunchedSettings.actionsHotkey, actions)
+        XCTAssertEqual(relaunchedSettings.peekHotkey, peek)
+    }
+
+    func testHotkeysRejectDuplicatesAndKeepPopupDismissReserved() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = makeSettings(defaults: defaults)
+        defer { settings.stop() }
+        let custom = HotkeyBinding(keyCode: 0x0F, modifiers: [.control, .shift])
+
+        XCTAssertTrue(settings.setHotkey(custom, for: .fix))
+        XCTAssertFalse(settings.setHotkey(custom, for: .actions))
+        XCTAssertFalse(settings.setHotkey(HotkeyCatalog.popupDismiss, for: .actions))
+        XCTAssertFalse(settings.setHotkey(HotkeyCatalog.popupDismiss, for: .peek))
+        XCTAssertEqual(settings.actionsHotkey, .actions)
+        XCTAssertEqual(settings.peekHotkey, .peek)
+    }
+
+    func testPeekReadsThePreviousKeyOnlyPreference() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("J", forKey: PeekPreferenceKey.shortcutKey)
+
+        XCTAssertEqual(AppPreferences(defaults: defaults).peekHotkey, HotkeyCatalog.peekBinding(for: "J"))
+    }
+
+    private func makeDefaults() throws -> (UserDefaults, String) {
+        let suiteName = "SettingsHotkeyTests.\(UUID().uuidString)"
+        return (try XCTUnwrap(UserDefaults(suiteName: suiteName)), suiteName)
+    }
+
+    private func makeSettings(defaults: UserDefaults) -> SettingsViewModel {
+        SettingsViewModel(accessibility: OnboardingAccessibilityStub(), defaults: defaults)
+    }
 }
 
 private struct SuccessfulCheckoutStub: CheckoutOpening {

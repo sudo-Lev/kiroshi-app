@@ -1,9 +1,11 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
     let onShowOnboarding: () -> Void
     let onQuit: () -> Void
+    @StateObject private var shortcutRecorder = SettingsHotkeyRecorder()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -12,6 +14,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     appearanceSection
+                    modelSection
                     shortcutsSection
                     accessSection
                     billingSection
@@ -32,6 +35,7 @@ struct SettingsView: View {
             viewModel.refreshAccessibility()
             viewModel.refreshUsage()
         }
+        .onDisappear { shortcutRecorder.stop() }
     }
 
     private var header: some View {
@@ -39,7 +43,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 QwixitLockup()
                     .frame(width: 104, height: 28, alignment: .leading)
-                Text("Shortcuts & access")
+                Text("Settings")
                     .font(.system(size: 10))
                     .foregroundStyle(KColor.secondary)
             }
@@ -69,23 +73,34 @@ struct SettingsView: View {
         }
     }
 
+    private var modelSection: some View {
+        SettingsSection(title: "AI model") {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(QwixAIProvider.allCases) { provider in
+                    TokiriUI.RadioOption(
+                        title: provider.title,
+                        value: provider,
+                        selection: $viewModel.aiProvider
+                    )
+                }
+                Text("Used for Fix, Actions, and Peek.")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(KColor.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 2)
+            }
+            .padding(8)
+        }
+    }
+
     private var shortcutsSection: some View {
         SettingsSection(title: "Hot keys") {
             SettingRow(
                 icon: .fix,
                 title: "Fix selected text",
-                detail: viewModel.mainHotkeyConflict
-                    ? "\(viewModel.mainHotkey.displayString) is taken by another app. Choose another combo."
-                    : "Press once to clean up grammar and punctuation."
+                detail: shortcutDetail(for: .fix)
             ) {
-                HStack(spacing: 6) {
-                    if viewModel.mainHotkey != .defaultMain {
-                        Button("Restore default") { viewModel.restoreDefaultHotkey() }
-                            .buttonStyle(SubtleButtonStyle())
-                    }
-                    ShortcutKeycaps(binding: viewModel.mainHotkey)
-                        .opacity(viewModel.mainHotkeyConflict ? 0.45 : 1)
-                }
+                hotkeyControl(for: .fix, binding: viewModel.mainHotkey)
             }
 
             rowDivider
@@ -106,12 +121,9 @@ struct SettingsView: View {
             SettingRow(
                 icon: .actions,
                 title: "Open actions",
-                detail: viewModel.actionHotkeyConflict
-                    ? "\(HotkeyCatalog.actions.displayString) is taken by another app."
-                    : "Translate, rewrite for Slack, or make text formal."
+                detail: shortcutDetail(for: .actions)
             ) {
-                ShortcutKeycaps(binding: HotkeyCatalog.actions)
-                    .opacity(viewModel.actionHotkeyConflict ? 0.45 : 1)
+                hotkeyControl(for: .actions, binding: viewModel.actionsHotkey)
             }
 
             rowDivider
@@ -119,10 +131,82 @@ struct SettingsView: View {
             SettingRow(
                 icon: .peek,
                 title: "Peek",
-                detail: "Read selected text without replacing it."
+                detail: shortcutDetail(for: .peek)
             ) {
-                ShortcutKeycaps(binding: HotkeyCatalog.peekBinding(for: viewModel.peekShortcutKey))
+                hotkeyControl(for: .peek, binding: viewModel.peekHotkey)
             }
+        }
+    }
+
+    private func hotkeyControl(for action: HotkeyAction, binding: HotkeyBinding) -> some View {
+        HStack(spacing: 5) {
+            if shortcutRecorder.recordingAction == action {
+                Text("Press keys…")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(KColor.violet)
+                    .padding(.horizontal, 7)
+                    .frame(height: 25)
+                    .background(KColor.surfaceHover, in: QwixitControlShape(cut: 5))
+                    .overlay(QwixitControlShape(cut: 5).stroke(KColor.violet))
+            } else {
+                TokiriUI.ShortcutButton(
+                    modifiers: binding.modifierSymbols,
+                    key: binding.keySymbol,
+                    label: "Change \(action.title) shortcut",
+                    hint: "Click, then press a key combination. Escape cancels."
+                ) {
+                    let viewModel = viewModel
+                    shortcutRecorder.begin(action) { [weak viewModel] binding, action in
+                        viewModel?.setHotkey(binding, for: action) ?? false
+                    }
+                }
+                .help("Change \(action.title) shortcut")
+                .opacity(isHotkeyConflict(for: action) ? 0.55 : 1)
+            }
+
+            if binding != defaultHotkey(for: action) {
+                Button("Default") { viewModel.restoreDefaultHotkey(for: action) }
+                    .buttonStyle(SubtleButtonStyle())
+                    .help("Restore the default \(action.title) shortcut")
+            }
+        }
+    }
+
+    private func shortcutDetail(for action: HotkeyAction) -> String {
+        if shortcutRecorder.recordingAction == action {
+            return shortcutRecorder.error ?? "Press a key combination. Escape cancels."
+        }
+        if isHotkeyConflict(for: action) {
+            return "\(hotkey(for: action).displayString) is taken by another app. Choose another combo."
+        }
+        return switch action {
+        case .fix: "Press once to clean up grammar and punctuation."
+        case .actions: "Translate, rewrite for Slack, or make text formal."
+        case .peek: "Read selected text without replacing it."
+        }
+    }
+
+    private func isHotkeyConflict(for action: HotkeyAction) -> Bool {
+        switch action {
+        case .fix: viewModel.mainHotkeyConflict
+        case .actions: viewModel.actionHotkeyConflict
+        case .peek: viewModel.peekHotkeyConflict
+        }
+    }
+
+    private func hotkey(for action: HotkeyAction) -> HotkeyBinding {
+        switch action {
+        case .fix: viewModel.mainHotkey
+        case .actions: viewModel.actionsHotkey
+        case .peek: viewModel.peekHotkey
+        }
+    }
+
+    private func defaultHotkey(for action: HotkeyAction) -> HotkeyBinding {
+        switch action {
+        case .fix: .defaultMain
+        case .actions: .actions
+        case .peek: .peek
         }
     }
 
@@ -263,6 +347,59 @@ struct SettingsView: View {
             .fill(KColor.line)
             .frame(height: 1)
             .padding(.leading, 52)
+    }
+}
+
+@MainActor
+private final class SettingsHotkeyRecorder: ObservableObject {
+    @Published private(set) var recordingAction: HotkeyAction?
+    @Published private(set) var error: String?
+    private var keyMonitor: Any?
+    private var onCapture: ((HotkeyBinding, HotkeyAction) -> Bool)?
+
+    func begin(_ action: HotkeyAction, onCapture: @escaping (HotkeyBinding, HotkeyAction) -> Bool) {
+        recordingAction = action
+        error = nil
+        self.onCapture = onCapture
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, NSApp.keyWindow?.title == "Tokiri Settings",
+                  let action = self.recordingAction else { return event }
+            return self.capture(event, for: action)
+        }
+    }
+
+    func stop() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
+        recordingAction = nil
+        error = nil
+        onCapture = nil
+    }
+
+    private func capture(_ event: NSEvent, for action: HotkeyAction) -> NSEvent? {
+        if event.keyCode == 53 {
+            stop()
+            return nil
+        }
+
+        var modifiers: GlobalHotKey.Modifiers = []
+        if event.modifierFlags.contains(.control) { modifiers.insert(.control) }
+        if event.modifierFlags.contains(.option) { modifiers.insert(.option) }
+        if event.modifierFlags.contains(.shift) { modifiers.insert(.shift) }
+        if event.modifierFlags.contains(.command) { modifiers.insert(.command) }
+        guard !modifiers.isEmpty else {
+            error = "Include at least one modifier key."
+            return nil
+        }
+
+        let binding = HotkeyBinding(keyCode: UInt32(event.keyCode), modifiers: modifiers)
+        guard onCapture?(binding, action) == true else {
+            error = "That combination is already assigned or reserved."
+            return nil
+        }
+        stop()
+        return nil
     }
 }
 

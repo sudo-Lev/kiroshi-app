@@ -170,7 +170,7 @@ struct MenuBarView: View {
             } else {
                 Spacer(minLength: 0)
                 TokiriUI.PopupCloseButton(
-                    shortcut: HotkeyCatalog.popupDismiss.presentation,
+                    shortcut: settingsViewModel.mainHotkey.presentation,
                     label: "Close Tokiri menu",
                     action: onClose
                 )

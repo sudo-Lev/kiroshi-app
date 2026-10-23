@@ -31,6 +31,15 @@ final class PaletteViewModelTests: XCTestCase {
         XCTAssertEqual(hotKey.modifiers, [.option, .command])
     }
 
+    func testPaletteRegistersTheConfiguredBinding() {
+        let hotKey = PaletteHotKeySpy()
+        let binding = HotkeyBinding(keyCode: 0x0F, modifiers: [.control, .shift])
+        ActionHotkey(hotKey: hotKey).start(binding: binding) {}
+
+        XCTAssertEqual(hotKey.keyCode, binding.keyCode)
+        XCTAssertEqual(hotKey.modifiers, binding.modifiers)
+    }
+
     func testLegacyDefaultHotkeyMigratesToOptionCommandX() {
         let defaults = UserDefaults(suiteName: #function)!
         defer { defaults.removePersistentDomain(forName: #function) }

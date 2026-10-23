@@ -6,9 +6,12 @@ enum AppPreferenceKey {
     static let animationsEnabled = "animationsEnabled"
     static let priorityProcessing = "priorityProcessing"
     static let appearance = "appearance"
+    static let aiProvider = "aiProvider"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
     static let mainHotkeyKeyCode = "hotkey.main.keyCode"
     static let mainHotkeyModifiers = "hotkey.main.modifiers"
+    static let actionsHotkeyKeyCode = "hotkey.actions.keyCode"
+    static let actionsHotkeyModifiers = "hotkey.actions.modifiers"
     static let legacyMigrationDone = "migration.legacyImportDone"
     static let needsRenamePermission = "migration.needsRenamePermission"
     static let quotaRemaining = "quota.remaining"
@@ -21,8 +24,9 @@ enum AppPreferenceKey {
     /// Every app-owned key; used when carrying settings over from the pre-rename build.
     static var all: [String] {
         var keys = [
-            showSuccess, reviewBeforeApplying, animationsEnabled, priorityProcessing, appearance, hasCompletedOnboarding,
-            mainHotkeyKeyCode, mainHotkeyModifiers, quotaRemaining, quotaPlan,
+            showSuccess, reviewBeforeApplying, animationsEnabled, priorityProcessing, appearance, aiProvider, hasCompletedOnboarding,
+            mainHotkeyKeyCode, mainHotkeyModifiers, actionsHotkeyKeyCode, actionsHotkeyModifiers,
+            quotaRemaining, quotaPlan,
             quotaPeriod
         ] + PeekPreferenceKey.all
 #if DEBUG
@@ -38,6 +42,20 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
+}
+
+enum QwixAIProvider: String, CaseIterable, Identifiable {
+    case openAI = "openai"
+    case anthropic
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .openAI: "GPT-5.6 Luna"
+        case .anthropic: "Claude Haiku 5.5"
+        }
+    }
 }
 
 #if DEBUG
@@ -67,6 +85,9 @@ enum DeveloperUsageScenario: String, CaseIterable, Identifiable {
 #endif
 
 enum PeekPreferenceKey {
+    static let hotkeyKeyCode = "peek.hotkey.keyCode"
+    static let hotkeyModifiers = "peek.hotkey.modifiers"
+    /// Pre-full-shortcut preference retained for upgrades from builds that stored only a key.
     static let shortcutKey = "peek.shortcutKey"
     static let targetLanguage = "peek.targetLanguage"
     static let smartDefault = "peek.smartDefault"
@@ -75,7 +96,7 @@ enum PeekPreferenceKey {
     static let lastMode = "peek.lastMode"
     static let lastLength = "peek.lastLength"
 
-    static let all = [shortcutKey, targetLanguage, smartDefault, rememberMode, prefetch, lastMode, lastLength]
+    static let all = [hotkeyKeyCode, hotkeyModifiers, shortcutKey, targetLanguage, smartDefault, rememberMode, prefetch, lastMode, lastLength]
 }
 
 struct AppPreferences {
@@ -92,6 +113,11 @@ struct AppPreferences {
         defaults.string(forKey: AppPreferenceKey.appearance)
             .flatMap(AppAppearance.init(rawValue:))
             ?? .light
+    }
+    var aiProvider: QwixAIProvider {
+        defaults.string(forKey: AppPreferenceKey.aiProvider)
+            .flatMap(QwixAIProvider.init(rawValue:))
+            ?? .openAI
     }
     var remainingActions: Int? {
 #if DEBUG
@@ -135,21 +161,88 @@ struct AppPreferences {
     var peekPrefetch: Bool { bool(for: PeekPreferenceKey.prefetch, default: true) }
 
     var mainHotkey: HotkeyBinding {
-        guard let keyCode = defaults.object(forKey: AppPreferenceKey.mainHotkeyKeyCode) as? Int,
-              let modifiers = defaults.object(forKey: AppPreferenceKey.mainHotkeyModifiers) as? Int else {
-            return .defaultMain
+        hotkey(
+            keyCodeKey: AppPreferenceKey.mainHotkeyKeyCode,
+            modifiersKey: AppPreferenceKey.mainHotkeyModifiers,
+            default: .defaultMain
+        )
+    }
+
+    func setMainHotkey(_ binding: HotkeyBinding?) {
+        setHotkey(
+            binding,
+            default: .defaultMain,
+            keyCodeKey: AppPreferenceKey.mainHotkeyKeyCode,
+            modifiersKey: AppPreferenceKey.mainHotkeyModifiers
+        )
+    }
+
+    var actionsHotkey: HotkeyBinding {
+        hotkey(
+            keyCodeKey: AppPreferenceKey.actionsHotkeyKeyCode,
+            modifiersKey: AppPreferenceKey.actionsHotkeyModifiers,
+            default: .actions
+        )
+    }
+
+    func setActionsHotkey(_ binding: HotkeyBinding?) {
+        setHotkey(
+            binding,
+            default: .actions,
+            keyCodeKey: AppPreferenceKey.actionsHotkeyKeyCode,
+            modifiersKey: AppPreferenceKey.actionsHotkeyModifiers
+        )
+    }
+
+    var peekHotkey: HotkeyBinding {
+        let configured = hotkey(
+            keyCodeKey: PeekPreferenceKey.hotkeyKeyCode,
+            modifiersKey: PeekPreferenceKey.hotkeyModifiers,
+            default: .peek
+        )
+        if defaults.object(forKey: PeekPreferenceKey.hotkeyKeyCode) != nil,
+           defaults.object(forKey: PeekPreferenceKey.hotkeyModifiers) != nil {
+            return configured
+        }
+        if let legacyKey = defaults.string(forKey: PeekPreferenceKey.shortcutKey) {
+            return HotkeyCatalog.peekBinding(for: legacyKey)
+        }
+        return .peek
+    }
+
+    func setPeekHotkey(_ binding: HotkeyBinding?) {
+        setHotkey(
+            binding,
+            default: .peek,
+            keyCodeKey: PeekPreferenceKey.hotkeyKeyCode,
+            modifiersKey: PeekPreferenceKey.hotkeyModifiers
+        )
+        defaults.removeObject(forKey: PeekPreferenceKey.shortcutKey)
+    }
+
+    private func hotkey(keyCodeKey: String, modifiersKey: String, default fallback: HotkeyBinding) -> HotkeyBinding {
+        guard let keyCode = defaults.object(forKey: keyCodeKey) as? Int,
+              let modifiers = defaults.object(forKey: modifiersKey) as? Int,
+              (0...127).contains(keyCode),
+              modifiers > 0 else {
+            return fallback
         }
         return HotkeyBinding(keyCode: UInt32(keyCode), modifiers: .init(rawValue: UInt32(modifiers)))
     }
 
-    func setMainHotkey(_ binding: HotkeyBinding?) {
-        guard let binding, binding != .defaultMain else {
-            defaults.removeObject(forKey: AppPreferenceKey.mainHotkeyKeyCode)
-            defaults.removeObject(forKey: AppPreferenceKey.mainHotkeyModifiers)
+    private func setHotkey(
+        _ binding: HotkeyBinding?,
+        default fallback: HotkeyBinding,
+        keyCodeKey: String,
+        modifiersKey: String
+    ) {
+        guard let binding, binding != fallback else {
+            defaults.removeObject(forKey: keyCodeKey)
+            defaults.removeObject(forKey: modifiersKey)
             return
         }
-        defaults.set(Int(binding.keyCode), forKey: AppPreferenceKey.mainHotkeyKeyCode)
-        defaults.set(Int(binding.modifiers.rawValue), forKey: AppPreferenceKey.mainHotkeyModifiers)
+        defaults.set(Int(binding.keyCode), forKey: keyCodeKey)
+        defaults.set(Int(binding.modifiers.rawValue), forKey: modifiersKey)
     }
 
     private func bool(for key: String, default defaultValue: Bool) -> Bool {

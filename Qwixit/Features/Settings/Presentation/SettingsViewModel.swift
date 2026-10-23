@@ -28,6 +28,9 @@ final class SettingsViewModel: ObservableObject {
     @Published var appearance: AppAppearance {
         didSet { defaults.set(appearance.rawValue, forKey: AppPreferenceKey.appearance) }
     }
+    @Published var aiProvider: QwixAIProvider {
+        didSet { defaults.set(aiProvider.rawValue, forKey: AppPreferenceKey.aiProvider) }
+    }
     @Published var peekTargetLanguage: String {
         didSet { defaults.set(peekTargetLanguage, forKey: PeekPreferenceKey.targetLanguage) }
     }
@@ -40,21 +43,20 @@ final class SettingsViewModel: ObservableObject {
     @Published var peekPrefetch: Bool {
         didSet { defaults.set(peekPrefetch, forKey: PeekPreferenceKey.prefetch) }
     }
-    @Published var peekShortcutKey: String {
-        didSet {
-            defaults.set(peekShortcutKey, forKey: PeekPreferenceKey.shortcutKey)
-            onPeekShortcutChanged?(peekShortcutKey)
-        }
-    }
     @Published private(set) var mainHotkey: HotkeyBinding
+    @Published private(set) var actionsHotkey: HotkeyBinding
+    @Published private(set) var peekHotkey: HotkeyBinding
     /// Set when macOS refused to register `mainHotkey` because another app owns it.
     @Published var mainHotkeyConflict = false
-    /// Set when macOS refuses the fixed ⌥⌘A Actions shortcut.
+    /// Set when macOS refused to register `actionsHotkey` because another app owns it.
     @Published var actionHotkeyConflict = false
+    /// Set when macOS refused to register `peekHotkey` because another app owns it.
+    @Published var peekHotkeyConflict = false
     /// The rename to Qwixit reset Accessibility trust for an existing user.
     @Published private(set) var needsRenamePermission: Bool
 
-    var onPeekShortcutChanged: ((String) -> Void)?
+    var onPeekHotkeyChanged: ((HotkeyBinding) -> Void)?
+    var onActionHotkeyChanged: ((HotkeyBinding) -> Void)?
     var onMainHotkeyChanged: ((HotkeyBinding) -> Void)?
     var onAppearanceChanged: ((AppAppearance) -> Void)?
 
@@ -69,6 +71,7 @@ final class SettingsViewModel: ObservableObject {
     private let defaults: UserDefaults
     private var permissionTask: Task<Void, Never>?
     private var billingTask: Task<Void, Never>?
+    private var billingRefreshGeneration = 0
     private var isPollingAfterCheckout = false
     private var usageObserver: NSObjectProtocol?
 
@@ -92,6 +95,7 @@ final class SettingsViewModel: ObservableObject {
         priorityProcessing = defaults.bool(forKey: AppPreferenceKey.priorityProcessing)
         let preferences = AppPreferences(defaults: defaults)
         appearance = preferences.appearance
+        aiProvider = preferences.aiProvider
 #if DEBUG
         developerUsageScenario = preferences.developerUsageScenario
 #endif
@@ -101,8 +105,9 @@ final class SettingsViewModel: ObservableObject {
         peekSmartDefault = preferences.peekSmartDefault
         peekRememberMode = preferences.peekRememberMode
         peekPrefetch = preferences.peekPrefetch
-        peekShortcutKey = HotkeyCatalog.peek.keySymbol
         mainHotkey = preferences.mainHotkey
+        actionsHotkey = preferences.actionsHotkey
+        peekHotkey = preferences.peekHotkey
         needsRenamePermission = defaults.bool(forKey: AppPreferenceKey.needsRenamePermission)
             && !accessibility.isTrusted
         usageObserver = NotificationCenter.default.addObserver(
@@ -118,18 +123,55 @@ final class SettingsViewModel: ObservableObject {
         if let usageObserver { NotificationCenter.default.removeObserver(usageObserver) }
     }
 
+    @discardableResult
+    func setHotkey(_ binding: HotkeyBinding, for action: HotkeyAction) -> Bool {
+        guard (0...127).contains(Int(binding.keyCode)), !binding.modifiers.isEmpty else { return false }
+
+        let current: [(HotkeyAction, HotkeyBinding)] = [
+            (.fix, mainHotkey), (.actions, actionsHotkey), (.peek, peekHotkey)
+        ]
+        guard !current.contains(where: { $0.0 != action && $0.1 == binding }) else { return false }
+        // ⌥⌘X remains the shared popup-dismiss shortcut when Fix is remapped.
+        guard action == .fix || binding != HotkeyCatalog.popupDismiss else { return false }
+
+        let preferences = AppPreferences(defaults: defaults)
+        switch action {
+        case .fix:
+            preferences.setMainHotkey(binding)
+            mainHotkey = binding
+            onMainHotkeyChanged?(binding)
+        case .actions:
+            preferences.setActionsHotkey(binding)
+            actionsHotkey = binding
+            onActionHotkeyChanged?(binding)
+        case .peek:
+            preferences.setPeekHotkey(binding)
+            peekHotkey = binding
+            onPeekHotkeyChanged?(binding)
+        }
+        return true
+    }
+
+    func restoreDefaultHotkey(for action: HotkeyAction) {
+        let binding: HotkeyBinding = switch action {
+        case .fix: .defaultMain
+        case .actions: .actions
+        case .peek: .peek
+        }
+        _ = setHotkey(binding, for: action)
+    }
+
     func setMainHotkey(_ binding: HotkeyBinding) {
-        AppPreferences(defaults: defaults).setMainHotkey(binding)
-        mainHotkey = binding
-        onMainHotkeyChanged?(binding)
+        _ = setHotkey(binding, for: .fix)
     }
 
     func restoreDefaultHotkey() {
-        setMainHotkey(.defaultMain)
+        restoreDefaultHotkey(for: .fix)
     }
 
     func stop() {
         permissionTask?.cancel()
+        billingRefreshGeneration += 1
         billingTask?.cancel()
         isPollingAfterCheckout = false
         onboarding.stop()
@@ -151,7 +193,7 @@ final class SettingsViewModel: ObservableObject {
 
     func refreshUsage() {
         readCachedUsage()
-        startBillingStatusRefresh()
+        startBillingStatusRefresh(shouldPoll: isPollingAfterCheckout)
     }
 
 #if DEBUG
@@ -189,16 +231,20 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func startBillingStatusRefresh(shouldPoll: Bool = false) {
-        // A window appearing or the app reactivating must not replace the
-        // checkout poll with a single request before Paddle's webhook arrives.
-        guard !isPollingAfterCheckout else { return }
+        // Foreground, menu, and Settings refreshes should check immediately
+        // without replacing an active checkout poll with a one-shot request.
+        let keepPolling = shouldPoll || isPollingAfterCheckout
+        billingRefreshGeneration += 1
+        let generation = billingRefreshGeneration
         billingTask?.cancel()
-        isPollingAfterCheckout = shouldPoll
+        isPollingAfterCheckout = keepPolling
 
         billingTask = Task { [weak self] in
             guard let self else { return }
-            defer { if shouldPoll { isPollingAfterCheckout = false } }
-            let attempts = shouldPoll ? 100 : 1
+            defer {
+                if generation == billingRefreshGeneration { isPollingAfterCheckout = false }
+            }
+            let attempts = keepPolling ? 100 : 1
             for attempt in 0..<attempts {
                 guard !Task.isCancelled else { return }
                 do {
@@ -210,10 +256,10 @@ final class SettingsViewModel: ObservableObject {
                         return
                     }
                 } catch {
-                    if !shouldPoll { return }
+                    if !keepPolling { return }
                 }
 
-                guard shouldPoll, attempt < attempts - 1 else { return }
+                guard keepPolling, attempt < attempts - 1 else { return }
                 // Keep checking while checkout is open, but ease off if the
                 // customer needs more than a minute to complete payment.
                 let interval = attempt < 45 ? billingPollInterval : .seconds(10)

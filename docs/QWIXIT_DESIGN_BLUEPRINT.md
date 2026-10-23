@@ -36,10 +36,10 @@ The visual character combines:
 
 ### Nonnegotiable product rules
 
-- The main hotkey is **Option + Command + X**.
+- The default hotkeys are Fix **Option + Command + X**, Actions **Option + Command + A**, and Peek **Option + Command + Z**. Settings lets the user record a unique key combination for each action. The shared close shortcut for interactive panels remains **Option + Command + X**. The menu-bar popover close badge follows the configured Fix shortcut.
 - One press fixes and replaces selected text by default. An optional Preview & Approve mode can show the proposed result first and wait for explicit approval.
-- **Option + Command + A** opens the action palette.
-- **Option + Command + Z** opens Peek.
+- The default **Option + Command + A** opens the action palette.
+- The default **Option + Command + Z** opens Peek.
 - The action palette and the focused translator are intentionally separate surfaces. Preserve their distinct behavior.
 - Do not display an interruptive **29/30** notification. Limit interruption happens only when usage reaches **30/30**.
 - Onboarding requests Accessibility access first, then teaches the real hotkeys through direct interaction.
@@ -367,7 +367,7 @@ Quick panels are borderless, nonactivating AppKit panels with transparent window
 - Quick panels do not become main application windows.
 - Click outside closes an unpinned palette or Peek panel.
 - Escape closes the current layer; where a nested step exists it goes back first.
-- Interactive transient panels use the shared `⌥⌘X` dismissal path. Surfaces that show a close badge keep the cut-corner badge; the lighter Actions and Peek picker/result states omit it and close with Escape, outside click, or the global popup shortcut. The shortcut closes the frontmost visible popup before it can start Fix; with no popup open it remains the Fix shortcut.
+- Interactive transient panels use the shared `⌥⌘X` dismissal path. Surfaces that show a close badge keep the cut-corner badge; the lighter Actions and Peek picker/result states omit it and close with Escape, outside click, or the global popup shortcut. The shortcut closes the frontmost visible popup before it can start Fix; it runs Fix with no popup only while Fix keeps its default `⌥⌘X` binding. The menu-bar popover also shows the configured Fix shortcut on its close badge and closes when that shortcut is pressed.
 - Processing, retry, success, and short automatic notices remain click-through and do not show a close badge. Settings and Onboarding retain native macOS window closing; onboarding keeps its Fix practice shortcut.
 - Restore focus to the originating application before changing selected text.
 - Never repeatedly recreate/show a visible panel in response to its own state updates. Resize or replace content in place to prevent blinking.
@@ -639,7 +639,7 @@ Guide copy must clearly say `PRESS ENTER TO CONTINUE` whenever Return advances t
 
 - Headline: `Fix it with one shortcut.`
 - Selected sample: `helo i thnik this sentnce sound wierd`.
-- User must press the real Option + Command + X shortcut.
+- User must press the currently configured Fix shortcut (Option + Command + X by default).
 - Show the actual processing HUD, then type the corrected result:
   `Hello, I think this sentence sounds weird.`
 - After completion, the visible Continue button and Return both advance.
@@ -647,7 +647,7 @@ Guide copy must clearly say `PRESS ENTER TO CONTINUE` whenever Return advances t
 ### Step 3: Actions
 
 - Selected sample: `yo can u send me the file asap pls`.
-- User presses Option + Command + A once.
+- User presses the currently configured Actions shortcut (Option + Command + A by default) once.
 - Open the onboarding palette immediately.
 - The palette is **360 pt wide** and uses the same single-column rows as the live Actions surface.
 - Choices: two useful translation targets, Slack style, and Make formal.
@@ -727,6 +727,7 @@ Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have 
 - Pressed primary state: opacity 82%, scale 98.5%.
 - Subtle button: 30 pt high, radius 8, 12 pt horizontal padding, surface fill and line border.
 - Shortcut badge: 25 pt high, radius 7, 7 pt horizontal padding, 10.5 Bold Mono.
+- In Hot keys, each shortcut badge is a button. Click it, press a modifier-plus-key combination, and press Escape to cancel; show a Default button only for a changed binding. Explain duplicate or popup-reserved combinations in the row detail.
 - Keycap: minimum 26 × 25, radius 6, bottom key edge line.
 - Access badge: capsule, 28 pt high or 24 pt compact, success/warning tone.
 - Toggle: use the custom angular `ON` / `OFF` control; its visible label is optional when the parent row already provides the setting name, but its accessibility label remains required.
@@ -742,7 +743,7 @@ Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have 
 - Wrapper: `QwixitControlShape` with a 16 pt chamfer on the top-left and bottom-right corners, plus a 1 pt `line` stroke; do not use a rounded outer container.
 - AppKit host: borderless, nonactivating panel with a native shadow; do not expose the system popover bubble or chevron.
 - Utility bar: 26 pt, horizontal padding 12, version left and cyan `Cloud` right.
-- Status row: 42 pt (30% shorter than the previous 60 pt row), horizontal padding 14. It contains the plan face in a 56 × 30 pt slot, a two-line plan block, a flexible spacer, the shared `⌥⌘X` close badge, and an icon-only access badge. Use 12 pt bold monospace for the plan title and 10.5 pt monospace for its detail. The entire Advanced row has a soft success-green gradient and green divider, with `[ $_$ ]` and the plan title in a readable green. The entire Free row uses a neutral surface and `[ ^_^ ]` face. The face has no separate badge background. The close badge is a button, not a static shortcut hint.
+- Status row: 42 pt (30% shorter than the previous 60 pt row), horizontal padding 14. It contains the plan face in a 56 × 30 pt slot, a two-line plan block, a flexible spacer, a close badge showing the current Fix shortcut, and an icon-only access badge. Pressing the configured Fix shortcut closes this menu-bar popover while it is open. Use 12 pt bold monospace for the plan title and 10.5 pt monospace for its detail. The entire Advanced row has a soft success-green gradient and green divider, with `[ $_$ ]` and the plan title in a readable green. The entire Free row uses a neutral surface and `[ ^_^ ]` face. The face has no separate badge background. The close badge is a button, not a static shortcut hint.
 - At the free limit, `Get Advanced` replaces the spacer and the close badge may hide to fit. The popup dismissal shortcut still works.
 - Show a compact `Preview & Approve` switch below the status row, bound to the same preference as Settings. Include a one-line status hint that nothing changes until approval.
 - Bottom actions: two rows with 32 pt buttons and 8 pt gaps. Settings and Quit share the upper row at 50% width each; Onboarding spans the full width below. Use 12 pt horizontal and 9 pt vertical outer padding. Settings and Onboarding use the filled shared `PrimaryButton` style. Quit uses the soft shared `QuitButton` style with a light danger tint and warm-to-pink border. Compact primary and Quit buttons use 12 pt horizontal padding and a 28 pt minimum height. The Settings footer uses the same soft Quit style.
@@ -796,8 +797,8 @@ Usage may be shown here as persistent plan information. It must not generate a s
 ### Interaction
 
 - [ ] One press fixes selected text and shows the processing HUD.
-- [ ] Option-Command-A opens the one-column Actions list.
-- [ ] Option + Command + Z opens the four-language Peek chooser.
+- [ ] The configured Actions shortcut (Option + Command + A by default) opens the one-column Actions list.
+- [ ] The configured Peek shortcut (Option + Command + Z by default) opens the four-language Peek chooser.
 - [ ] Arrow keys, Tab, Return, Escape, number keys, and result-language cycling work as specified.
 - [ ] Every visible action also responds to a mouse click.
 - [ ] Context panels do not cover the selected text when an adjacent position exists.
@@ -832,7 +833,7 @@ Usage may be shown here as persistent plan information. It must not generate a s
 
 Paste the following together with this document:
 
-> Design Qwixit for macOS from the attached normative blueprint. Reproduce its tokens, fixed window sizes, keyboard behavior, state hierarchy, face system, and motion timings exactly. Use the supplied Qwixit assets without redrawing them. Treat the Option-Command-X feedback HUD, Option-Command-A action palette, dedicated Option-Command-Z translator, onboarding, Settings, and menu bar popover as one coherent system. Keep quick actions clear and keyboard first. Do not add generic AI chat patterns, large mascot art, glassmorphism, new gradients, new actions, or internal design annotations. Provide light and dark variants, all loading/success/error/limit states, and static Reduced Motion variants. Show interaction specifications for mouse, arrows, Tab, Return, Escape, and number keys. Validate every screen against the acceptance checklist before presenting it.
+> Design Qwixit for macOS from the attached normative blueprint. Reproduce its tokens, fixed window sizes, keyboard behavior, state hierarchy, face system, and motion timings exactly. Use the supplied Qwixit assets without redrawing them. Treat the default Option-Command-X Fix flow, default Option-Command-A action palette, default Option-Command-Z Peek surface, onboarding, Settings, and menu bar popover as one coherent system. Settings can remap all three feature shortcuts; Option-Command-X stays reserved for popup dismissal, and the menu-bar popover close badge follows the configured Fix shortcut. Keep quick actions clear and keyboard first. Do not add generic AI chat patterns, large mascot art, glassmorphism, new gradients, new actions, or internal design annotations. Provide light and dark variants, all loading/success/error/limit states, and static Reduced Motion variants. Show interaction specifications for mouse, arrows, Tab, Return, Escape, and number keys. Validate every screen against the acceptance checklist before presenting it.
 
 ---
 

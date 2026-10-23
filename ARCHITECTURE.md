@@ -55,8 +55,8 @@ Presentation → Domain ← Data / Infrastructure
 - single-instance startup;
 - menu-bar status item and popover;
 - onboarding and settings windows;
-- global Fix, Actions, and Peek hotkeys;
-- shared popup dismissal routing: a visible interactive popup consumes `⌥⌘X` before Fix, while each AppKit controller retains ownership of its close behavior;
+- configurable global Fix, Actions, and Peek hotkeys, stored in `UserDefaults` with the current combinations as defaults;
+- shared popup dismissal routing: `⌥⌘X` closes interactive transient panels; the menu-bar popover also shows and closes with the configured Fix shortcut, while Fix's default `⌥⌘X` dismisses the frontmost popup before applying Fix;
 - launch/activation refreshes;
 - teardown of tasks and hotkey registrations.
 
@@ -64,7 +64,9 @@ AppKit objects owning windows or panels end in `WindowController` or `PanelContr
 
 ## Core runtime flows
 
-### Fix (`⌥⌘X`)
+The defaults are Fix `⌥⌘X`, Actions `⌥⌘A`, and Peek `⌥⌘Z`. Settings records a modifier-plus-key combination for each action, persists it, rejects duplicates, and asks `AppDelegate` to re-register it immediately. Actions and Peek cannot claim `⌥⌘X`, which remains reserved for dismissing interactive panels when Fix is remapped. The menu-bar popover instead reflects the configured Fix shortcut in its close badge and closes when that shortcut is pressed.
+
+### Fix (default `⌥⌘X`)
 
 1. `AppDelegate` receives the Carbon hotkey without activating Qwixit.
 2. `QuickImproveViewModel` verifies Accessibility access and captures the selected text and its screen bounds.
@@ -75,7 +77,7 @@ AppKit objects owning windows or panels end in `WindowController` or `PanelContr
 
 The original text must remain unchanged whenever capture, authorization, or model output fails. If the paste cannot be sent, the recovery panel offers the result for manual copying.
 
-### Actions (`⌥⌘A`)
+### Actions (default `⌥⌘A`)
 
 1. The independent Actions hotkey opens `PalettePanelController` beside the selection.
 2. `PaletteViewModel` exposes the presets (translate, Slack style, make formal) and keyboard selection state. Typed search text only filters; it never reaches the model.
@@ -84,7 +86,7 @@ The original text must remain unchanged whenever capture, authorization, or mode
 
 Actions is a replacing flow. It must stay independent from the Fix hotkey and must not depend on double-tap timing.
 
-### Peek (`⌥⌘Z`)
+### Peek (default `⌥⌘Z`)
 
 1. `PeekHotkey` triggers selection reading.
 2. `PeekPanelController` opens a non-activating reading surface.
@@ -137,6 +139,7 @@ These invariants are core behavior, not cosmetic implementation details.
 - The client and Worker both force OpenAI `store: false`.
 - Selected text is wrapped as data and explicitly treated as untrusted instructions.
 - Model API credentials and Paddle webhook secrets exist only as Worker secrets.
+- The Worker stores first-party operational diagnostics as daily aggregates in a global Durable Object for the owner, currently the only Tokiri user. Dimensions are provider, task, outcome, and a fixed error reason; counters include request errors, model attempts, automatic Fix retries, end-to-end latency, provider latency, Worker overhead, fixed-bucket p95 histograms, and requests still active after 10 seconds grouped by current phase. Peek latency is time to first byte because it streams. No installation IDs, IP addresses, text, prompts, model output, or text-derived hashes are stored; daily aggregates expire after 365 days.
 - Subscription activation is accepted only from verified Paddle webhooks.
 - Reset endpoints require a dedicated bearer secret and are development tooling, not a customer API.
 
@@ -145,6 +148,7 @@ These invariants are core behavior, not cosmetic implementation details.
 - `UserDefaults` stores preferences, onboarding state, developer scenarios, and cached quota display state.
 - Keychain stores the random installation identity and local development-reset secrets.
 - The Durable Object stores authoritative usage, subscription, and webhook-deduplication state per installation.
+- A separate global Durable Object identity stores `/v2/qwix` daily aggregates for up to 365 days. It receives only fixed dimensions and numeric counts; it never receives user text or an installation identifier.
 - No persistence layer may store selected text or generated output.
 
 ## Naming and ownership

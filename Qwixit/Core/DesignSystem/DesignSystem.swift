@@ -657,16 +657,19 @@ struct ShortcutBadgeButton: View {
     let key: String
     let action: () -> Void
     let label: String
+    let hint: String
 
     init(
         modifiers: [String],
         key: String,
         label: String,
+        hint: String = "Dismiss this panel",
         action: @escaping () -> Void
     ) {
         self.modifiers = modifiers
         self.key = key
         self.label = label
+        self.hint = hint
         self.action = action
     }
 
@@ -677,7 +680,7 @@ struct ShortcutBadgeButton: View {
         .buttonStyle(ShortcutBadgeButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
-        .accessibilityHint("Dismiss this panel")
+        .accessibilityHint(hint)
     }
 }
 

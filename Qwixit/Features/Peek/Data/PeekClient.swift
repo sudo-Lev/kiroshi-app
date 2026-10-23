@@ -27,6 +27,25 @@ struct PeekRequest: Sendable {
     let length: PeekSummaryLength
     /// Shared by every retry of the same panel request so the Worker charges it once.
     let operationID: String
+    let provider: QwixAIProvider
+
+    init(
+        text: String,
+        sourceLanguage: String?,
+        targetLanguage: String,
+        mode: PeekMode,
+        length: PeekSummaryLength,
+        operationID: String,
+        provider: QwixAIProvider = .openAI
+    ) {
+        self.text = text
+        self.sourceLanguage = sourceLanguage
+        self.targetLanguage = targetLanguage
+        self.mode = mode
+        self.length = length
+        self.operationID = operationID
+        self.provider = provider
+    }
 }
 
 protocol PeekClientProtocol: AnyObject {
@@ -47,6 +66,11 @@ actor PeekClient: PeekClientProtocol {
     nonisolated func stream(_ request: PeekRequest) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
+                let timingStartedAt = ProcessInfo.processInfo.systemUptime
+                defer {
+                    let elapsed = max(0, Int(((ProcessInfo.processInfo.systemUptime - timingStartedAt) * 1_000).rounded()))
+                    QwixitAPI.recordClientTiming(provider: request.provider.rawValue, task: "peek", durationMs: elapsed)
+                }
                 do {
                     var urlRequest = URLRequest(url: OpenAIClient.endpoint)
                     urlRequest.httpMethod = "POST"
@@ -96,6 +120,7 @@ actor PeekClient: PeekClientProtocol {
         let task = QwixTask(
             task: "peek",
             text: request.text,
+            provider: request.provider.rawValue,
             language: Self.baseLanguageCode(request.targetLanguage),
             mode: request.mode.rawValue,
             length: request.length.rawValue,

@@ -10,6 +10,15 @@ final class PeekViewModelTests: XCTestCase {
         XCTAssertEqual(hotKey.modifiers, [.option, .command])
     }
 
+    func testPeekRegistersTheConfiguredBinding() {
+        let hotKey = HotKeySpy()
+        let binding = HotkeyBinding(keyCode: 0x0F, modifiers: [.control, .shift])
+        PeekHotkey(hotKey: hotKey).start(binding: binding) {}
+
+        XCTAssertEqual(hotKey.keyCode, binding.keyCode)
+        XCTAssertEqual(hotKey.modifiers, binding.modifiers)
+    }
+
     func testSmartDefaultChoosesTranslationForDifferentLanguage() {
         XCTAssertEqual(
             PeekViewModel.smartDefault(sourceLanguage: "fr", targetLanguage: "en", wordCount: 12),
@@ -229,12 +238,29 @@ final class PeekViewModelTests: XCTestCase {
 
         XCTAssertEqual(body, [
             "task": "peek",
+            "provider": "openai",
             "text": "Jedno.\n\nDwa.",
             "mode": "translate",
             "length": "points",
             "language": "uk",
             "sourceLanguage": "pl"
         ])
+    }
+
+    func testPeekRequestIncludesTheSelectedProvider() throws {
+        let request = PeekRequest(
+            text: "Selected text",
+            sourceLanguage: nil,
+            targetLanguage: "en",
+            mode: .summary,
+            length: .points,
+            operationID: QwixitOperation.makeID(),
+            provider: .anthropic
+        )
+        let data = try PeekClient().makeBody(request)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: String])
+
+        XCTAssertEqual(body["provider"], "anthropic")
     }
 
     @MainActor
@@ -264,6 +290,7 @@ final class PeekViewModelTests: XCTestCase {
         XCTAssertNotEqual(base, PeekCacheKey(text: "same", mode: .summary, language: "uk", length: .points))
         XCTAssertNotEqual(base, PeekCacheKey(text: "same", mode: .summary, language: "en", length: .full))
         XCTAssertNotEqual(base, PeekCacheKey(text: "different", mode: .summary, language: "en", length: .points))
+        XCTAssertNotEqual(base, PeekCacheKey(text: "same", mode: .summary, language: "en", length: .points, provider: .anthropic))
     }
 }
 

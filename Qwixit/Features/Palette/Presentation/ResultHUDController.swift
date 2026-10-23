@@ -17,7 +17,7 @@ final class ResultHUDController {
 
     func showDone(action: PaletteAction, detail: String, capture: PaletteCapture) {
         present(.pasteSent, capture: capture)
-        scheduleDismiss(after: 2.8)
+        scheduleDismiss(after: 1.25)
     }
 
     func showError(_ message: String, capture: PaletteCapture?) {
