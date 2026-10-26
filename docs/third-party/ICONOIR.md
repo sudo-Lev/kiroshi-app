@@ -1,6 +1,6 @@
 # Iconoir asset attribution
 
-Tokiri bundles modified copies of these Iconoir regular SVGs from commit `1f48078bbe0bdf833d2ad2b0cf0be0b16fe5209d` of [iconoir-icons/iconoir](https://github.com/iconoir-icons/iconoir): `sun-light`, `half-moon`, `magic-wand`, `eye`, `select-window`, `text-magnifying-glass`, `shield-check`, `shield-alert`, and `credit-card`. They were simplified for Xcode's template rendering and their stroke width was increased from 1.5 to 2 for legibility at small macOS settings sizes. The original SVG paths and concepts remain Iconoir's work.
+hotkeygo bundles modified copies of these Iconoir regular SVGs from commit `1f48078bbe0bdf833d2ad2b0cf0be0b16fe5209d` of [iconoir-icons/iconoir](https://github.com/iconoir-icons/iconoir): `sun-light`, `half-moon`, `magic-wand`, `eye`, `select-window`, `text-magnifying-glass`, `shield-check`, `shield-alert`, and `credit-card`. They were simplified for Xcode's template rendering and their stroke width was increased from 1.5 to 2 for legibility at small macOS settings sizes. The original SVG paths and concepts remain Iconoir's work.
 
 MIT License
 

@@ -5,7 +5,7 @@
  * not in CI:
  *
  *   npm run eval:prompts                       # production Worker
- *   QWIXIT_WORKER_URL=https://… npm run eval:prompts
+ *   HOTKEYGO_WORKER_URL=https://… npm run eval:prompts
  *   npm run eval:prompts -- --only peek        # cases whose name contains "peek"
  *
  * Each case uses a fresh random installation ID, so cases never share quota
@@ -14,7 +14,7 @@
 
 import { randomBytes, randomUUID } from "node:crypto";
 
-const WORKER_URL = process.env.QWIXIT_WORKER_URL ?? "https://qwixit-api.levmisiliuk.workers.dev";
+const WORKER_URL = process.env.HOTKEYGO_WORKER_URL ?? "https://qwixit-api.levmisiliuk.workers.dev";
 const onlyIndex = process.argv.indexOf("--only");
 const only = onlyIndex > -1 ? process.argv[onlyIndex + 1] : null;
 
@@ -189,12 +189,12 @@ const cases = [
 
 async function run(testCase) {
   const installationID = randomBytes(32).toString("base64url");
-  const response = await fetch(`${WORKER_URL}/v2/qwix`, {
+  const response = await fetch(`${WORKER_URL}/v2/hotkeygo`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Qwixit-Installation-ID": installationID,
-      "X-Qwixit-Operation-ID": randomUUID(),
+      "X-HotkeyGo-Installation-ID": installationID,
+      "X-HotkeyGo-Operation-ID": randomUUID(),
     },
     body: JSON.stringify(testCase.body),
   });

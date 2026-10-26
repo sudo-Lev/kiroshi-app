@@ -1,4 +1,4 @@
-# Qwixit durable decisions
+# hotkeygo durable decisions
 
 **Last reviewed:** 2026-10-16
 
@@ -32,7 +32,7 @@ Fix changes typos, grammar, punctuation, and clearly awkward wording using the s
 
 **Status:** accepted
 
-Qwixit must not persist or log selected text or generated output in app-controlled storage. Fix's system clipboard backup is specified in D013. Model requests use `store: false`. A random installation ID exists only for quota and subscription state.
+hotkeygo must not persist or log selected text or generated output in app-controlled storage. Fix's system clipboard backup is specified in D013. Model requests use `store: false`. A random installation ID exists only for quota and subscription state.
 
 **Why:** anonymity and low friction are part of the product value, not merely implementation details.
 
@@ -40,7 +40,7 @@ Qwixit must not persist or log selected text or generated output in app-controll
 
 **Status:** accepted
 
-Qwixit remains a native SwiftUI/AppKit macOS menu-bar application while demand is being validated. Windows, iOS, and browser expansion are deferred.
+hotkeygo remains a native SwiftUI/AppKit macOS menu-bar application while demand is being validated. Windows, iOS, and browser expansion are deferred.
 
 **Why:** another platform does not repair weak retention or paid demand on the first platform.
 
@@ -48,7 +48,7 @@ Qwixit remains a native SwiftUI/AppKit macOS menu-bar application while demand i
 
 **Status:** provisional
 
-The app currently offers 30 free AI actions per installation per calendar month and $10/month Qwixit Advanced. Advanced gives more room to work, not unlimited use: a proposed fair-use ceiling of 300 actions per UTC day and 3 000 per month keeps $10 above model cost. It keeps the same careful Fix quality bar.
+The app currently offers 30 free AI actions per installation per calendar month and $10/month hotkeygo Advanced. Advanced gives more room to work, not unlimited use: a proposed fair-use ceiling of 300 actions per UTC day and 3 000 per month keeps $10 above model cost. It keeps the same careful Fix quality bar.
 
 **Why:** this supports repeated usage, exposes limit behavior, and tests willingness to pay for speed. The numbers may change with evidence.
 
@@ -64,7 +64,7 @@ The current interface is close to the intended product. Improvements should poli
 
 **Status:** accepted
 
-The owner approved first-party Worker diagnostics on 2026-10-23. Tokiri currently has one user. The Worker stores daily aggregate counts by provider, task, outcome, fixed error reason, and requests still pending after 10 seconds grouped by current phase, plus model-attempt counts, automatic Fix retries, Worker duration, provider duration, and fixed-bucket latency distributions for `/v2/qwix` requests. The app reports only its elapsed request time plus fixed provider/task labels; the Worker stores those as daily aggregates. For Fix and Actions, app time minus Worker time estimates the combined network trip and app overhead, not a one-way latency. Peek's provider duration and Worker duration cover its streamed response; its end-to-end app time is reported after the stream ends. App-side measurements begin with builds containing the reporter. No installation IDs, IP addresses, selected text, prompts, model output, or text-derived hashes are stored; aggregates expire after 365 days. No third-party SDK or new macOS permission is introduced. Per-installation views and other product-event families require a separate decision.
+The owner approved first-party Worker diagnostics on 2026-10-23. hotkeygo currently has one user. The Worker stores daily aggregate counts by provider, task, outcome, fixed error reason, and requests still pending after 10 seconds grouped by current phase, plus model-attempt counts, automatic Fix retries, Worker duration, provider duration, and fixed-bucket latency distributions for model requests. The app reports only its elapsed request time plus fixed provider/task labels; the Worker stores those as daily aggregates. For Fix and Actions, app time minus Worker time estimates the combined network trip and app overhead, not a one-way latency. Peek's provider duration and Worker duration cover its streamed response; its end-to-end app time is reported after the stream ends. App-side measurements begin with builds containing the reporter. No installation IDs, IP addresses, selected text, prompts, model output, or text-derived hashes are stored; aggregates expire after 365 days. No third-party SDK or new macOS permission is introduced. Per-installation views and other product-event families require a separate decision.
 
 **Why:** observability is useful, but not at the expense of the anonymity and low-friction promise.
 
@@ -74,7 +74,7 @@ The owner approved first-party Worker diagnostics on 2026-10-23. Tokiri currentl
 
 Use feature-first MVVM in a lightweight Clean Architecture shell. AppKit controllers own windows, view models own presentation state and task lifetime, and protocols isolate system or network effects where testing matters.
 
-**Why:** Qwixit needs explicit ownership for macOS integration without infrastructure disproportionate to a small native utility.
+**Why:** hotkeygo needs explicit ownership for macOS integration without infrastructure disproportionate to a small native utility.
 
 ## D010 — Preview fails closed; Peek never silently truncates
 
@@ -88,7 +88,7 @@ When Preview & Approve is enabled, an unavailable selection snapshot leaves the 
 
 **Status:** accepted
 
-Interactive transient panels use the shared TokiriUI close badge and close with `⌥⌘X`. That binding remains reserved when the user changes the Fix shortcut, so Actions and Peek cannot be assigned it. The menu-bar popover is the exception: its close badge shows the configured Fix shortcut, and pressing Fix closes that popover while it is open. The three feature shortcuts must stay unique. Closing a preview cancels it without replacing text; click-through status notices and standard macOS windows keep their current behavior.
+Interactive transient panels use the shared HotkeyGoUI close badge and close with `⌥⌘X`. That binding remains reserved when the user changes the Fix shortcut, so Actions and Peek cannot be assigned it. The menu-bar popover is the exception: its close badge shows the configured Fix shortcut, and pressing Fix closes that popover while it is open. The three feature shortcuts must stay unique. Closing a preview cancels it without replacing text; click-through status notices and standard macOS windows keep their current behavior.
 
 **Why:** transient panels keep a predictable shared dismissal gesture, while the menu-bar popover's shortcut badge stays in sync with the user's Fix setting.
 
@@ -98,7 +98,7 @@ Interactive transient panels use the shared TokiriUI close badge and close with 
 
 Fix and Actions capture selected text and source focus, restore that focus, and replace through the clipboard plus ⌘V. Accessibility may capture selection and restore focus, but it does not write replacement text or gate success on editor readback. D013 updates Fix's completion label and clipboard behavior.
 
-**Why:** editor Accessibility behavior varies and can be delayed or report success without updating the real input. One keyboard-based path avoids app-specific replacement branches and makes status claims match what Tokiri can observe reliably.
+**Why:** editor Accessibility behavior varies and can be delayed or report success without updating the real input. One keyboard-based path avoids app-specific replacement branches and makes status claims match what hotkeygo can observe reliably.
 
 ## D013 — Keep a manual paste backup after Fix
 
@@ -106,12 +106,12 @@ Fix and Actions capture selected text and source focus, restore that focus, and 
 
 After Fix posts ⌘V, leave the generated replacement on the system clipboard. Show the compact green success chip for the completed Fix request. Success does not assert that the destination editor consumed the paste. Selection-copy fallbacks and Actions continue restoring the previous clipboard, and a newer clipboard change is never overwritten.
 
-**Why:** some editors miss a synthetic paste event. The user can press ⌘V immediately without reopening Tokiri or losing the generated correction.
+**Why:** some editors miss a synthetic paste event. The user can press ⌘V immediately without reopening hotkeygo or losing the generated correction.
 
 ## D014 — The Worker owns prompts; one action costs one attempt
 
 **Status:** accepted
 
-The app sends `/v2/qwix` a task (`fix`, `action`, `peek`), the selected text, the user's enumerated provider choice, and task parameters. It never sends instructions or provider credentials. The Worker owns provider routing and prompts in `cloudflare-worker/prompts.js`, so prompt or provider changes ship with a Worker deploy. Every retry of one user action carries the same operation ID, and the ledger charges it once. Confirmed service failures, rejected results, and a Fix with nothing to change return the action, each capped per day. Actions has no quick-questions step and no free-form panel follow-up.
+The app sends a task (`fix`, `action`, `peek`), the selected text, the user's enumerated provider choice, and task parameters. It never sends instructions or provider credentials. The source Worker serves this contract at `/v2/hotkeygo` and keeps `/v2/qwix` as a deployment-compatibility alias; the app stays on `/v2/qwix` until the renamed route is deployed. The Worker owns provider routing and prompts in `cloudflare-worker/prompts.js`, so prompt or provider changes ship with a Worker deploy. Every retry of one user action carries the same operation ID, and the ledger charges it once. Confirmed service failures, rejected results, and a Fix with nothing to change return the action, each capped per day. Actions has no quick-questions step and no free-form panel follow-up.
 
 **Why:** any client-built prompt can be replayed with arbitrary instructions, turning the free allowance into a free general-purpose chatbot. Charging per HTTP request made flaky networks cost users several actions for one result.

@@ -1,8 +1,8 @@
-# Qwixit repository guidance
+# hotkeygo repository guidance
 
 ## Product compass
 
-Qwixit is a native macOS menu-bar utility that removes the trip to an AI chat and back. The primary job is: select text, press one shortcut, and receive a clean result in place without losing focus or workflow context.
+hotkeygo is a native macOS menu-bar utility that removes the trip to an AI chat and back. The primary job is: select text, press one shortcut, and receive a clean result in place without losing focus or workflow context.
 
 - **Fix (`⌥⌘X`) is the core product.** It corrects typos, grammar, punctuation, and clearly awkward wording with the smallest safe edits. Preserve meaning, tone, language, and formatting.
 - **Actions (`⌥⌘A`) is secondary.** It performs an explicit transformation, such as translating selected text, and replaces the selection.
@@ -25,17 +25,17 @@ Qwixit is a native macOS menu-bar utility that removes the trip to an AI chat an
 - Features must not depend on another feature's presentation layer. Move truly shared primitives to `Core/` or app-wide adapters to `Infrastructure/`.
 - Transient panels must not steal focus from the user's active app. Preserve the selection, restore the clipboard after selection-copy fallbacks and Actions, and keep mouse and keyboard paths equivalent. Fix leaves its result on the clipboard for manual ⌘V unless another process changed it.
 - Prefer small changes within existing patterns. The current UI is close to the intended product; redesign it only when requested or when fixing a demonstrated usability/accessibility defect.
-- **Use TokiriUI first for every new or changed UI surface.** Check `Qwixit/Core/DesignSystem/` and `docs/TOKIRI_UI.md` before introducing a control, visual token, or icon. Reuse an existing component when its meaning and behavior fit; keep one-off feature composition in its feature.
-- If TokiriUI lacks a suitable component, use the native SwiftUI/AppKit control for now, record the gap in `docs/TOKIRI_UI.md`, and explicitly tell the owner what is missing in the handoff. Do not silently invent a near-duplicate or force a custom control where macOS behavior matters.
-- Choose icons by semantic `TokiriUI.IconName`. Use the curated local vector assets for primary product actions; system symbols are allowed only as catalogued utility fallbacks. When an icon is missing, record and report the gap rather than scattering `Image(systemName:)` strings through feature views. Keep brand marks in supplied assets, not redrawn as icons.
+- **Use HotkeyGoUI first for every new or changed UI surface.** Check `HotkeyGo/Core/DesignSystem/` and `docs/HOTKEYGO_UI.md` before introducing a control, visual token, or icon. Reuse an existing component when its meaning and behavior fit; keep one-off feature composition in its feature.
+- If HotkeyGoUI lacks a suitable component, use the native SwiftUI/AppKit control for now, record the gap in `docs/HOTKEYGO_UI.md`, and explicitly tell the owner what is missing in the handoff. Do not silently invent a near-duplicate or force a custom control where macOS behavior matters.
+- Choose icons by semantic `HotkeyGoUI.IconName`. Use the curated local vector assets for primary product actions; system symbols are allowed only as catalogued utility fallbacks. When an icon is missing, record and report the gap rather than scattering `Image(systemName:)` strings through feature views. Keep the product wordmark as lowercase `hotkeygo` text; do not reintroduce the removed logo mark without an owner request.
 - Billing details—30 free actions and $10/month Advanced—are a tested hypothesis, not permanent product doctrine. Keep them internally consistent, but do not broaden or entrench them without a product decision.
 
 ## Read the relevant source, not every source
 
 - Product behavior, priorities, terminology, and non-goals: `docs/PRODUCT.md`
 - Code ownership and runtime boundaries: `ARCHITECTURE.md`
-- Visual, motion, and interaction specifications: `docs/QWIXIT_DESIGN_BLUEPRINT.md`
-- TokiriUI component catalog, icon policy, and open gaps: `docs/TOKIRI_UI.md`
+- Visual, motion, and interaction specifications: `docs/HOTKEYGO_DESIGN_BLUEPRINT.md`
+- HotkeyGoUI component catalog, icon policy, and open gaps: `docs/HOTKEYGO_UI.md`
 - Local setup, billing tests, deployment, and release readiness: `docs/OPERATIONS.md`
 - Durable product and engineering rationale: `docs/DECISIONS.md`
 
@@ -43,15 +43,15 @@ When documentation and behavior conflict, inspect the current implementation and
 
 ## Validation
 
-Use Xcode 16 or newer with the `Qwixit` scheme and a macOS destination.
+Use Xcode 16 or newer with the `HotkeyGo` scheme and a macOS destination.
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
-  -project Qwixit.xcodeproj -scheme Qwixit -configuration Debug \
+  -project HotkeyGo.xcodeproj -scheme HotkeyGo -configuration Debug \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
-  -project Qwixit.xcodeproj -scheme Qwixit \
+  -project HotkeyGo.xcodeproj -scheme HotkeyGo \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO test
 
 cd cloudflare-worker

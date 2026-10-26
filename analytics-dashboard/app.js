@@ -1,5 +1,5 @@
 const API_URL = "https://qwixit-api.levmisiliuk.workers.dev/internal/analytics";
-const SESSION_KEY = "tokiri.analytics.dashboard-key";
+const SESSION_KEY = "hotkeygo.analytics.dashboard-key";
 const DURATION_BUCKETS_MS = [100, 250, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 30_000, 60_000, 120_000, 300_000];
 const EMPTY_HISTOGRAM = () => Array(DURATION_BUCKETS_MS.length + 1).fill(0);
 
@@ -67,7 +67,7 @@ function taskName(task) {
 }
 
 function phaseName(phase) {
-  return phase === "model" ? "The model" : "Tokiri service";
+  return phase === "model" ? "The model" : "hotkeygo service";
 }
 
 function stageName(stage) {
@@ -95,19 +95,19 @@ function errorDiagnosis(row) {
       invalid_fix_json: ["Unexpected Fix format", "The Fix answer did not match the required JSON format."],
       invalid_fix_verdict: ["Unexpected Fix result", "The Fix answer used an unsupported result type."],
       invalid_action_json: ["Unexpected Actions format", "The model answer was not valid JSON with a text field."],
-      malformed_response: ["Unexpected provider response", "The provider response did not match the structure Tokiri expects."],
+      malformed_response: ["Unexpected provider response", "The provider response did not match the structure hotkeygo expects."],
       empty_output: ["Empty model answer", "The provider returned an empty answer."],
       selected_text_marker: ["Internal marker in answer", "The answer included an internal selection marker."],
       implausible_length: ["Unexpected answer length", "The answer was much longer or shorter than the selected text."],
     };
-    const [title, detail] = details[row.reason] || ["Answer failed checks", "The answer did not pass Tokiri’s output checks."];
+    const [title, detail] = details[row.reason] || ["Answer failed checks", "The answer did not pass hotkeygo’s output checks."];
     return { title, detail, source: "Model output checks" };
   }
   if (row.outcome === "upstream_error") {
     return { title: "Provider request failed", source: "Model provider", detail: "The provider returned an error or the request could not reach it." };
   }
   if (row.outcome === "rate_limited") {
-    return { title: "Request rate limited", source: "Tokiri request limit", detail: "Tokiri temporarily limited this request. Wait briefly, then try again." };
+    return { title: "Request rate limited", source: "hotkeygo request limit", detail: "hotkeygo temporarily limited this request. Wait briefly, then try again." };
   }
   if (row.outcome === "quota_blocked") {
     const detail = row.reason === "free_limit_reached" ? "The 30 free actions for this month were used."
@@ -123,12 +123,12 @@ function errorDiagnosis(row) {
     return { title: "Request could not be processed", source: "Request check", detail: "Check the feature and request setup." };
   }
   if (row.outcome === "worker_error") {
-    return { title: "Tokiri Worker failed", source: stage, detail: `An internal error occurred during ${stage.toLowerCase()}. No model answer was accepted.` };
+    return { title: "hotkeygo Worker failed", source: stage, detail: `An internal error occurred during ${stage.toLowerCase()}. No model answer was accepted.` };
   }
   if (row.outcome === "service_error") {
-    return { title: "Tokiri service failed", source: stage, detail: `The service could not complete this request during ${stage.toLowerCase()}.` };
+    return { title: "hotkeygo service failed", source: stage, detail: `The service could not complete this request during ${stage.toLowerCase()}.` };
   }
-  return { title: "Request failed", source: stage, detail: "The source and stage show where Tokiri stopped handling the request." };
+  return { title: "Request failed", source: stage, detail: "The source and stage show where hotkeygo stopped handling the request." };
 }
 
 function rowsBy(rows, key) {
@@ -443,7 +443,7 @@ function renderDashboard(data) {
   setLatencyPair("workerLatency", "workerP95", total.latencyCount ? total.workerDurationMs / total.latencyCount : NaN, total.workerDurationHistogram, total.latencyCount ? total.maxWorkerDurationMs : NaN);
   document.querySelector("#slowRequests").textContent = formatCount(slow.count);
   document.querySelector("#slowBreakdown").textContent = slow.count
-    ? `Model: ${formatCount(slow.model)} · Tokiri service: ${formatCount(slow.worker)}`
+    ? `Model: ${formatCount(slow.model)} · hotkeygo service: ${formatCount(slow.worker)}`
     : "No responses over 10 seconds";
   document.querySelector("#requestRange").textContent = `in the last ${days} days`;
   document.querySelector("#latencyCoverage").textContent = `App response timing is available for ${formatCount(client.count)} of ${formatCount(total.requests)} requests. The Fix and Actions network estimate includes both directions plus app overhead; Peek is streamed.`;

@@ -1,4 +1,4 @@
-# Qwixit operations and release guide
+# hotkeygo operations and release guide
 
 **Status:** current development and release procedure
 **Last reviewed:** 2026-10-07
@@ -16,17 +16,17 @@ The app is an `LSUIElement` menu-bar utility. App Sandbox is disabled because sy
 
 ## Build and test the macOS app
 
-Open `Qwixit.xcodeproj`, select the `Qwixit` scheme and **My Mac**, then run with `⌘R`.
+Open `HotkeyGo.xcodeproj`, select the `HotkeyGo` scheme and **My Mac**, then run with `⌘R`.
 
 For an unsigned command-line build:
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
-  -project Qwixit.xcodeproj \
-  -scheme Qwixit \
+  -project HotkeyGo.xcodeproj \
+  -scheme HotkeyGo \
   -configuration Debug \
   -destination 'platform=macOS' \
-  -derivedDataPath /tmp/QwixitDerivedData \
+  -derivedDataPath /tmp/HotkeyGoDerivedData \
   CODE_SIGNING_ALLOWED=NO \
   COMPILER_INDEX_STORE_ENABLE=NO \
   build
@@ -36,10 +36,10 @@ Run the unit tests with:
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
-  -project Qwixit.xcodeproj \
-  -scheme Qwixit \
+  -project HotkeyGo.xcodeproj \
+  -scheme HotkeyGo \
   -destination 'platform=macOS' \
-  -derivedDataPath /tmp/QwixitDerivedData \
+  -derivedDataPath /tmp/HotkeyGoDerivedData \
   -parallel-testing-enabled NO \
   CODE_SIGNING_ALLOWED=NO \
   test
@@ -51,7 +51,7 @@ Do not launch an additional app process casually during automated verification: 
 
 Fix and Actions use one replacement path in every app: capture the selected text and source focus, restore the source app and focused element, put the fresh text on the clipboard, then post ⌘V. AX is used to read the selection and restore focus; it never writes the replacement or decides whether a paste succeeded. Actions' insert mode sends Right Arrow first to collapse the selection at its end, then uses the same paste path.
 
-ReplacementAttemptReport contains only three transient steps: clipboard write, optional caret move, and ⌘V event. isSubmitted means the clipboard write completed and the required keyboard events were posted. Fix shows “Success”; this marks a completed request and posted event, not proof that another app consumed the paste. If Tokiri cannot prepare the clipboard or post the required event, it offers the fresh text and a manual copy button. Fix leaves the correction on the system clipboard as a manual paste backup after a successful clipboard write; Actions restores the previous clipboard. Neither selected nor generated text is logged or stored in Qwixit data.
+ReplacementAttemptReport contains only three transient steps: clipboard write, optional caret move, and ⌘V event. isSubmitted means the clipboard write completed and the required keyboard events were posted. Fix shows “Success”; this marks a completed request and posted event, not proof that another app consumed the paste. If hotkeygo cannot prepare the clipboard or post the required event, it offers the fresh text and a manual copy button. Fix leaves the correction on the system clipboard as a manual paste backup after a successful clipboard write; Actions restores the previous clipboard. Neither selected nor generated text is logged or stored in hotkeygo data.
 
 Unit tests cover the clipboard, paste-event, and caret-move requirements for a submitted status, plus recovery when a paste event cannot be posted. Clipboard archive tests verify that Fix keeps the correction, Actions restores rich clipboard contents, and newer clipboard content is preserved. These tests do not measure delivery to real editors. Before claiming a replacement success rate, use controlled, unsent drafts in a native text control and browser editors such as Slack and GitHub, plus representative spreadsheet and messaging apps. Exercise single-line, multiline, and repeated selections; Fix, Actions replace, and Actions insert. Confirm that manual ⌘V pastes the Fix result and that Actions restores the previous clipboard. Record only pass/fail and editor category. A 99.5% delivery claim requires a sufficiently large real-editor trial; unit tests alone cannot support it.
 
@@ -95,6 +95,8 @@ npx wrangler secret put PADDLE_WEBHOOK_SECRET
 npm run deploy
 ```
 
+The Worker name and hostname remain `qwixit-api` because that is the deployed endpoint used for billing and current clients. The app continues to call `/v2/qwix` until the updated Worker is deployed; the source Worker accepts both `/v2/qwix` and `/v2/hotkeygo`. Keep both routes, headers, and Paddle metadata fields as compatibility aliases through the client migration.
+
 The Worker retry for rejected Fix output and Claude Actions truncated at `max_tokens`, plus the analytics collector, take effect only after this deployment. Claude Actions get an 8,192-token output ceiling on the first request and a 16,384-token ceiling on the single truncation retry. The dashboard is a separate static Cloudflare Pages project; its default origin is `https://tokiri-analytics.pages.dev` in `wrangler.toml`. If Pages uses another production hostname, update `ANALYTICS_DASHBOARD_ORIGIN` before deploying the Worker.
 
 Deploy the dashboard after the Worker:
@@ -118,14 +120,14 @@ Set a monthly budget and 50%/80% alerts on each model-provider account used by t
 
 ### Deploy order for API changes
 
-`/v2/qwix` is the only model endpoint; the client sends a task, selected provider (`openai` or `anthropic`), and enumerated parameters. The Worker owns the prompt (`prompts.js`) and both provider credentials. Provider is optional for old clients and defaults to OpenAI. When a change touches the request or response shape, keep the Worker backward compatible first: deploy a Worker that accepts both the old and the new shape, then ship the app, and remove the old shape only after every installation has updated. Builds from before October 2026 used the removed `/v1/responses` proxy and no longer work.
+`/v2/hotkeygo` is the canonical model endpoint; `/v2/qwix` remains an alias for deployed clients. The client sends a task, selected provider (`openai` or `anthropic`), and enumerated parameters. The Worker owns the prompt (`prompts.js`) and both provider credentials. Provider is optional for old clients and defaults to OpenAI. When a change touches the request or response shape, keep the Worker backward compatible first: deploy a Worker that accepts both the old and the new shape, then ship the app, and remove the old shape only after every installation has updated. Builds from before October 2026 used the removed `/v1/responses` proxy and no longer work.
 
 A prompt change in `prompts.js` needs only a Worker deploy, not an app release. Before deploying one, deploy to a test Worker or accept a brief production window, then run the prompt eval:
 
 ```sh
 cd cloudflare-worker
 npm run eval:prompts                          # production Worker
-QWIXIT_WORKER_URL=https://… npm run eval:prompts
+HOTKEYGO_WORKER_URL=https://… npm run eval:prompts
 npm run eval:prompts -- --only peek           # a subset by case name
 ```
 
@@ -162,7 +164,7 @@ The reset cancels matching Paddle sandbox subscriptions before deleting the inst
 
 Before a public build, verify this sequence from a clean installation:
 
-1. Install and launch Qwixit without an existing installation identity.
+1. Install and launch hotkeygo without an existing installation identity.
 2. Complete Accessibility onboarding using mouse and keyboard paths.
 3. Confirm `⌥⌘X` safely fixes and replaces text in native and browser-backed editors.
 4. Confirm `⌥⌘A` transforms and replaces text.
@@ -171,9 +173,10 @@ Before a public build, verify this sequence from a clean installation:
 7. Verify the limit state does not alter selected text and offers the correct upgrade path.
 8. Complete Paddle checkout and verify signed webhook activation unlocks Advanced.
 9. Relaunch the app and verify subscription restoration from server state.
-10. Verify cancellation and non-active subscription states return to the intended free behavior.
-11. Verify offline, timeout, empty-response, permission, no-selection, and hotkey-conflict recovery.
-12. Verify light/dark themes, Reduce Motion, VoiceOver labels, Fix's ⌘V backup, Actions' clipboard restoration, and multi-display panel placement.
+10. Upgrade a signed Qwixit build with an active sandbox subscription to a signed hotkeygo build; verify that the Keychain installation identity and Advanced access survive the bundle-ID change.
+11. Verify cancellation and non-active subscription states return to the intended free behavior.
+12. Verify offline, timeout, empty-response, permission, no-selection, and hotkey-conflict recovery.
+13. Verify light/dark themes, Reduce Motion, VoiceOver labels, Fix's ⌘V backup, Actions' clipboard restoration, and multi-display panel placement.
 
 ## Public `.dmg` readiness
 

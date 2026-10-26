@@ -11,17 +11,17 @@ The canonical agent guidance lives in `AGENTS.md` (product compass, privacy rule
 Build and full test commands are in `AGENTS.md`. Narrower variants:
 
 ```sh
-# One Swift test class or method (XCTest, target QwixitTests)
+# One Swift test class or method (XCTest, target HotkeyGoTests)
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
-  -project Qwixit.xcodeproj -scheme Qwixit -destination 'platform=macOS' \
+  -project HotkeyGo.xcodeproj -scheme HotkeyGo -destination 'platform=macOS' \
   CODE_SIGNING_ALLOWED=NO test \
-  -only-testing:QwixitTests/PeekViewModelTests/testSomething
+  -only-testing:HotkeyGoTests/PeekViewModelTests/testSomething
 
 # One Worker test by name (node:test)
 cd cloudflare-worker && node --test --test-name-pattern "Paddle signatures" worker.test.js
 ```
 
-Run the app from Xcode (`⌘R`). Launching a new build closes any older running Qwixit instance (single-instance per bundle ID). Accessibility permission is required for selection capture and replacement.
+Run the app from Xcode (`⌘R`). Launching a new build closes any older running hotkeygo instance (single-instance per bundle ID). Accessibility permission is required for selection capture and replacement.
 
 ## Code-name ↔ product-name map
 
@@ -36,8 +36,8 @@ Folder names don't match the product terms used in docs:
 
 ## Big picture
 
-- `Qwixit/App/QwixitApp.swift` is the composition root: `AppContainer` builds services, view models, and panel controllers; `AppDelegate` owns the status item, hotkey routing, windows, and teardown.
-- All model calls go through `cloudflare-worker/worker.js` (a single-file Worker). It holds the OpenAI key, enforces model policy and `store: false`, and meters every request through a Durable Object ledger keyed by the `X-Qwixit-Installation-ID` header. Paddle signed webhooks are the only path to Advanced. Changes to request shape usually touch both the Swift networking layer and the Worker.
+- `HotkeyGo/App/HotkeyGoApp.swift` is the composition root: `AppContainer` builds services, view models, and panel controllers; `AppDelegate` owns the status item, hotkey routing, windows, and teardown.
+- All model calls go through `cloudflare-worker/worker.js` (a single-file Worker). It holds the OpenAI key, enforces model policy and `store: false`, and meters every request through a Durable Object ledger keyed by the `X-HotkeyGo-Installation-ID` header. Paddle signed webhooks are the only path to Advanced. Changes to request shape usually touch both the Swift networking layer and the Worker.
 - Naming conventions: presentation models end in `ViewModel` (never `Store`); window owners end in `WindowController`, transient non-activating panels in `PanelController`.
 - On any failure (capture, quota, model, replacement) the user's original selection must stay unchanged; clipboard fallbacks must snapshot and fully restore the pasteboard.
 

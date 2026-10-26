@@ -1,5 +1,5 @@
 /**
- * Qwixit API and billing gateway.
+ * hotkeygo API and billing gateway.
  *
  * Required encrypted secrets: OPENAI_API_KEY (or the legacy
  * qwixit-cloudflare-key during migration), CLAUDE_API_SECRET,
@@ -79,7 +79,7 @@ export default {
       if (request.method !== "GET") return errorResponse(405, "Method not allowed.", {}, { Allow: "GET" });
       const installationID = url.searchParams.get("installation_id") ?? "";
       if (!INSTALLATION_ID_PATTERN.test(installationID)) {
-        return errorResponse(400, "A valid Tokiri installation identity is required.");
+        return errorResponse(400, "A valid hotkeygo installation identity is required.");
       }
       if (!env.USAGE_LEDGER) return errorResponse(500, "Worker usage storage is not configured.");
       return billingStatusResponse(env, installationID);
@@ -92,7 +92,10 @@ export default {
       if (request.method !== "POST") return errorResponse(405, "Method not allowed.", {}, { Allow: "POST" });
       return handleDevelopmentReset(request, env);
     }
-    if (url.pathname === "/v2/qwix") return handleQwix(request, env, executionContext);
+    // Keep the deployed route available while clients migrate to the renamed route.
+    if (url.pathname === "/v2/hotkeygo" || url.pathname === "/v2/qwix") {
+      return handleHotkeyGo(request, env, executionContext);
+    }
     if (url.pathname === "/internal/client-timing") return handleClientTiming(request, env);
     if (url.pathname === "/internal/analytics") return handleAnalyticsDashboard(request, env);
     return request.headers.get("accept")?.includes("text/html")
@@ -134,8 +137,9 @@ async function handleAnalyticsDashboard(request, env) {
   if (!env.USAGE_LEDGER) return errorResponse(503, "Analytics storage is not configured.", {}, corsHeaders);
 
   const days = Math.min(90, Math.max(1, Number(new URL(request.url).searchParams.get("days")) || 30));
+  // Keep this Durable Object name so the app rename does not orphan aggregates.
   const analyticsID = env.USAGE_LEDGER.idFromName("tokiri-analytics-global-v1");
-  const response = await env.USAGE_LEDGER.get(analyticsID).fetch(`https://analytics.tokiri/analytics/query?days=${days}`);
+  const response = await env.USAGE_LEDGER.get(analyticsID).fetch(`https://analytics.hotkeygo/analytics/query?days=${days}`);
   return new Response(response.body, {
     status: response.status,
     headers: securityHeaders({ "Content-Type": "application/json; charset=utf-8", ...corsHeaders }),
@@ -157,19 +161,19 @@ async function handleClientTiming(request, env) {
   if (!isAnalyticsClientTiming(event)) return errorResponse(400, "Invalid client timing report.");
   if (!env.USAGE_LEDGER) return errorResponse(503, "Analytics storage is not configured.");
   const analyticsID = env.USAGE_LEDGER.idFromName("tokiri-analytics-global-v1");
-  return env.USAGE_LEDGER.get(analyticsID).fetch("https://analytics.tokiri/analytics/client-timing", {
+  return env.USAGE_LEDGER.get(analyticsID).fetch("https://analytics.hotkeygo/analytics/client-timing", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(event),
   });
 }
 
-async function handleQwix(request, env, executionContext) {
+async function handleHotkeyGo(request, env, executionContext) {
   const metrics = { provider: "unknown", task: "unknown", outcome: "worker_error", reason: "other", stage: "request_validation", modelAttempts: 0, retries: 0, modelDurationMs: 0, modelPhaseActive: false, modelStreamStartedAt: null, startedAt: Date.now() };
   const finishSlowWatch = watchSlowRequest(env, metrics, executionContext);
   let response;
   try {
-    response = await handleQwixRequest(request, env, metrics);
+    response = await handleHotkeyGoRequest(request, env, metrics);
     metrics.outcome = await analyticsOutcome(response, metrics);
   } catch (error) {
     finishSlowWatch();
@@ -247,7 +251,7 @@ function watchSlowRequest(env, metrics, executionContext) {
         phase: metrics.modelPhaseActive ? "model" : "worker",
       };
       const analyticsID = env.USAGE_LEDGER.idFromName("tokiri-analytics-global-v1");
-      await env.USAGE_LEDGER.get(analyticsID).fetch("https://analytics.tokiri/analytics/slow", {
+      await env.USAGE_LEDGER.get(analyticsID).fetch("https://analytics.hotkeygo/analytics/slow", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(event),
@@ -301,7 +305,7 @@ function recordAnalytics(env, metrics, executionContext) {
     try {
       if (!env.USAGE_LEDGER) return;
       const analyticsID = env.USAGE_LEDGER.idFromName("tokiri-analytics-global-v1");
-      await env.USAGE_LEDGER.get(analyticsID).fetch("https://analytics.tokiri/analytics/record", {
+      await env.USAGE_LEDGER.get(analyticsID).fetch("https://analytics.hotkeygo/analytics/record", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(event),
@@ -725,7 +729,7 @@ async function readOptionalJSON(request) {
 
 async function authorizeUsage(env, installationID, operationID) {
   const id = env.USAGE_LEDGER.idFromName(installationID);
-  const response = await env.USAGE_LEDGER.get(id).fetch("https://usage.qwixit/authorize", {
+  const response = await env.USAGE_LEDGER.get(id).fetch("https://usage.hotkeygo/authorize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ operationID }),
@@ -736,7 +740,7 @@ async function authorizeUsage(env, installationID, operationID) {
 
 async function refundUsage(env, installationID, operationID, reason = "failure") {
   const id = env.USAGE_LEDGER.idFromName(installationID);
-  const response = await env.USAGE_LEDGER.get(id).fetch("https://usage.qwixit/refund", {
+  const response = await env.USAGE_LEDGER.get(id).fetch("https://usage.hotkeygo/refund", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ operationID, reason }),
@@ -757,7 +761,7 @@ async function tryRefund(env, installationID, operationID, quota, reason) {
 
 async function upstreamFailure(env, installationID, operationID, quota) {
   const current = await tryRefund(env, installationID, operationID, quota, "failure");
-  return errorResponse(502, "The AI service is temporarily unavailable.", { code: "upstream_failed" }, qwixHeaders(current));
+  return errorResponse(502, "The AI service is temporarily unavailable.", { code: "upstream_failed" }, hotkeygoHeaders(current));
 }
 
 function operationExhaustedResponse() {
@@ -789,12 +793,20 @@ async function isRateLimited(env, installationID, request) {
 }
 
 /** For Advanced, the remaining count is the actions left today. */
-function qwixHeaders(quota) {
+function hotkeygoHeaders(quota) {
+  const limit = String(quota.advanced ? ADVANCED_ACTIONS_PER_DAY : FREE_ACTIONS_PER_MONTH);
+  const remaining = String(quota.advanced ? quota.dailyRemaining : quota.remaining);
+  const plan = quota.advanced ? "advanced" : "free";
+  const period = quota.period;
   return {
-    "X-Qwixit-Limit": String(quota.advanced ? ADVANCED_ACTIONS_PER_DAY : FREE_ACTIONS_PER_MONTH),
-    "X-Qwixit-Remaining": String(quota.advanced ? quota.dailyRemaining : quota.remaining),
-    "X-Qwixit-Plan": quota.advanced ? "advanced" : "free",
-    "X-Qwixit-Period": quota.period,
+    "X-HotkeyGo-Limit": limit,
+    "X-HotkeyGo-Remaining": remaining,
+    "X-HotkeyGo-Plan": plan,
+    "X-HotkeyGo-Period": period,
+    "X-Qwixit-Limit": limit,
+    "X-Qwixit-Remaining": remaining,
+    "X-Qwixit-Plan": plan,
+    "X-Qwixit-Period": period,
   };
 }
 
@@ -807,7 +819,7 @@ class TaskError extends Error {
 }
 
 /** Accepts only known tasks and enumerated parameters; nothing a client sends can become an instruction. */
-export function parseQwixTask(source) {
+export function parseHotkeyGoTask(source) {
   if (!isObject(source)) throw new TaskError(400, "invalid_task", "Request body must be a JSON object.");
   const allowed = {
     fix: ["task", "text", "priority", "provider"],
@@ -854,7 +866,7 @@ export function parseQwixTask(source) {
 }
 
 /** Builds the OpenAI request entirely from server templates. */
-export function buildQwixRequest(task, { priority = false } = {}) {
+export function buildHotkeyGoRequest(task, { priority = false } = {}) {
   const prompt = task.task === "fix"
     ? fixPrompt()
     : task.task === "action"
@@ -865,7 +877,7 @@ export function buildQwixRequest(task, { priority = false } = {}) {
     instructions: prompt.instructions,
     input: wrapSelectedText(task.text),
     reasoning: { effort: "none" },
-    max_output_tokens: qwixOutputTokens(task),
+    max_output_tokens: hotkeygoOutputTokens(task),
     store: false,
     text: task.task === "peek" ? { format: prompt.format } : { verbosity: "low", ...(prompt.format ? { format: prompt.format } : {}) },
   };
@@ -875,7 +887,7 @@ export function buildQwixRequest(task, { priority = false } = {}) {
 }
 
 /** Builds an Anthropic Messages request while keeping prompts and output schemas server-owned. */
-export function buildAnthropicQwixRequest(task) {
+export function buildAnthropicHotkeyGoRequest(task) {
   const prompt = task.task === "fix"
     ? fixPrompt()
     : task.task === "action"
@@ -888,7 +900,7 @@ export function buildAnthropicQwixRequest(task) {
     model: ANTHROPIC_MODEL,
     system: instructions,
     messages: [{ role: "user", content: wrapSelectedText(task.text) }],
-    max_tokens: anthropicQwixOutputTokens(task),
+    max_tokens: anthropicHotkeyGoOutputTokens(task),
     // These are short transformations; reserve the output budget for the
     // requested result instead of model reasoning.
     ...(task.task === "fix" || task.task === "action" ? { thinking: { type: "disabled" } } : {}),
@@ -1029,7 +1041,7 @@ export function anthropicStreamAsResponses(source) {
   });
 }
 
-function qwixOutputTokens(task) {
+function hotkeygoOutputTokens(task) {
   // Rough server-side estimate: two characters per token errs high for Cyrillic and English.
   const estimate = Math.ceil(task.text.length / 2);
   if (task.task === "peek") return 4_096;
@@ -1037,9 +1049,9 @@ function qwixOutputTokens(task) {
   return Math.min(Math.ceil(estimate * 1.3) + 128, 4_096);
 }
 
-function anthropicQwixOutputTokens(task) {
+function anthropicHotkeyGoOutputTokens(task) {
   if (task.task === "action") return ANTHROPIC_ACTION_OUTPUT_TOKENS;
-  return qwixOutputTokens(task);
+  return hotkeygoOutputTokens(task);
 }
 
 function normalizedForComparison(text) {
@@ -1058,7 +1070,7 @@ export function plausibleOutputLength(task, input, output) {
 }
 
 /** Decides what a completed, non-streamed model response means for the client and the quota. */
-export function evaluateQwixOutput(task, payload) {
+export function evaluateHotkeyGoOutput(task, payload) {
   if (ANALYTICS_REASONS.has(payload?.formatError)) return { kind: "rejected", reason: payload.formatError };
   if (!payload || typeof payload !== "object" || typeof payload.status !== "string") {
     return { kind: "rejected", reason: "malformed_response" };
@@ -1097,17 +1109,21 @@ export function evaluateQwixOutput(task, payload) {
   return { kind: "text", text };
 }
 
-async function handleQwixRequest(request, env, metrics) {
+async function handleHotkeyGoRequest(request, env, metrics) {
   metrics.stage = "request_validation";
   if (request.method !== "POST") return errorResponse(405, "Method not allowed.", {}, { Allow: "POST" });
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     return errorResponse(415, "Content-Type must be application/json.");
   }
-  const installationID = request.headers.get("x-qwixit-installation-id") ?? "";
+  const installationID = request.headers.get("x-hotkeygo-installation-id")
+    ?? request.headers.get("x-qwixit-installation-id")
+    ?? "";
   if (!INSTALLATION_ID_PATTERN.test(installationID)) {
-    return errorResponse(401, "A valid Tokiri installation identity is required.", { code: "invalid_installation" });
+    return errorResponse(401, "A valid hotkeygo installation identity is required.", { code: "invalid_installation" });
   }
-  const operationID = request.headers.get("x-qwixit-operation-id") ?? "";
+  const operationID = request.headers.get("x-hotkeygo-operation-id")
+    ?? request.headers.get("x-qwixit-operation-id")
+    ?? "";
   if (!OPERATION_ID_PATTERN.test(operationID)) {
     return errorResponse(400, "A valid operation identity is required.", { code: "invalid_operation" });
   }
@@ -1129,7 +1145,7 @@ async function handleQwixRequest(request, env, metrics) {
     if (rawBody === null) throw new TaskError(413, "text_too_long", "Request body is too large.");
     let source;
     try { source = JSON.parse(new TextDecoder().decode(rawBody)); } catch { throw new TaskError(400, "invalid_task", "Request body must be valid JSON."); }
-    task = parseQwixTask(source);
+    task = parseHotkeyGoTask(source);
   } catch (error) {
     if (error instanceof TaskError) return errorResponse(error.status, error.message, { code: error.code });
     throw error;
@@ -1140,14 +1156,14 @@ async function handleQwixRequest(request, env, metrics) {
   metrics.task = task.task;
   const apiKey = provider === "anthropic"
     ? env.CLAUDE_API_SECRET
-    : env.OPENAI_API_KEY ?? env["qwixit-cloudflare-key"];
+    : env.OPENAI_API_KEY ?? env["hotkeygo-cloudflare-key"] ?? env["qwixit-cloudflare-key"];
   if (!apiKey) {
     metrics.stage = "worker_configuration";
     if (provider === "anthropic") {
       console.error("Missing CLAUDE_API_SECRET secret");
       return errorResponse(422, "Claude is not configured on this service yet.", { code: "provider_not_configured" });
     }
-    console.error("Missing OPENAI_API_KEY secret (or legacy qwixit-cloudflare-key)");
+    console.error("Missing OPENAI_API_KEY secret");
     return errorResponse(500, "Worker is not configured.");
   }
 
@@ -1174,8 +1190,8 @@ async function handleQwixRequest(request, env, metrics) {
   // Priority processing costs more, so only Advanced may request it.
   const priority = task.priority && quota.advanced;
   const body = provider === "anthropic"
-    ? buildAnthropicQwixRequest(task)
-    : buildQwixRequest(task, { priority });
+    ? buildAnthropicHotkeyGoRequest(task)
+    : buildHotkeyGoRequest(task, { priority });
   const sendToProvider = async (requestBody) => {
     metrics.stage = "provider_request";
     metrics.modelAttempts += 1;
@@ -1190,7 +1206,7 @@ async function handleQwixRequest(request, env, metrics) {
             ? { "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
             : {
                 Authorization: `Bearer ${apiKey}`,
-                "User-Agent": "Qwixit-Worker/1.0",
+                "User-Agent": "hotkeygo-Worker/1.0",
                 "X-Client-Request-Id": operationID,
               }),
         },
@@ -1221,7 +1237,7 @@ async function handleQwixRequest(request, env, metrics) {
     const body = provider === "anthropic" ? anthropicStreamAsResponses(upstream.body) : upstream.body;
     if (body) metrics.modelStreamStartedAt = Date.now();
     else metrics.modelPhaseActive = false;
-    const headers = securityHeaders({ "Content-Type": "text/event-stream", ...qwixHeaders(quota) });
+    const headers = securityHeaders({ "Content-Type": "text/event-stream", ...hotkeygoHeaders(quota) });
     copyHeader(upstream.headers, headers, "x-request-id");
     return new Response(body, { status: 200, headers });
   }
@@ -1229,7 +1245,7 @@ async function handleQwixRequest(request, env, metrics) {
   metrics.stage = "output_check";
   let payload = await readProviderJSON(upstream, metrics);
   if (provider === "anthropic") payload = normalizeAnthropicResponse(payload, task);
-  let outcome = evaluateQwixOutput(task, payload);
+  let outcome = evaluateHotkeyGoOutput(task, payload);
   metrics.reason = outcome.kind === "rejected" && ANALYTICS_REASONS.has(outcome.reason) ? outcome.reason : "none";
 
   // Retry rejected Fix output once, and retry Claude Actions when its output
@@ -1271,7 +1287,7 @@ async function handleQwixRequest(request, env, metrics) {
     metrics.stage = "output_check";
     payload = await readProviderJSON(upstream, metrics);
     if (provider === "anthropic") payload = normalizeAnthropicResponse(payload, task);
-    outcome = evaluateQwixOutput(task, payload);
+    outcome = evaluateHotkeyGoOutput(task, payload);
     metrics.reason = outcome.kind === "rejected" && ANALYTICS_REASONS.has(outcome.reason) ? outcome.reason : "none";
   }
 
@@ -1279,22 +1295,22 @@ async function handleQwixRequest(request, env, metrics) {
     metrics.stage = "usage_refund";
     const current = await tryRefund(env, installationID, operationID, quota, "clean");
     metrics.stage = "response_handling";
-    return Response.json({ result: "clean" }, { headers: securityHeaders(qwixHeaders(current)) });
+    return Response.json({ result: "clean" }, { headers: securityHeaders(hotkeygoHeaders(current)) });
   }
   if (outcome.kind === "rejected") {
     // Log only provider/task and a fixed reason code; never include selected or generated text.
     console.warn("Model output rejected", provider, task.task, outcome.reason);
     const current = await tryRefund(env, installationID, operationID, quota, "rejected");
-    return errorResponse(422, "The result didn’t pass Qwixit’s checks. Your text is unchanged.", { code: "output_rejected" }, qwixHeaders(current));
+    return errorResponse(422, "The result didn’t pass hotkeygo’s checks. Your text is unchanged.", { code: "output_rejected" }, hotkeygoHeaders(current));
   }
   metrics.stage = "response_handling";
   const result = task.task === "fix" ? { result: "fixed", text: outcome.text } : { text: outcome.text };
-  return Response.json(result, { headers: securityHeaders(qwixHeaders(quota)) });
+  return Response.json(result, { headers: securityHeaders(hotkeygoHeaders(quota)) });
 }
 
 async function billingStatusResponse(env, installationID) {
   const id = env.USAGE_LEDGER.idFromName(installationID);
-  const response = await env.USAGE_LEDGER.get(id).fetch("https://usage.qwixit/status");
+  const response = await env.USAGE_LEDGER.get(id).fetch("https://usage.hotkeygo/status");
   if (!response.ok) return errorResponse(503, "Subscription status is temporarily unavailable.");
   return new Response(response.body, {
     status: response.status,
@@ -1323,13 +1339,13 @@ async function handleDevelopmentReset(request, env) {
     return errorResponse(400, "Request body must be valid JSON.");
   }
   if (!INSTALLATION_ID_PATTERN.test(installationID)) {
-    return errorResponse(400, "A valid Tokiri installation identity is required.");
+    return errorResponse(400, "A valid hotkeygo installation identity is required.");
   }
   if (!env.USAGE_LEDGER) return errorResponse(500, "Worker usage storage is not configured.");
 
   const id = env.USAGE_LEDGER.idFromName(installationID);
   const ledger = env.USAGE_LEDGER.get(id);
-  const stateResponse = await ledger.fetch("https://usage.qwixit/subscription-state");
+  const stateResponse = await ledger.fetch("https://usage.hotkeygo/subscription-state");
   if (!stateResponse.ok) return errorResponse(503, "Could not inspect the installation subscription.");
   const { subscription } = await stateResponse.json();
 
@@ -1362,7 +1378,7 @@ async function handleDevelopmentReset(request, env) {
     }
   }
 
-  const response = await ledger.fetch("https://usage.qwixit/reset", { method: "POST" });
+  const response = await ledger.fetch("https://usage.hotkeygo/reset", { method: "POST" });
   if (!response.ok) return errorResponse(503, "Could not reset the installation.");
   return Response.json({
     reset: true,
@@ -1388,7 +1404,9 @@ export async function findPaddleSandboxSubscriptions(installationID, apiKey, fet
 
     const body = await response.json();
     for (const candidate of body?.data ?? []) {
-      if (candidate?.custom_data?.qwixit_installation_id === installationID && candidate?.id) {
+      const candidateInstallationID = candidate?.custom_data?.hotkeygo_installation_id
+        ?? candidate?.custom_data?.qwixit_installation_id;
+      if (candidateInstallationID === installationID && candidate?.id) {
         subscriptionIDs.push(candidate.id);
       }
     }
@@ -1459,7 +1477,8 @@ async function handlePaddleWebhook(request, env) {
     return Response.json({ accepted: true }, { headers: securityHeaders() });
   }
 
-  const installationID = event.data?.custom_data?.qwixit_installation_id;
+  const installationID = event.data?.custom_data?.hotkeygo_installation_id
+    ?? event.data?.custom_data?.qwixit_installation_id;
   if (!INSTALLATION_ID_PATTERN.test(installationID ?? "")) {
     return Response.json({ accepted: true }, { headers: securityHeaders() });
   }
@@ -1468,7 +1487,7 @@ async function handlePaddleWebhook(request, env) {
   );
   const status = matchingItem ? String(event.data?.status ?? "none") : "none";
   const id = env.USAGE_LEDGER.idFromName(installationID);
-  const response = await env.USAGE_LEDGER.get(id).fetch("https://usage.qwixit/subscription", {
+  const response = await env.USAGE_LEDGER.get(id).fetch("https://usage.hotkeygo/subscription", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1512,21 +1531,21 @@ function constantTimeEqual(left, right) {
 
 function checkoutPage(url) {
   const installationID = url.searchParams.get("installation_id") ?? "";
-  if (!INSTALLATION_ID_PATTERN.test(installationID)) return errorResponse(400, "Open checkout from the Tokiri app.");
+  if (!INSTALLATION_ID_PATTERN.test(installationID)) return errorResponse(400, "Open checkout from the hotkeygo app.");
   const successUrl = `${url.origin}/billing/success?installation_id=${encodeURIComponent(installationID)}`;
   const html = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tokiri Advanced</title><script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+    <title>hotkeygo Advanced</title><script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
     <style>:root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f3ee;color:#16131f}main{width:min(440px,calc(100% - 40px));padding:32px;border:1px solid #dedbd4;border-radius:18px;background:white;box-shadow:0 18px 60px rgba(17,21,20,.08)}.eyebrow{margin:0 0 10px;color:#6959d9;font:700 12px/1.2 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}h1{margin:0;font-size:32px;letter-spacing:-.04em}.price-row{display:flex;align-items:center;gap:14px;margin:18px 0 4px}.price{margin:0;font-size:28px;font-weight:750}.face{white-space:pre;font:800 15px/1 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:-1.25px 0 #00d8f0,1.25px 0 #ff2d9b}.billing-details{margin:0 0 24px;color:#646b68}button{width:100%;min-height:48px;border:0;border-radius:12px;background:#16131f;color:white;font:inherit;font-weight:700;cursor:pointer}button:disabled{cursor:wait;opacity:.55}button:focus-visible{outline:3px solid #d9ccff;outline-offset:3px}#status{min-height:20px;margin:14px 0 0;color:#646b68;font-size:13px;text-align:center}@media(prefers-reduced-motion:reduce){.face{animation:none}}</style>
   </head>
-  <body><main><p class="eyebrow">Tokiri sandbox</p><h1>Advanced</h1><div class="price-row"><p class="price">$10 / month</p><span class="face" data-open="[ ¬_¬ ]" data-shut="[ -_- ]">[ ¬_¬ ]</span></div><p class="billing-details">More room to work. Cancel anytime. Sandbox test payments only.</p><button id="checkout" disabled>Preparing checkout…</button><p id="status" role="status"></p></main>
+  <body><main><p class="eyebrow">hotkeygo sandbox</p><h1>Advanced</h1><div class="price-row"><p class="price">$10 / month</p><span class="face" data-open="[ ¬_¬ ]" data-shut="[ -_- ]">[ ¬_¬ ]</span></div><p class="billing-details">More room to work. Cancel anytime. Sandbox test payments only.</p><button id="checkout" disabled>Preparing checkout…</button><p id="status" role="status"></p></main>
     <script>
       const button=document.getElementById("checkout");const status=document.getElementById("status");
       Paddle.Environment.set("sandbox");
       Paddle.Initialize({token:${JSON.stringify(PADDLE_SANDBOX_CLIENT_TOKEN)},eventCallback(event){if(event.name==="checkout.completed")status.textContent="Payment completed. Activating Advanced…";if(event.name==="checkout.payment.error")status.textContent="The test payment failed. Try another test card.";}});
-      function openCheckout(){status.textContent="";Paddle.Checkout.open({items:[{priceId:${JSON.stringify(PADDLE_SANDBOX_ADVANCED_PRICE_ID)},quantity:1}],customData:{qwixit_installation_id:${JSON.stringify(installationID)}},settings:{variant:"one-page",successUrl:${JSON.stringify(successUrl)}}});}
+      function openCheckout(){status.textContent="";Paddle.Checkout.open({items:[{priceId:${JSON.stringify(PADDLE_SANDBOX_ADVANCED_PRICE_ID)},quantity:1}],customData:{hotkeygo_installation_id:${JSON.stringify(installationID)},qwixit_installation_id:${JSON.stringify(installationID)}},settings:{variant:"one-page",successUrl:${JSON.stringify(successUrl)}}});}
       button.disabled=false;button.textContent="Get Advanced";button.addEventListener("click",openCheckout);openCheckout();
       if(!matchMedia("(prefers-reduced-motion: reduce)").matches){const face=document.querySelector(".face");setInterval(()=>{face.textContent=face.dataset.shut;setTimeout(()=>face.textContent=face.dataset.open,170)},4200)}
     </script>
@@ -1537,13 +1556,13 @@ function checkoutPage(url) {
 
 function checkoutSuccessPage(url) {
   const installationID = url.searchParams.get("installation_id") ?? "";
-  if (!INSTALLATION_ID_PATTERN.test(installationID)) return errorResponse(400, "Open checkout from the Tokiri app.");
+  if (!INSTALLATION_ID_PATTERN.test(installationID)) return errorResponse(400, "Open checkout from the hotkeygo app.");
   const statusUrl = `${url.origin}/billing/status?installation_id=${encodeURIComponent(installationID)}`;
   const html = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Activating Advanced · Tokiri</title>
+    <title>Activating Advanced · hotkeygo</title>
     <style>
       :root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f3ee;color:#16131f}
       body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,#fff 0,#f8f5f0 42%,#f1eee8 100%)}
@@ -1556,14 +1575,14 @@ function checkoutSuccessPage(url) {
       @media(prefers-reduced-motion:no-preference){.track span{animation:pulse 1.2s ease-in-out infinite}.track span:nth-child(2){animation-delay:.15s}.track span:nth-child(3){animation-delay:.3s}@keyframes pulse{0%,70%,100%{opacity:.28;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}}
     </style>
   </head>
-  <body><main aria-live="polite"><span class="face" id="face">[ @_@ ]</span><h1 id="title">Payment received.</h1><p id="message">Activating Advanced… keep Tokiri open.</p><div class="track" id="track" aria-hidden="true"><span></span><span></span><span></span></div><button id="retry" hidden>Check again</button></main>
+  <body><main aria-live="polite"><span class="face" id="face">[ @_@ ]</span><h1 id="title">Payment received.</h1><p id="message">Activating Advanced… keep hotkeygo open.</p><div class="track" id="track" aria-hidden="true"><span></span><span></span><span></span></div><button id="retry" hidden>Check again</button></main>
     <script>
       const face=document.getElementById("face"),title=document.getElementById("title"),message=document.getElementById("message"),track=document.getElementById("track"),retry=document.getElementById("retry");
       const statusUrl=${JSON.stringify(statusUrl)};let attempts=0,timer;
-      function showReady(){clearTimeout(timer);document.title="Advanced is ready · Tokiri";face.textContent="[ ^_- ]";title.textContent="Advanced is ready.";message.textContent="Advanced is active. Tokiri is ready.";track.hidden=true;retry.hidden=true}
-      function showDelayed(){face.textContent="[ ?_? ]";title.textContent="Still syncing.";message.textContent="Paddle is taking a little longer. Tokiri will keep checking.";retry.hidden=false}
+      function showReady(){clearTimeout(timer);document.title="Advanced is ready · hotkeygo";face.textContent="[ ^_- ]";title.textContent="Advanced is ready.";message.textContent="Advanced is active. hotkeygo is ready.";track.hidden=true;retry.hidden=true}
+      function showDelayed(){face.textContent="[ ?_? ]";title.textContent="Still syncing.";message.textContent="Paddle is taking a little longer. hotkeygo will keep checking.";retry.hidden=false}
       async function check(){retry.hidden=true;try{const response=await fetch(statusUrl,{cache:"no-store"});if(response.ok&&(await response.json()).plan==="advanced"){showReady();return}}catch{}attempts+=1;if(attempts===12)showDelayed();timer=setTimeout(check,attempts<8?1200:attempts<20?2200:5000)}
-      retry.addEventListener("click",()=>{attempts=0;face.textContent="[ @_@ ]";title.textContent="Checking again.";message.textContent="Activating Advanced… keep Tokiri open.";track.hidden=false;check()});check();
+      retry.addEventListener("click",()=>{attempts=0;face.textContent="[ @_@ ]";title.textContent="Checking again.";message.textContent="Activating Advanced… keep hotkeygo open.";track.hidden=false;check()});check();
       if(!matchMedia("(prefers-reduced-motion: reduce)").matches){setInterval(()=>{if(face.textContent==="[ @_@ ]"){face.textContent="[ -_- ]";setTimeout(()=>{if(face.textContent==="[ -_- ]")face.textContent="[ @_@ ]"},170)}},4200)}
     </script>
   </body>
@@ -1572,7 +1591,7 @@ function checkoutSuccessPage(url) {
 }
 
 function notFoundPage() {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found · Tokiri</title><style>:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff;background:#100b17}body{margin:0;min-height:100vh;display:grid;place-items:center}main{text-align:center;padding:32px}.face{display:block;margin-bottom:18px;white-space:pre;font:800 34px/1 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:-2.8px 0 #00d8f0,2.8px 0 #ff2d9b}p{margin:0;color:#c9c1d3;font:700 14px/1.5 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}</style></head><body><main><span class="face">[ ?_? ]</span><p>page not found.</p></main></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found · hotkeygo</title><style>:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff;background:#100b17}body{margin:0;min-height:100vh;display:grid;place-items:center}main{text-align:center;padding:32px}.face{display:block;margin-bottom:18px;white-space:pre;font:800 34px/1 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:-2.8px 0 #00d8f0,2.8px 0 #ff2d9b}p{margin:0;color:#c9c1d3;font:700 14px/1.5 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}</style></head><body><main><span class="face">[ ?_? ]</span><p>page not found.</p></main></body></html>`;
   return new Response(html, { status: 404, headers: securityHeaders({ "Content-Type": "text/html; charset=utf-8" }) });
 }
 

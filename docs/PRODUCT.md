@@ -1,11 +1,11 @@
-# Qwixit product knowledge
+# hotkeygo product knowledge
 
 **Status:** product source of truth
 **Last reviewed:** 2026-10-16
 
 ## Product promise
 
-Qwixit makes working with selected text faster than leaving the current app for ChatGPT, Claude, DeepSeek, or a translator.
+hotkeygo makes working with selected text faster than leaving the current app for ChatGPT, Claude, DeepSeek, or a translator.
 
 The problem is not access to AI. The problem is the workflow:
 
@@ -18,7 +18,7 @@ The problem is not access to AI. The problem is the workflow:
 7. return to the original app;
 8. paste it back.
 
-Qwixit collapses that sequence into a selection and a shortcut. The product sells speed, a new workflow, and the absence of friction—not merely access to a model.
+hotkeygo collapses that sequence into a selection and a shortcut. The product sells speed, a new workflow, and the absence of friction—not merely access to a model.
 
 ## Target user
 
@@ -42,7 +42,7 @@ Fix replaces selected text in place. For the current product stage it should:
 
 The default Fix behavior remains immediate replacement. An optional **Preview & Approve** setting can keep the original selection unchanged, show the proposed correction with a local diff, and wait for explicit approval before applying it. If preview cannot safely capture the selection, it leaves the text unchanged and explains why.
 
-The default shortcuts are Fix **Option + Command + X**, Actions **Option + Command + A**, and Peek **Option + Command + Z**. Users can record a different key combination for each action in Settings; combinations must be unique. **Option + Command + X** remains reserved as the shared close shortcut for interactive transient popups. The menu-bar popover's close badge shows the configured Fix shortcut, and that shortcut closes the menu-bar popover while it is open. When Fix keeps its default shortcut, the shared dismissal takes priority while any interactive popup is open. After Fix is remapped, its shortcut closes the menu-bar popover, and **Option + Command + X** remains the shared dismissal shortcut for transient popups. Onboarding teaches the current Fix and Actions shortcuts.
+The default shortcuts are Fix **Option + Command + X**, Actions **Option + Command + A**, and Peek **Option + Command + Z**. Users can record a different key combination for each action in Settings; combinations must be unique. **Option + Command + X** remains reserved as the shared close shortcut for interactive transient popups. The menu-bar popover's close badge shows the configured Fix shortcut, and that shortcut closes the menu-bar popover while it is open. When Fix keeps its default shortcut, the shared dismissal takes priority while any interactive popup is open. After Fix is remapped, its shortcut closes the menu-bar popover, and **Option + Command + X** remains the shared dismissal shortcut for transient popups. Onboarding teaches the current Fix, Actions, and Peek shortcuts.
 
 The long-term aspiration is a highly intelligent assistant that understands what the user meant. Until quality can be validated confidently, conservative correction is preferred over ambitious rewriting.
 
@@ -71,7 +71,7 @@ The durable boundary is simple:
 
 1. **Speed comes first.** Every unnecessary window, confirmation, click, and focus change weakens the product.
 2. **Clean output earns trust.** Fast nonsense is not useful. Ambitious transformations require an explicit user action.
-3. **Stay out of the way.** Qwixit should live quietly on the computer and appear only when invoked or when a real recovery action is necessary.
+3. **Stay out of the way.** hotkeygo should live quietly on the computer and appear only when invoked or when a real recovery action is necessary.
 4. **Selected text remains central.** Preserve the user's place, selection, and active application. Restore the clipboard after capture fallbacks and Actions; Fix leaves its result there as a manual paste backup.
 5. **Keyboard first, never keyboard only.** Core workflows must be fast from the keyboard, while every visible action remains genuinely clickable and accessible.
 6. **Confident personality, restrained footprint.** The product may feel stylish, punk, and bold without becoming loud, decorative, or attention-seeking.
@@ -79,17 +79,17 @@ The durable boundary is simple:
 
 ## Privacy position
 
-Qwixit is built around speed and anonymity.
+hotkeygo is built around speed and anonymity.
 
-- Selected text and generated output must not be persisted or logged in Qwixit storage. Fix intentionally leaves the generated replacement on the system clipboard so the user can press ⌘V if the automatic paste is missing.
+- Selected text and generated output must not be persisted or logged in hotkeygo storage. Fix intentionally leaves the generated replacement on the system clipboard so the user can press ⌘V if the automatic paste is missing.
 - OpenAI requests use `store: false`.
 - The app offers GPT-5.6 Luna and Claude Haiku 5.5. It sends the selected text only to the provider the user chose; provider credentials stay in Cloudflare Worker secrets. Claude requests use structured outputs, which Anthropic documents as zero data retention for prompts and responses (the schema may be cached for up to 24 hours).
-- Qwixit currently has no user account. A random device-local installation ID exists only to enforce quota and associate subscription state.
-- The owner approved internal operational analytics on 2026-10-23. Tokiri currently has one user, so the dashboard is for owner diagnostics: Action request errors, request outcomes, app response time, the combined network/app overhead for Fix and Actions, model-provider time, Worker/ledger time, and requests still pending after 10 seconds. The Worker stores daily aggregates by UTC day, provider, task, outcome, fixed error reason, and slow-request phase; the app reports only elapsed time with fixed provider/task labels. The Fix and Actions network estimate is app time minus Worker time, so it combines both network directions and app overhead; it cannot isolate one-way latency. Peek is streamed, so its app and Worker timings run through stream completion. App-side measurements begin with builds containing the reporter. No installation IDs, IP addresses, selected text, prompts, model output, or text-derived hashes are stored; daily aggregates expire after 365 days. Other event families or per-installation views need a separate product decision.
+- hotkeygo currently has no user account. A random device-local installation ID exists only to enforce quota and associate subscription state.
+- The owner approved internal operational analytics on 2026-10-23. hotkeygo currently has one user, so the dashboard is for owner diagnostics: Action request errors, request outcomes, app response time, the combined network/app overhead for Fix and Actions, model-provider time, Worker/ledger time, and requests still pending after 10 seconds. The Worker stores daily aggregates by UTC day, provider, task, outcome, fixed error reason, and slow-request phase; the app reports only elapsed time with fixed provider/task labels. The Fix and Actions network estimate is app time minus Worker time, so it combines both network directions and app overhead; it cannot isolate one-way latency. Peek is streamed, so its app and Worker timings run through stream completion. App-side measurements begin with builds containing the reporter. No installation IDs, IP addresses, selected text, prompts, model output, or text-derived hashes are stored; daily aggregates expire after 365 days. Other event families or per-installation views need a separate product decision.
 
 ## Business model
 
-The current model is 30 free AI actions per installation per calendar month and $10/month for Qwixit Advanced. Advanced gives more room to work, with a fair-use ceiling (proposed: 300 actions per UTC day, 3 000 per month), while keeping the same careful Fix quality bar. Fix, Actions, and Peek accept up to about 2 pages (6 000 characters); longer selections are rejected in the app before any request. This is a working hypothesis with several purposes:
+The current model is 30 free AI actions per installation per calendar month and $10/month for hotkeygo Advanced. Advanced gives more room to work, with a fair-use ceiling (proposed: 300 actions per UTC day, 3 000 per month), while keeping the same careful Fix quality bar. Fix, Actions, and Peek accept up to about 2 pages (6 000 characters); longer selections are rejected in the app before any request. This is a working hypothesis with several purposes:
 
 - let the app remain installed and useful without immediate payment;
 - expose natural usage and limit behavior;
@@ -100,7 +100,7 @@ The exact allowance, price, and packaging may change. Do not treat them as the p
 
 ## Current stage and priorities
 
-Qwixit is preparing for its first public macOS distribution. The immediate priority is to harden the complete commercial flow:
+hotkeygo is preparing for its first public macOS distribution. The immediate priority is to harden the complete commercial flow:
 
 `install → onboard → use 30 actions → reach limit → subscribe → unlock Advanced → restore state`
 

@@ -17,7 +17,7 @@ try {
     [
       "add-generic-password",
       "-U",
-      "-s", "ai.qwixit.development",
+      "-s", "ai.hotkeygo.development",
       "-a", "worker-reset-secret",
       "-w", secret,
     ],

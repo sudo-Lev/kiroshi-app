@@ -1,4 +1,4 @@
-# Tokiri activity dashboard
+# hotkeygo activity dashboard
 
 This is a static Cloudflare Pages site for the owner. It reads aggregate analytics from the Worker API; it does not store event data itself.
 

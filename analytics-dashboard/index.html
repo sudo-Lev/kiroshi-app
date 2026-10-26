@@ -5,19 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f9f8fc">
     <meta name="robots" content="noindex, nofollow">
-    <title>Tokiri · Activity</title>
-    <link rel="icon" href="/assets/tokiri-mark-light.svg" type="image/svg+xml">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="hotkeygo">
+    <meta property="og:title" content="hotkeygo · Activity">
+    <meta property="og:image" content="/assets/og-hotkeygo.png">
+    <meta property="og:image:width" content="1397">
+    <meta property="og:image:height" content="348">
+    <title>hotkeygo · Activity</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/favicon.ico" sizes="any" type="image/x-icon">
+    <link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+    <link rel="icon" href="/assets/favicon-48.png" sizes="48x48" type="image/png">
+    <link rel="icon" href="/assets/favicon-16.png" sizes="16x16" type="image/png">
+    <link rel="apple-touch-icon" href="/assets/favicon-180.png" sizes="180x180">
+    <link rel="manifest" href="/site.webmanifest">
     <link rel="stylesheet" href="/styles.css">
     <script defer src="/app.js"></script>
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Tokiri activity dashboard">
+      <a class="brand" href="/" aria-label="hotkeygo activity dashboard">
         <picture>
-          <source srcset="/assets/tokiri-mark-dark.svg" media="(prefers-color-scheme: dark)">
-          <img src="/assets/tokiri-mark-light.svg" width="28" height="28" alt="">
+          <source media="(prefers-color-scheme: dark)" srcset="/assets/wordmark-dark.svg">
+          <img src="/assets/wordmark-light.svg" alt="">
         </picture>
-        <span>Tokiri</span>
       </a>
       <div class="toolbar" aria-label="Dashboard controls">
         <label class="range-control" for="rangeSelect">
@@ -152,7 +163,7 @@
           <div class="report-heading">
             <div>
               <h2 id="taskTitle">Features</h2>
-              <p>See which parts of Tokiri you use most.</p>
+              <p>See which parts of hotkeygo you use most.</p>
             </div>
           </div>
           <div class="report-body">
@@ -169,7 +180,7 @@
           <div class="report-heading">
             <div>
               <h2 id="errorTitle">Errors to review</h2>
-              <p>See what went wrong and whether it came from the model or Tokiri.</p>
+              <p>See what went wrong and whether it came from the model or hotkeygo.</p>
             </div>
           </div>
           <div class="report-body">
@@ -202,6 +213,12 @@
         </section>
 
         <footer class="privacy-note">
+          <a class="footer-brand" href="/" aria-label="hotkeygo activity dashboard">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="/assets/wordmark-dark.svg">
+              <img src="/assets/wordmark-light.svg" alt="">
+            </picture>
+          </a>
           <span>Daily totals only · no device IDs, selected text, prompts, or model responses</span>
           <button class="text-button" id="disconnectButton" type="button">Disconnect</button>
         </footer>
