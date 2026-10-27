@@ -3,275 +3,6 @@ import XCTest
 @testable import HotkeyGo
 
 @MainActor
-final class OnboardingViewModelTests: XCTestCase {
-    func testStartsAtWelcomeAndAdvancesToAccess() {
-        let model = makeModel()
-
-        XCTAssertEqual(model.step, 0)
-        XCTAssertEqual(model.phase, .idle)
-        XCTAssertTrue(model.canContinue)
-
-        model.advance()
-
-        XCTAssertEqual(model.step, 1)
-        XCTAssertTrue(model.canContinue)
-    }
-
-    func testAccessCanBeDeferredWithoutChangingStepState() {
-        let accessibility = OnboardingAccessibilityStub()
-        let model = makeModel(accessibility: accessibility)
-        model.step = 1
-
-        model.requestAccessibility()
-
-        XCTAssertTrue(accessibility.didRequestPermission)
-        XCTAssertTrue(model.isRequestingAccessibility)
-        XCTAssertEqual(model.phase, .idle)
-        XCTAssertTrue(model.canContinue)
-    }
-
-    func testGrantedAccessibilityWaitsForExplicitContinue() {
-        let accessibility = OnboardingAccessibilityStub()
-        let model = makeModel(accessibility: accessibility)
-        model.step = 1
-
-        model.requestAccessibility()
-        accessibility.isTrusted = true
-        model.refreshAccessibility()
-
-        XCTAssertTrue(model.accessibilityGranted)
-        XCTAssertFalse(model.isRequestingAccessibility)
-        XCTAssertTrue(model.canContinue)
-        XCTAssertEqual(model.step, 1)
-
-        model.advance()
-        XCTAssertEqual(model.step, 2)
-    }
-
-    func testAlreadyGrantedAccessibilityDoesNotSkipAccessStep() {
-        let accessibility = OnboardingAccessibilityStub()
-        accessibility.isTrusted = true
-        let model = OnboardingModel(accessibility: accessibility, initialStep: 1)
-
-        model.refreshAccessibility()
-
-        XCTAssertTrue(model.accessibilityGranted)
-        XCTAssertEqual(model.step, 1)
-        XCTAssertTrue(model.canContinue)
-    }
-
-    func testFixHotkeyStartsLocalProcessing() {
-        let model = makeModel()
-        model.step = 2
-
-        model.handleMainHotkey()
-
-        XCTAssertEqual(model.phase, .processing)
-        XCTAssertEqual(model.originalText, "helo i thnik this sentnce sound wierd")
-        XCTAssertTrue(model.hasRealInput)
-    }
-
-    func testActionsHotkeyOpensPalette() {
-        let model = makeModel()
-        model.step = 3
-
-        model.handleActionHotkey()
-        XCTAssertEqual(model.phase, .palette)
-    }
-
-    func testPaletteChoiceStartsReplacement() {
-        let model = makeModel()
-        model.step = 3
-        model.handleActionHotkey()
-
-        model.chooseAction(.polish)
-
-        XCTAssertEqual(model.choice, .polish)
-        XCTAssertEqual(model.phase, .processing)
-    }
-
-    func testActionsNumberKeysMatchTheFourVisibleChoices() {
-        let model = makeModel()
-        model.step = 3
-        model.handleActionHotkey()
-
-        XCTAssertEqual(model.actionPaletteRows.map(\.title), ["Ukrainian", "Polish", "Slack style", "Make formal"])
-        XCTAssertEqual(model.actionPaletteSeparatorCount, 1)
-        model.chooseNumber(3)
-
-        XCTAssertEqual(model.choice, .slack)
-        XCTAssertEqual(model.phase, .processing)
-    }
-
-    func testActionSearchKeepsNumberEntryAndReturnSelectionInSync() {
-        let model = makeModel()
-        model.step = 3
-        model.handleActionHotkey()
-        model.actionQuery = "formal"
-
-        XCTAssertEqual(model.actionPaletteRows.map(\.title), ["Make formal"])
-        XCTAssertFalse(model.chooseNumber(1))
-        model.confirmSelection()
-
-        XCTAssertEqual(model.choice, .formal)
-        XCTAssertEqual(model.phase, .processing)
-    }
-
-    func testPeekHotkeyOpensLanguageChooserAndEscapeClosesIt() async throws {
-        let model = makeModel()
-        model.step = 4
-        let originalText = model.originalText
-
-        model.handlePeekHotkey()
-
-        XCTAssertEqual(model.phase, .peekChoice)
-        XCTAssertEqual(model.peekChoices.map(\.name), ["Українська", "Polski", "Français", "English"])
-        XCTAssertFalse(model.canContinue)
-        XCTAssertEqual(model.originalText, originalText)
-        XCTAssertTrue(model.escapeOverlay())
-        XCTAssertEqual(model.phase, .idle)
-        XCTAssertFalse(model.canContinue)
-
-        try await Task.sleep(for: .milliseconds(1_000))
-        XCTAssertEqual(model.phase, .idle)
-    }
-
-    func testPeekPracticeShortcutIsConsumedAndOpensLanguageChooser() throws {
-        let model = makeModel()
-        model.step = 4
-        let event = try XCTUnwrap(NSEvent.keyEvent(
-            with: .keyDown,
-            location: .zero,
-            modifierFlags: [.option, .command],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            characters: "z",
-            charactersIgnoringModifiers: "z",
-            isARepeat: false,
-            keyCode: 0x06
-        ))
-
-        XCTAssertTrue(OnboardingHotkeyRouter.routePracticeShortcut(
-            event,
-            model: model,
-            fix: .defaultMain,
-            actions: .actions,
-            peek: .peek
-        ))
-        XCTAssertEqual(model.phase, .peekChoice)
-        XCTAssertFalse(model.canContinue)
-    }
-
-    func testPeekChooserSelectionShowsProcessingThenTranslation() async throws {
-        let model = makeModel()
-        model.step = 4
-        model.handlePeekHotkey()
-
-        XCTAssertTrue(model.choosePeekNumber(2))
-        XCTAssertEqual(model.phase, .peekProcessing)
-        XCTAssertEqual(model.peekLanguage, .polish)
-        XCTAssertFalse(model.canContinue)
-
-        try await Task.sleep(for: .milliseconds(1_100))
-
-        XCTAssertEqual(model.phase, .peek)
-        XCTAssertTrue(model.canContinue)
-        XCTAssertEqual(model.originalText, "¿Nos vemos frente a la estación sobre el mediodía?")
-        XCTAssertEqual(model.peekLanguage.result, "Czy spotkamy się przed dworcem około południa?")
-        XCTAssertTrue(model.escapeOverlay())
-        XCTAssertEqual(model.phase, .peekDone)
-        XCTAssertTrue(model.canContinue)
-    }
-
-    func testPeekSearchFiltersLanguagesAndNumbersChooseVisibleRows() {
-        let model = makeModel()
-        model.step = 4
-        model.handlePeekHotkey()
-        model.peekQuery = "fran"
-
-        XCTAssertEqual(model.peekChoices.map(\.name), ["Français"])
-        XCTAssertTrue(model.choosePeekNumber(1))
-        XCTAssertEqual(model.peekLanguage, .french)
-        XCTAssertEqual(model.phase, .peekProcessing)
-    }
-
-    func testPeekResultCanSwitchLanguageAndRunsProcessingAgain() async throws {
-        let model = makeModel()
-        model.step = 4
-        model.handlePeekHotkey()
-        model.choosePeekLanguage(at: 0)
-        try await Task.sleep(for: .milliseconds(1_000))
-        XCTAssertEqual(model.phase, .peek)
-
-        model.cyclePeekLanguage()
-
-        XCTAssertEqual(model.peekLanguage, .polish)
-        XCTAssertEqual(model.phase, .peekProcessing)
-        try await Task.sleep(for: .milliseconds(1_000))
-        XCTAssertEqual(model.phase, .peek)
-    }
-
-    func testSkippingPeekCancelsItsLoadingTask() async throws {
-        let model = makeModel()
-        model.step = 4
-        model.handlePeekHotkey()
-        model.choosePeekLanguage(at: 0)
-
-        model.skipPractice()
-
-        XCTAssertEqual(model.phase, .skipped)
-        XCTAssertTrue(model.canContinue)
-        try await Task.sleep(for: .milliseconds(1_000))
-        XCTAssertEqual(model.phase, .skipped)
-    }
-
-    func testCanGoBackThroughCompletedSteps() {
-        let model = makeModel()
-        model.step = 3
-        model.handleActionHotkey()
-
-        model.goBack()
-
-        XCTAssertEqual(model.step, 2)
-        XCTAssertEqual(model.phase, .idle)
-    }
-
-    func testSkipCompletesOnlyPracticeSteps() {
-        let model = makeModel()
-        model.step = 2
-
-        model.skipPractice()
-
-        XCTAssertEqual(model.phase, .skipped)
-        XCTAssertTrue(model.canContinue)
-    }
-
-    func testSkippingPeekCanStillContinue() {
-        let model = makeModel()
-        model.step = 4
-
-        model.skipPractice()
-
-        XCTAssertEqual(model.phase, .skipped)
-        XCTAssertTrue(model.canContinue)
-    }
-
-    private func makeModel(accessibility: OnboardingAccessibilityStub = OnboardingAccessibilityStub()) -> OnboardingModel {
-        OnboardingModel(accessibility: accessibility)
-    }
-}
-
-private final class OnboardingAccessibilityStub: AccessibilityServicing {
-    var isTrusted = false
-    private(set) var didRequestPermission = false
-    func requestPermission() { didRequestPermission = true }
-    func selectedText() async -> String? { nil }
-    func selectionBounds() -> CGRect? { nil }
-    func fallbackPoint() -> CGPoint { .zero }
-}
-
-@MainActor
 final class SettingsBillingTests: XCTestCase {
     func testCheckoutPollSurvivesRefreshUntilSubscriptionBecomesActive() async throws {
         let suiteName = "SettingsBillingTests.\(UUID().uuidString)"
@@ -284,7 +15,7 @@ final class SettingsBillingTests: XCTestCase {
             BillingStatus(plan: "advanced", subscriptionStatus: "active", remaining: nil, period: "2026-10"),
         ])
         let model = SettingsViewModel(
-            accessibility: OnboardingAccessibilityStub(),
+            accessibility: SettingsAccessibilityStub(),
             checkout: SuccessfulCheckoutStub(),
             billingStatus: billing,
             billingPollInterval: .milliseconds(100),
@@ -316,7 +47,7 @@ final class SettingsBillingTests: XCTestCase {
             BillingStatus(plan: "advanced", subscriptionStatus: "active", remaining: nil, period: "2026-10"),
         ])
         let model = SettingsViewModel(
-            accessibility: OnboardingAccessibilityStub(),
+            accessibility: SettingsAccessibilityStub(),
             checkout: SuccessfulCheckoutStub(),
             billingStatus: billing,
             billingPollInterval: .milliseconds(10),
@@ -344,7 +75,7 @@ final class SettingsBillingTests: XCTestCase {
             BillingStatus(plan: "advanced", subscriptionStatus: "active", remaining: nil, period: "2026-10"),
         ])
         let model = SettingsViewModel(
-            accessibility: OnboardingAccessibilityStub(),
+            accessibility: SettingsAccessibilityStub(),
             checkout: SuccessfulCheckoutStub(),
             billingStatus: billing,
             billingPollInterval: .seconds(30),
@@ -461,7 +192,7 @@ final class SettingsHotkeyTests: XCTestCase {
     }
 
     private func makeSettings(defaults: UserDefaults) -> SettingsViewModel {
-        SettingsViewModel(accessibility: OnboardingAccessibilityStub(), defaults: defaults)
+        SettingsViewModel(accessibility: SettingsAccessibilityStub(), defaults: defaults)
     }
 }
 
@@ -526,4 +257,13 @@ final class HotkeyGoUsageTests: XCTestCase {
             ]
         ))
     }
+}
+
+
+private final class SettingsAccessibilityStub: AccessibilityServicing {
+    var isTrusted = false
+    func requestPermission() {}
+    func selectedText() async -> String? { nil }
+    func selectionBounds() -> CGRect? { nil }
+    func fallbackPoint() -> CGPoint { .zero }
 }

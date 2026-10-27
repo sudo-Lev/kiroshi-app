@@ -851,7 +851,7 @@ These files are the final authority if a numeric or behavioral ambiguity remains
 - `HotkeyGo/Features/Palette/Presentation/ResultHUDController.swift`
 - `HotkeyGo/Features/Peek/Presentation/PeekView.swift`
 - `HotkeyGo/Features/Peek/Presentation/PeekPanelController.swift`
-- `HotkeyGo/Features/Settings/Presentation/OnboardingView.swift`
+- `HotkeyGo/Features/Onboarding/Presentation/OnboardingView.swift`
 - `HotkeyGo/Features/Settings/Presentation/SettingsView.swift`
 - `HotkeyGo/Features/Settings/Presentation/MenuBarView.swift`
 - `HotkeyGo/App/HotkeyGoApp.swift`

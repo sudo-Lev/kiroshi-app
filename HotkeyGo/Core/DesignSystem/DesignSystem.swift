@@ -1367,6 +1367,7 @@ struct PopupPlainRowButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .frame(maxWidth: .infinity, minHeight: 41, maxHeight: 41)
             .background {
                 HotkeyGoControlShape(cut: 6)
                     .fill((configuration.isPressed || isHovering) ? HotkeyGoColor.surfaceHover : .clear)

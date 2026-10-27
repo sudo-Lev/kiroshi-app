@@ -239,7 +239,6 @@ struct HotkeyGoActionPalette: View {
                 .id(index)
         } else {
             Button { onSelect(index) } label: { label }
-                .frame(height: 41)
                 .buttonStyle(HotkeyGoUI.PopupPlainRowButton())
                 .accessibilityLabel("\(row.title), shortcut \(index + 1)")
                 .id(index)

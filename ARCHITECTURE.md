@@ -46,6 +46,7 @@ Presentation → Domain ← Data / Infrastructure
 - Data and infrastructure types implement those protocols.
 - `App` normally chooses concrete implementations and connects feature entry points.
 - A feature must not reach into another feature's presentation layer. Shared behavior moves to `Core` or an app-wide infrastructure contract.
+- `Core/Language/LanguageSupport.swift` owns language detection and translation-language catalogs shared by Palette, Peek, and onboarding.
 - Feature views use HotkeyGoUI for matching controls and icons. A missing primitive is documented in `docs/HOTKEYGO_UI.md`; native SwiftUI/AppKit is the temporary fallback, with the gap called out to the owner. HotkeyGoUI owns appearance and interaction primitives, not view-model state, business rules, or AppKit window lifecycles.
 
 ## Composition and lifecycle
@@ -155,7 +156,8 @@ These invariants are core behavior, not cosmetic implementation details.
 
 - Observable presentation models end in `ViewModel`, not `Store`.
 - Window owners end in `WindowController`; transient panel owners end in `PanelController`.
-- Global settings live in `SettingsViewModel`; one-shot correction state lives in `QuickImproveViewModel`.
+- User-editable settings live in `SettingsViewModel`; onboarding progress, access checks, and local practice state live in `OnboardingViewModel`; one-shot correction state lives in `QuickImproveViewModel`.
+- Onboarding's root view composes focused step views and practice surfaces. Its feature controller owns the onboarding window and local keyboard routing; `AppDelegate` injects the current shortcut bindings.
 - Expose read-only state unless mutation is a genuine user-editable binding.
 - Retain long-running `Task` instances and cancel them when their owner stops or supersedes the work.
 

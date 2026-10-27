@@ -1,78 +1,9 @@
 import AppKit
 import Foundation
 
-enum OnboardingPhase: Equatable {
-    case idle
-    case processing
-    case typing
-    case palette
-    case peekChoice
-    case peekProcessing
-    case peek
-    case peekDone
-    case skipped
-    case done
-}
-
-enum OnboardingPeekLanguage: Int, CaseIterable, Identifiable, Equatable {
-    case ukrainian
-    case polish
-    case french
-    case english
-
-    var id: Int { rawValue }
-
-    var name: String {
-        switch self {
-        case .ukrainian: "Українська"
-        case .polish: "Polski"
-        case .french: "Français"
-        case .english: "English"
-        }
-    }
-
-    var result: String {
-        switch self {
-        case .ukrainian: "Чи зустрінемося біля вокзалу близько полудня?"
-        case .polish: "Czy spotkamy się przed dworcem około południa?"
-        case .french: "On se retrouve devant la gare vers midi ?"
-        case .english: "Shall we meet in front of the station around noon?"
-        }
-    }
-}
-
-enum OnboardingChoice: Int, CaseIterable, Identifiable {
-    case ukrainian
-    case polish
-    case slack
-    case formal
-
-    var id: Int { rawValue }
-
-    var title: String {
-        switch self {
-        case .slack: "Slack style"
-        case .formal: "Make formal"
-        case .ukrainian: "Ukrainian"
-        case .polish: "Polish"
-        }
-    }
-
-    var result: String {
-        switch self {
-        case .slack: "Hey, could you send me the file when you get a sec?"
-        case .formal: "Could you please send me the file at your earliest convenience?"
-        case .ukrainian: "Можеш надіслати мені файл якнайшвидше, будь ласка?"
-        case .polish: "Możesz wysłać mi plik jak najszybciej?"
-        }
-    }
-
-    var isRewrite: Bool { self == .slack || self == .formal }
-}
-
 @MainActor
-final class OnboardingModel: ObservableObject {
-    @Published var step = 0 {
+final class OnboardingViewModel: ObservableObject {
+    @Published private(set) var step: OnboardingStep {
         didSet {
             guard step != oldValue else { return }
             cancelTasks()
@@ -80,7 +11,6 @@ final class OnboardingModel: ObservableObject {
         }
     }
     @Published private(set) var phase: OnboardingPhase = .idle
-    @Published private(set) var choice: OnboardingChoice?
     @Published private(set) var typed = ""
     @Published private(set) var accessibilityGranted: Bool
     @Published private(set) var isRequestingAccessibility = false
@@ -94,6 +24,7 @@ final class OnboardingModel: ObservableObject {
     @Published private(set) var peekLanguage = OnboardingPeekLanguage.ukrainian
     @Published private(set) var peekCopied = false
     @Published private(set) var hasRealInput = false
+    let detectedLanguage: DetectedLanguage?
     @Published var actionQuery = "" {
         didSet {
             if actionQuery != oldValue { actionSelectionIndex = 0 }
@@ -105,40 +36,46 @@ final class OnboardingModel: ObservableObject {
         }
     }
 
-    let accessibility: AccessibilityServicing
-    private var tasks: [Task<Void, Never>] = []
+    private let accessibility: AccessibilityServicing
+    private let defaults: UserDefaults
+    private var activeTask: Task<Void, Never>?
 
     init(
         accessibility: AccessibilityServicing,
-        initialStep: Int = 0,
+        detector: LanguageDetecting = LanguageDetector(),
+        defaults: UserDefaults = .standard,
+        initialStep: OnboardingStep = .welcome,
         initialPhase: OnboardingPhase = .idle
     ) {
         self.accessibility = accessibility
+        self.defaults = defaults
         accessibilityGranted = accessibility.isTrusted
+        detectedLanguage = detector.detect(Self.peekSampleText)
         step = initialStep
         phase = initialPhase
     }
 
-    deinit { tasks.forEach { $0.cancel() } }
+    deinit { activeTask?.cancel() }
 
     func stop() { cancelTasks() }
 
+    var hasCompletedOnboarding: Bool {
+        defaults.bool(forKey: AppPreferenceKey.hasCompletedOnboarding)
+    }
+
     var canContinue: Bool {
         switch step {
-        case 0: true
-        case 1: true
-        case 2...3: phase == .done || phase == .skipped
-        case 4: phase == .peek || phase == .peekDone || phase == .done || phase == .skipped
-        case 5: true
-        default: false
+        case .welcome, .accessibility, .complete: true
+        case .fix, .actions: phase == .done || phase == .skipped
+        case .peek: phase == .peek || phase == .peekDone || phase == .done || phase == .skipped
         }
     }
 
     var originalText: String {
         switch step {
-        case 3: actionsSample
-        case 4: "¿Nos vemos frente a la estación sobre el mediodía?"
-        default: "helo i thnik this sentnce sound wierd"
+        case .actions: actionsSample
+        case .peek: Self.peekSampleText
+        case .welcome, .accessibility, .fix, .complete: "helo i thnik this sentnce sound wierd"
         }
     }
 
@@ -155,26 +92,11 @@ final class OnboardingModel: ObservableObject {
         return orderedLanguages.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
-    var peekContextLabel: String { "Spanish · \(originalText.split(whereSeparator: \.isWhitespace).count) words" }
-
-    var actionPaletteRows: [HotkeyGoUI.ActionPaletteRow] {
-        var hasTranslation = false
-        var hasSeenRewrite = false
-        return actionChoices.map { choice in
-            let startsNewGroup = choice.isRewrite && hasTranslation && !hasSeenRewrite
-            if !choice.isRewrite { hasTranslation = true }
-            if choice.isRewrite { hasSeenRewrite = true }
-            return HotkeyGoUI.ActionPaletteRow(
-                id: String(describing: choice),
-                title: choice.title,
-                startsNewGroup: startsNewGroup
-            )
-        }
-    }
+    var peekWordCount: Int { Self.peekSampleText.split(whereSeparator: \.isWhitespace).count }
+    var peekDetectedLanguageName: String { detectedLanguage?.displayName ?? "Unknown language" }
+    var peekContextLabel: String { "\(peekDetectedLanguageName) · \(peekWordCount) words" }
 
     var actionContextLabel: String { "English · \(actionsSample.split(whereSeparator: \.isWhitespace).count) words" }
-    var actionPaletteSeparatorCount: Int { actionPaletteRows.filter(\.startsNewGroup).count }
-    var actionPaletteFooter: String { "Sample only · no request is sent" }
 
     func refreshAccessibility() {
         accessibilityGranted = accessibility.isTrusted
@@ -202,17 +124,27 @@ final class OnboardingModel: ObservableObject {
     }
 
     func advance() {
-        guard canContinue, step < 5 else { return }
-        step += 1
+        guard canContinue, let nextStep = step.next else { return }
+        step = nextStep
     }
 
     func goBack() {
-        guard step > 0 else { return }
-        step -= 1
+        guard let previousStep = step.previous else { return }
+        step = previousStep
+    }
+
+    func goBack(to destination: OnboardingStep) {
+        guard destination.precedes(step) else { return }
+        step = destination
+    }
+
+    func showAccessibilityStep() {
+        guard hasCompletedOnboarding else { return }
+        step = .accessibility
     }
 
     func skipPractice() {
-        guard (2...4).contains(step) else { return }
+        guard step.isPractice else { return }
         cancelTasks()
         phase = .skipped
     }
@@ -226,13 +158,13 @@ final class OnboardingModel: ObservableObject {
 
     func handleMainHotkey() {
         hasRealInput = true
-        guard step == 2, phase == .idle else { return }
+        guard step == .fix, phase == .idle else { return }
         runReplacement("Hello, I think this sentence sounds weird.")
     }
 
     func handleActionHotkey() {
         hasRealInput = true
-        guard step == 3, phase == .idle else { return }
+        guard step == .actions, phase == .idle else { return }
         phase = .palette
         actionQuery = ""
         actionSelectionIndex = 0
@@ -240,7 +172,7 @@ final class OnboardingModel: ObservableObject {
 
     func handlePeekHotkey() {
         hasRealInput = true
-        guard step == 4, phase == .idle || phase == .peekDone else { return }
+        guard step == .peek, phase == .idle || phase == .peekDone else { return }
         peekQuery = ""
         peekSelectionIndex = 0
         peekCopied = false
@@ -295,7 +227,7 @@ final class OnboardingModel: ObservableObject {
     }
 
     func choosePeekLanguage(at index: Int) {
-        guard step == 4, phase == .peekChoice, peekChoices.indices.contains(index) else { return }
+        guard step == .peek, phase == .peekChoice, peekChoices.indices.contains(index) else { return }
         startPeekTranslation(peekChoices[index])
     }
 
@@ -324,17 +256,27 @@ final class OnboardingModel: ObservableObject {
     }
 
     func chooseAction(_ action: OnboardingChoice) {
-        guard step == 3, phase == .palette else { return }
-        choice = action
+        guard step == .actions, phase == .palette else { return }
         runReplacement(action.result)
     }
 
     func restart() {
         cancelTasks()
-        step = 0
+        step = .welcome
         resetStepState()
         refreshAccessibility()
     }
+
+    func completeOnboarding() {
+        defaults.set(true, forKey: AppPreferenceKey.hasCompletedOnboarding)
+    }
+
+#if DEBUG
+    func resetOnboardingForTesting() {
+        defaults.removeObject(forKey: AppPreferenceKey.hasCompletedOnboarding)
+        restart()
+    }
+#endif
 
     private func runReplacement(_ result: String) {
         cancelTasks()
@@ -367,15 +309,15 @@ final class OnboardingModel: ObservableObject {
         isRequestingAccessibility = false
         addTask { [weak self] in
             try? await Task.sleep(for: .milliseconds(900))
-            guard !Task.isCancelled, let self, step == 4, phase == .peekProcessing else { return }
+            guard !Task.isCancelled, let self, step == .peek, phase == .peekProcessing else { return }
             phase = .peek
         }
     }
 
     private func resetStepState() {
         phase = .idle
-        choice = nil
         typed = ""
+        isRequestingAccessibility = false
         actionQuery = ""
         controlDown = false
         optionDown = false
@@ -391,13 +333,15 @@ final class OnboardingModel: ObservableObject {
     }
 
     private func addTask(_ operation: @escaping @MainActor () async -> Void) {
-        tasks.append(Task { await operation() })
+        activeTask?.cancel()
+        activeTask = Task { await operation() }
     }
 
     private func cancelTasks() {
-        tasks.forEach { $0.cancel() }
-        tasks.removeAll()
+        activeTask?.cancel()
+        activeTask = nil
     }
 
     private var actionsSample: String { "yo can u send me the file asap pls" }
+    private static let peekSampleText = "¿Nos vemos frente a la estación sobre el mediodía?"
 }

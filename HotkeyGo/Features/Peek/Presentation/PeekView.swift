@@ -161,7 +161,6 @@ struct PeekView: View {
                 .id(index)
         } else {
             Button { viewModel.chooseLanguage(at: index) } label: { label }
-                .frame(height: 41)
                 .buttonStyle(HotkeyGoUI.PopupPlainRowButton())
                 .accessibilityLabel("Translate to \(language.name), shortcut \(index + 1)")
                 .id(index)

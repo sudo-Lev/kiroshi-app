@@ -13,6 +13,7 @@ struct HotkeyGoApp: App {
 @MainActor
 final class AppContainer {
     let settingsViewModel: SettingsViewModel
+    let onboardingViewModel: OnboardingViewModel
     let quickImproveViewModel: QuickImproveViewModel
     let popupDismiss = PopupDismissCoordinator()
     let feedback: FeedbackWindowController
@@ -34,9 +35,14 @@ final class AppContainer {
         let accessibility = AccessibilityService()
         LegacyMigration.run(isAccessibilityTrusted: accessibility.isTrusted)
         let improver = TextImprovementService()
-        let peekViewModel = PeekViewModel(client: PeekClient(), detector: LanguageDetector())
+        let languageDetector = LanguageDetector()
+        let peekViewModel = PeekViewModel(client: PeekClient(), detector: languageDetector)
         let settings = SettingsViewModel(accessibility: accessibility)
         settingsViewModel = settings
+        onboardingViewModel = OnboardingViewModel(
+            accessibility: accessibility,
+            detector: languageDetector
+        )
         feedback = FeedbackWindowController(
             popupDismiss: popupDismiss,
             onUpgrade: { settings.openStarterCheckout() }
@@ -49,7 +55,7 @@ final class AppContainer {
             onUpgrade: { settings.openStarterCheckout() }
         )
         palettePanel = PalettePanelController(
-            viewModel: PaletteViewModel(registry: ActionRegistry(), detector: LanguageDetector()),
+            viewModel: PaletteViewModel(registry: ActionRegistry(), detector: languageDetector),
             bridge: AXTextBridge(),
             improver: improver,
             hud: ResultHUDController(feedback: feedback),
@@ -123,9 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let settings = container.settingsViewModel
         settings.refreshUsage()
-        if !settings.hasCompletedOnboarding || settings.needsRenamePermission {
+        let onboarding = container.onboardingViewModel
+        if !onboarding.hasCompletedOnboarding || settings.needsRenamePermission {
             // Upgrading users only need the permission step again.
-            if settings.hasCompletedOnboarding { settings.onboarding.step = 1 }
+            if onboarding.hasCompletedOnboarding { onboarding.showAccessibilityStep() }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.showOnboarding()
             }
@@ -134,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         container.settingsViewModel.stop()
+        container.onboardingViewModel.stop()
         container.quickImproveViewModel.stop()
         container.peekHotkey.stop()
         container.fixHotkey.unregister()
@@ -142,7 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         container.settingsViewModel.refreshAccessibility()
-        container.settingsViewModel.onboarding.refreshAccessibility()
+        container.onboardingViewModel.refreshAccessibility()
         container.settingsViewModel.refreshUsage()
     }
 
@@ -151,14 +159,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func showOnboardingReplay() {
-        container.settingsViewModel.restartOnboarding()
+        container.onboardingViewModel.restart()
         showOnboarding()
     }
 
     private func showOnboarding() {
         let controller = onboardingWindowController
             ?? OnboardingWindowController(
-                viewModel: container.settingsViewModel,
+                viewModel: container.onboardingViewModel,
+                shortcuts: { [weak self] in
+                    guard let self else { return .standard }
+                    return OnboardingShortcuts(
+                        fix: container.settingsViewModel.mainHotkey,
+                        actions: container.settingsViewModel.actionsHotkey,
+                        peek: container.settingsViewModel.peekHotkey
+                    )
+                },
                 onFinish: { [weak self] in self?.finishOnboarding() }
             )
         onboardingWindowController = controller
@@ -167,14 +183,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showOnboardingForTesting() {
 #if DEBUG
-        container.settingsViewModel.resetOnboardingForTesting()
+        container.onboardingViewModel.resetOnboardingForTesting()
         showOnboarding()
 #endif
     }
 
     private func togglePeek() async {
         if onboardingWindowController?.isVisible == true {
-            container.settingsViewModel.onboarding.handlePeekHotkey()
+            container.onboardingViewModel.handlePeekHotkey()
             return
         }
         if container.peekPanel.isVisible {
@@ -222,7 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleFixHotkey() {
         if onboardingWindowController?.isVisible == true {
-            container.settingsViewModel.onboarding.handleMainHotkey()
+            container.onboardingViewModel.handleMainHotkey()
             return
         }
         if menuPopover.isShown {
@@ -238,7 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleActionHotkey() async {
         if onboardingWindowController?.isVisible == true {
-            container.settingsViewModel.onboarding.handleActionHotkey()
+            container.onboardingViewModel.handleActionHotkey()
             return
         }
         await container.palettePanel.toggle()
@@ -280,7 +296,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func finishOnboarding() {
-        container.settingsViewModel.completeOnboarding()
+        container.onboardingViewModel.completeOnboarding()
+        container.settingsViewModel.clearRenamePermissionAfterOnboarding()
     }
 
     private func showAbout() {
@@ -472,199 +489,6 @@ final class SettingsWindowController {
         }
 
         if let window { AppWindowPresenter.present(window) }
-    }
-}
-
-@MainActor
-final class OnboardingWindowController {
-    private let viewModel: SettingsViewModel
-    private let onFinish: () -> Void
-    private var window: NSWindow?
-    private var keyMonitor: Any?
-
-    init(viewModel: SettingsViewModel, onFinish: @escaping () -> Void) {
-        self.viewModel = viewModel
-        self.onFinish = onFinish
-    }
-
-    var isVisible: Bool { window?.isVisible == true }
-
-    func show() {
-        installKeyMonitorIfNeeded()
-        if window == nil {
-            let root = OnboardingView(
-                model: viewModel.onboarding,
-                fixShortcut: viewModel.mainHotkey,
-                actionShortcut: viewModel.actionsHotkey,
-                peekShortcut: viewModel.peekHotkey,
-                onFinish: { [weak self] in
-                    self?.close()
-                    self?.onFinish()
-                }
-            )
-            .frame(width: 820, height: 640)
-
-            let window = NSWindow(
-                contentRect: .init(x: 0, y: 0, width: 820, height: 640),
-                styleMask: [.titled, .closable, .fullSizeContentView],
-                backing: .buffered,
-                defer: false
-            )
-            window.title = "Welcome to hotkeygo"
-            window.setAccessibilityLabel("hotkeygo onboarding")
-            window.isReleasedWhenClosed = false
-            window.titlebarAppearsTransparent = true
-            window.titleVisibility = .hidden
-            window.isMovableByWindowBackground = true
-            window.backgroundColor = .clear
-            window.isOpaque = false
-            window.hasShadow = true
-            window.contentView = NSHostingView(rootView: root)
-            window.contentView?.wantsLayer = true
-            window.contentView?.layer?.cornerRadius = 12
-            window.contentView?.layer?.masksToBounds = true
-            window.center()
-            self.window = window
-        }
-
-        if let window { AppWindowPresenter.present(window) }
-    }
-
-    func close() {
-        window?.close()
-        window = nil
-    }
-
-    private func installKeyMonitorIfNeeded() {
-        guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
-            guard let self, isVisible else { return event }
-
-            if event.type == .flagsChanged {
-                viewModel.onboarding.updateModifiers(
-                    control: event.modifierFlags.contains(.control),
-                    option: event.modifierFlags.contains(.option),
-                    shift: event.modifierFlags.contains(.shift),
-                    command: event.modifierFlags.contains(.command)
-                )
-                return event
-            }
-
-            if OnboardingHotkeyRouter.routePracticeShortcut(
-                event,
-                model: viewModel.onboarding,
-                fix: viewModel.mainHotkey,
-                actions: viewModel.actionsHotkey,
-                peek: viewModel.peekHotkey
-            ) {
-                return nil
-            }
-
-            let onboarding = viewModel.onboarding
-            if onboarding.phase == .palette {
-                switch event.keyCode {
-                case 53:
-                    _ = onboarding.escapeOverlay()
-                case 126, 48:
-                    onboarding.moveSelection(by: -1)
-                case 125:
-                    onboarding.moveSelection(by: 1)
-                case 36, 76:
-                    onboarding.confirmSelection()
-                case 18...21:
-                    guard onboarding.chooseNumber(Int(event.keyCode - 17)) else { return event }
-                default:
-                    return event
-                }
-                return nil
-            }
-
-            if onboarding.phase == .peekChoice {
-                switch event.keyCode {
-                case 53:
-                    _ = onboarding.escapeOverlay()
-                case 126:
-                    onboarding.moveSelection(by: -1)
-                case 125:
-                    onboarding.moveSelection(by: 1)
-                case 48:
-                    onboarding.moveSelection(by: event.modifierFlags.contains(.shift) ? -1 : 1)
-                case 36, 76:
-                    onboarding.confirmSelection()
-                case 18...21:
-                    guard onboarding.choosePeekNumber(Int(event.keyCode - 17)) else { return event }
-                default:
-                    return event
-                }
-                return nil
-            }
-
-            if onboarding.step == 4,
-               (onboarding.phase == .peekProcessing || onboarding.phase == .peek),
-               event.keyCode == 53 {
-                _ = onboarding.escapeOverlay()
-                return nil
-            }
-
-            if onboarding.step == 4, onboarding.phase == .peek,
-               (event.keyCode == 36 || event.keyCode == 76 ||
-                (event.keyCode == 8 && event.modifierFlags.contains(.command))) {
-                onboarding.copyPeekResult()
-                return nil
-            }
-
-            if onboarding.step == 4, onboarding.phase == .peek {
-                switch event.keyCode {
-                case 48:
-                    onboarding.cyclePeekLanguage(by: event.modifierFlags.contains(.shift) ? -1 : 1)
-                    return nil
-                case 18...21:
-                    guard onboarding.choosePeekResultNumber(Int(event.keyCode - 17)) else { return event }
-                    return nil
-                default:
-                    break
-                }
-            }
-
-            if event.keyCode == 36 || event.keyCode == 76 {
-                guard onboarding.canContinue else { return event }
-                if onboarding.step == 5 { close(); onFinish() } else { onboarding.advance() }
-                return nil
-            }
-
-            if event.keyCode == 53 { close(); return nil }
-
-            return event
-        }
-    }
-
-    deinit {
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-    }
-}
-
-@MainActor
-enum OnboardingHotkeyRouter {
-    static func routePracticeShortcut(
-        _ event: NSEvent,
-        model: OnboardingModel,
-        fix: HotkeyBinding,
-        actions: HotkeyBinding,
-        peek: HotkeyBinding
-    ) -> Bool {
-        if actions.matches(event) {
-            model.handleActionHotkey()
-            return true
-        }
-        if fix.matches(event) {
-            model.handleMainHotkey()
-            return true
-        }
-        if peek.matches(event) {
-            model.handlePeekHotkey()
-            return true
-        }
-        return false
     }
 }
 

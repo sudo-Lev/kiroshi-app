@@ -6,7 +6,6 @@ protocol CheckoutOpening {
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
-    let onboarding: OnboardingModel
     @Published private(set) var accessibilityGranted: Bool
     @Published private(set) var remainingActions: Int?
     @Published private(set) var isAdvanced: Bool
@@ -59,10 +58,6 @@ final class SettingsViewModel: ObservableObject {
     var onPeekHotkeyChanged: ((HotkeyBinding) -> Bool)?
     var onActionHotkeyChanged: ((HotkeyBinding) -> Bool)?
     var onMainHotkeyChanged: ((HotkeyBinding) -> Bool)?
-    var hasCompletedOnboarding: Bool {
-        defaults.bool(forKey: AppPreferenceKey.hasCompletedOnboarding)
-    }
-
     private let accessibility: AccessibilityServicing
     private let checkout: CheckoutOpening
     private let billingStatus: BillingStatusChecking
@@ -82,7 +77,6 @@ final class SettingsViewModel: ObservableObject {
         defaults: UserDefaults = .standard
     ) {
         self.accessibility = accessibility
-        onboarding = OnboardingModel(accessibility: accessibility)
         self.checkout = checkout
         self.billingStatus = billingStatus
         self.billingPollInterval = billingPollInterval
@@ -178,11 +172,9 @@ final class SettingsViewModel: ObservableObject {
         billingRefreshGeneration += 1
         billingTask?.cancel()
         isPollingAfterCheckout = false
-        onboarding.stop()
     }
 
-    func completeOnboarding() {
-        defaults.set(true, forKey: AppPreferenceKey.hasCompletedOnboarding)
+    func clearRenamePermissionAfterOnboarding() {
         if accessibilityGranted { clearRenamePermission() }
     }
 
@@ -206,16 +198,7 @@ final class SettingsViewModel: ObservableObject {
         developerUsageScenario = scenario
         readCachedUsage()
     }
-
-    func resetOnboardingForTesting() {
-        defaults.removeObject(forKey: AppPreferenceKey.hasCompletedOnboarding)
-        restartOnboarding()
-    }
 #endif
-
-    func restartOnboarding() {
-        onboarding.restart()
-    }
 
     func requestAccessibility() {
         accessibility.requestPermission()
