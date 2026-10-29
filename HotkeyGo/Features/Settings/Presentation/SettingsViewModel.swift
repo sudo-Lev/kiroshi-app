@@ -7,8 +7,9 @@ protocol CheckoutOpening {
 @MainActor
 final class SettingsViewModel: ObservableObject {
     @Published private(set) var accessibilityGranted: Bool
-    @Published private(set) var remainingActions: Int?
-    @Published private(set) var isAdvanced: Bool
+    let planStatus: PlanStatus
+    var remainingActions: Int? { planStatus.remainingActions }
+    var isAdvanced: Bool { planStatus.isAdvanced }
 #if DEBUG
     @Published private(set) var developerUsageScenario: DeveloperUsageScenario
 #endif
@@ -67,13 +68,13 @@ final class SettingsViewModel: ObservableObject {
     private var billingTask: Task<Void, Never>?
     private var billingRefreshGeneration = 0
     private var isPollingAfterCheckout = false
-    private var usageObserver: NSObjectProtocol?
 
     init(
         accessibility: AccessibilityServicing,
         checkout: CheckoutOpening = PaddleCheckoutOpener(),
         billingStatus: BillingStatusChecking = BillingStatusClient(),
         billingPollInterval: Duration = .seconds(2),
+        planStatus: PlanStatus? = nil,
         defaults: UserDefaults = .standard
     ) {
         self.accessibility = accessibility
@@ -81,6 +82,7 @@ final class SettingsViewModel: ObservableObject {
         self.billingStatus = billingStatus
         self.billingPollInterval = billingPollInterval
         self.defaults = defaults
+        self.planStatus = planStatus ?? PlanStatus(defaults: defaults)
         accessibilityGranted = accessibility.isTrusted
         showSuccess = defaults.object(forKey: AppPreferenceKey.showSuccess) as? Bool ?? true
         reviewBeforeApplying = AppPreferences(defaults: defaults).reviewBeforeApplying
@@ -92,8 +94,6 @@ final class SettingsViewModel: ObservableObject {
 #if DEBUG
         developerUsageScenario = preferences.developerUsageScenario
 #endif
-        remainingActions = preferences.remainingActions
-        isAdvanced = preferences.isAdvanced
         peekTargetLanguage = preferences.peekTargetLanguage
         peekSmartDefault = preferences.peekSmartDefault
         peekRememberMode = preferences.peekRememberMode
@@ -103,17 +103,6 @@ final class SettingsViewModel: ObservableObject {
         peekHotkey = preferences.peekHotkey
         needsRenamePermission = defaults.bool(forKey: AppPreferenceKey.needsRenamePermission)
             && !accessibility.isTrusted
-        usageObserver = NotificationCenter.default.addObserver(
-            forName: HotkeyGoUsage.didChange,
-            object: defaults,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.readCachedUsage() }
-        }
-    }
-
-    deinit {
-        if let usageObserver { NotificationCenter.default.removeObserver(usageObserver) }
     }
 
     @discardableResult
@@ -205,16 +194,17 @@ final class SettingsViewModel: ObservableObject {
         pollAccessibilityPermission()
     }
 
-    func openStarterCheckout() {
+    @discardableResult
+    func openStarterCheckout() -> Bool {
         if checkout.openStarterCheckout() {
             startBillingStatusRefresh(shouldPoll: true)
+            return true
         }
+        return false
     }
 
     private func readCachedUsage() {
-        let preferences = AppPreferences(defaults: defaults)
-        remainingActions = preferences.remainingActions
-        isAdvanced = preferences.isAdvanced
+        planStatus.refreshFromCache()
     }
 
     private func startBillingStatusRefresh(shouldPoll: Bool = false) {

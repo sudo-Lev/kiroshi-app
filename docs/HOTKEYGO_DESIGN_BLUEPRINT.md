@@ -99,6 +99,7 @@ All semantic colors have explicit light and dark variants. Use sRGB values exact
 | `surface` | `#FFFFFF` | `#17141F` | Cards and panels |
 | `surfaceHover` | `#F6F4FD` | `#251F30` | Hover, keycap, quiet selected areas |
 | `line` | `#DCDBE2` | `#34323C` | Borders and dividers (neutral, no violet tint) |
+| `tile` | `#EEE8FF` | `#241C38` | Selected radio tiles |
 | `popupBorder` | `#D6D4DE` | `#34323C` | 360 pt Actions / Peek shell border |
 | `popupDivider` | `#ECEBF0` | `#34323C` | Actions / Peek header, list, and footer dividers |
 | `popupMuted` | `#9A97A8` | `#B0ABBF` | Popup source context, digits, and footer copy |
@@ -124,7 +125,7 @@ All semantic colors have explicit light and dark variants. Use sRGB values exact
 
 ### Theme behavior
 
-The app has an explicit Light/Dark preference. It sets both the SwiftUI color scheme and the underlying AppKit window appearance. Do not derive the app theme from a translucent system material.
+The app defaults to Auto, following the current macOS appearance in SwiftUI and AppKit windows, including system appearance changes while the app is open. Users can instead choose an explicit Light or Dark appearance. Auto clears any per-window appearance override; do not derive the app theme from a translucent system material.
 
 ---
 
@@ -218,7 +219,7 @@ Faces are text, always monospaced, kept on one line, and usually bracketed. They
 | Broke | `[ $_00_$ ]` | Out of tokens |
 | Empty | `[ x_x ]` | 30/30 used |
 | Upsell | `[ ¬_¬ ]` | Advanced plan prompt |
-| Advanced | `[ $_$ ]` | Advanced plan active; more room to work. It stays visible without blinking to another expression. |
+| Advanced | `[ ⌐■_■ ]` | Advanced plan active; more room to work. It stays visible without blinking to another expression. |
 | Lost | `[ ?_? ]` | No network signal |
 | Retry | `[ @_@ ]` | Reconnecting or retrying |
 | Idle | `[ #_# ]` | Offline waiting |
@@ -296,7 +297,10 @@ Motion must explain state, input, or spatial continuity. Never animate the entir
 | Onboarding key response | 160 ms | snappy | Key press/tap state |
 | Onboarding typed result | 22 ms per 2 characters | linear | Begins after 900 ms processing |
 | HotkeyGoUI primary button impulse | 200 ms | ease out | One cyan edge trace on press; never delays the action |
-| HotkeyGoUI quiet control impulse | 160 ms | ease out | One short edge trace on toggle, newly selected radio/theme option, or other custom button press |
+| Radio tile state change | 150 ms | ease out | Border, fill, and bevel change without moving the tile |
+| Radio tile check key | ~220 ms | spring | Opacity and scale reveal the selected state |
+| Radio tile glitch edge | 120 ms | stepped flicker | One selected silhouette flicker; none with Reduce Motion or Increase Contrast |
+| HotkeyGoUI quiet control impulse | 160 ms | ease out | One short edge trace on toggle or other custom button press |
 | HotkeyGoUI toggle thumb | 240 ms | ease out | Translate horizontally across a fixed track; never replace its layout position |
 | Face blink | 4030 + 170 ms | stepped | Open pause, brief shut frame |
 | Loading face | 320 ms/frame | stepped | Eight exact frames |
@@ -411,15 +415,29 @@ The one press fix flow uses a compact processing/success/error HUD beside the se
 
 ### Other compact notices
 
-Permission, no selection, and subscription sync use a standard compact notice:
+No selection and subscription sync use a standard compact notice:
 
 - HStack gap 11, horizontal padding 13, vertical padding 11;
 - panel radius 13 with contextual 2 × 24 accent;
 - icon tile 32 × 32, radius 9;
 - title 13 Semibold; detail 10.5 Regular;
-- window sizes: no selection 306 × 82, permission/subscription 326 × 86.
+- window sizes: no selection 306 × 82, subscription 326 × 86.
 
-No selection hides after 2.4 seconds. Permission and ordinary errors hide after 4 seconds. Offline uses the cyber status chip with `CONNECTION LOST`, concise unchanged text, a `NET` badge, and the shared `⌥⌘X` close control. Limit states may remain until explicitly dismissed or superseded in the one press flow.
+No selection hides after 2.4 seconds. Ordinary errors hide after 4 seconds. Offline uses the cyber status chip with `CONNECTION LOST`, concise unchanged text, a `NET` badge, and the shared `⌥⌘X` close control. Limit states may remain until explicitly dismissed or superseded in the one press flow.
+
+### Accessibility access notice
+
+Show a dedicated access notice when a Fix, Actions, or Peek shortcut is pressed while `AXIsProcessTrusted()` is false. Use one reusable non-activating `NSPanel` at `.statusBar` level, 372 × 62 pt, centered at the top of the screen under the menu bar with a 12 pt gap. Repeated shortcuts restart the same notice timer. Never show an access notice after permission is granted.
+
+- The plate is always `#14111C`, independent of system appearance. Its 1.5 pt border is made from an outer cut-corner gradient fill and an inset fill; outer/inner cuts are 12/11.4 pt. The gradient runs from warning at 70% to violet at 60%, increasing to 100%/70% on hover.
+- Place the 11 pt blinking `[ o_o ]` brand face at the left, colored `#FAA629`, with 1 pt cyan/magenta split edges and no backing tile. Reduce Motion keeps the face still.
+- Use the single-line title “Accessibility access needed” in 13.5/17 pt SF Pro 800 and the detail “Privacy & Security › Accessibility” in 10.5/14 pt JetBrains Mono 500. Use `#F1EDFA` and `#B0ABBF` respectively.
+- The trailing OPEN ↗ key is 30 pt high with a warning border, 7/6.4 pt cuts, and a 1.5 pt inset. Its idle fill is warning at 16% over the plate; hover fills it with warning and moves the arrow 1.5 pt up/right. Hovering anywhere on the plate uses the hover border and button state.
+- Add a 2 pt warning accent inset 16 pt from the top and bottom, a 30 × 1.5 pt top tick at x=20, cyan/magenta edge shadows, and a black 0/10/22 shadow at 45%.
+- A 1.5 pt countdown line sits on the bottom edge from x=18 to 12 pt before the right edge. It shrinks linearly over 8 seconds (configurable from 5–10); hovering freezes the remaining time and mouse-out resumes it without a jump.
+- Appear/disappear with 250 ms ease-out opacity and a 6 pt vertical move. Reduce Motion fades without moving; the countdown continues. Pressing moves the plate down 1 pt. Escape does nothing.
+- The entire plate is one button. Each explicit click while access is missing requests Accessibility permission and opens `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility`; the notice dismisses immediately. Post a VoiceOver announcement when it appears; the button label is “Accessibility access needed. Open System Settings.”
+- Keep the panel non-activating and do not create waiting or granted variants.
 
 ## 9.1 Fix preview panel
 
@@ -518,12 +536,12 @@ Option + Command + Z is a dedicated read-only translator. It never replaces the 
 - Entrance: 150 ms alpha fade; 80 ms with Reduce Motion.
 - State resize: 180 ms ease out with the top edge fixed.
 - Pinned position: 16 pt from right edge and 56 pt from top visible edge.
-- Unpinned Peek closes on outside click. Pinned Peek remains open and is movable by the window background.
+- Unpinned Peek closes on outside click. Drag the Peek title or the empty result-header space after the target language to move the panel in either pinned or unpinned mode; dragging never activates a main app window.
 
 ### Header
 
-- Pick header: 48 pt, no logo or close badge. Violet caret and `Search…` field on the left; full source language and word count (for example `Indonesian · 9 words`) on the right.
-- Result header: full source language and arrow, the selected target as a small dark button, and `⇥ next` on the right. No language codes.
+- Pick header: 48 pt, with a 72 pt `Peek` title drag area at the left, no logo or close badge. Violet caret and `Search…` field follow the title; full source language and word count (for example `Indonesian · 9 words`) appear on the right.
+- Result header: the same `Peek` title drag area, full source language and arrow, the selected target as a small dark button, empty drag space, and a close button on the right. No language codes.
 
 ### Initial chooser
 
@@ -713,16 +731,18 @@ Key press state changes use a 160 ms snappy transition. Stop the demonstration w
 ### Sections
 
 - Appearance.
+- AI model.
 - Hot keys.
 - Access.
 - Plan / billing.
 - Developer tools in debug builds only.
 
 Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have a minimum height of 54 and horizontal padding 12. Icon tile is 30 × 30, radius 8. Row title is 12 Bold; detail is 9.5 Regular with at most two lines.
+The Plan card keeps its current row and copy, then adds the shared three-segment meter, `FREE` / `ADVANCED` labels, and a monthly usage/reset line. Free shows `used / 30 this month · resets {MMM d}`; the limit state uses red. Advanced uses three green segments and shows its renewal date. Hide the upgrade button for Advanced; show a Manage link only when billing management exists.
 
 ### Standard controls
 
-- Primary button: 32 pt high, radius 8, 15 pt horizontal padding, 12 Bold white text, vertical violet gradient from `violet` to `#5716E0`, white border at 18%.
+- Standard primary button: 32 pt high, radius 8, 15 pt horizontal padding, 12 Bold white text, vertical violet gradient from `violet` to `#5716E0`, white border at 18%. Compact filled primary buttons are 30 pt high with 12 pt horizontal padding and the cyan-violet-magenta cut-corner border used by the menu plan CTA.
 - Pressed primary state: opacity 82%, scale 98.5%.
 - Subtle button: 30 pt high, radius 8, 12 pt horizontal padding, surface fill and line border.
 - Shortcut badge: 25 pt high, radius 7, 7 pt horizontal padding, 10.5 Bold Mono.
@@ -730,22 +750,24 @@ Each section uses a 9 pt Bold Mono label and a standard card. Setting rows have 
 - Keycap: minimum 26 × 25, radius 6, bottom key edge line.
 - Access badge: capsule, 28 pt high or 24 pt compact, success/warning tone.
 - Toggle: use the custom angular `ON` / `OFF` control; its visible label is optional when the parent row already provides the setting name, but its accessibility label remains required.
-- Theme selector: use a custom angular segmented control for the explicit Light/Dark pair, with sun/moon icons and a violet selected segment. Do not replace it with a boolean toggle because the selected mode must remain visible.
-- Radio: use a 17 pt circular indicator with a violet center dot for the selected value, a line-only unselected state, and a full-row hit target. Use radio options for three or more mutually exclusive choices; keep two short equal-weight choices segmented.
+- Theme selector: use a three-column radio-tile grid with fixed-color mini window previews for Auto/Light/Dark. Auto follows the system appearance; Light and Dark are explicit overrides.
+- AI model selector: use full-width radio-tile rows with a provider logo, model name, provider name, and selected check key.
+- Radio tiles: use one shared `HotkeyGoUI.RadioTileGroup` with `.grid(columns:)` or `.list` layouts. The cut-corner border stays 1.5 pt in every state; selection uses a violet bevel and check key without a circular indicator or layout shift. Arrow keys move and select; Space and Return activate the focused tile.
 
 ---
 
 ## 14. Menu bar popover
 
-- Width: **318**.
+- Width: **360**.
 - Background: `canvas`.
 - Wrapper: `HotkeyGoControlShape` with a 16 pt chamfer on the top-left and bottom-right corners, plus a 1 pt `line` stroke; do not use a rounded outer container.
 - AppKit host: borderless, nonactivating panel with a native shadow; do not expose the system popover bubble or chevron.
-- Utility bar: 26 pt, horizontal padding 12, version left and cyan `Cloud` right.
-- Status row: 42 pt (30% shorter than the previous 60 pt row), horizontal padding 14. It contains the plan face in a 56 × 30 pt slot, a two-line plan block, a flexible spacer, a close badge showing the current Fix shortcut, and an icon-only access badge. Pressing the configured Fix shortcut closes this menu-bar popover while it is open. Use 12 pt bold monospace for the plan title and 10.5 pt monospace for its detail. The entire Advanced row has a soft success-green gradient and green divider, with `[ $_$ ]` and the plan title in a readable green. The entire Free row uses a neutral surface and `[ ^_^ ]` face. The face has no separate badge background. The close badge is a button, not a static shortcut hint.
-- At the free limit, `Get Advanced` replaces the spacer and the close badge may hide to fit. The popup dismissal shortcut still works.
+- Utility bar: 26 pt, horizontal padding 12, version left and inline accessibility status on the right. Show `Access Needed` with a warning-yellow dot or `Access` with a green dot. Do not show an environment label or dropdown until another environment is available.
+- Plan row: 66 pt high in every state, padding 0 12 0 20, gap 14. Show `[ ^_^ ]` for Free and `[ ⌐■_■ ]` for Advanced at 14.45 pt JetBrains Mono ExtraBold with the 1.275 pt cyan/magenta split. Free face is static and ink; Advanced is green with a soft dark-theme glow. Pair a 15 pt plan name and the shared meter with an 11 pt Mono subline. Free shows `used / 30 used`; at 30 it shows `Resets {MMM d}` in red and `Get Advanced`. Advanced shows `more room to work` and three green meter segments without a numeric usage subline. The close chip remains in the plan row's right slot. Advanced has no green row fill.
+- A 30-tick line replaces the divider in the plan row. It spans x20 to the right 12 pt inset; Free used ticks follow the same ink/orange/red meter tone. Advanced shows all 30 ticks in green as a plan indicator, independent of usage. The limit row is clickable and tinted red at 5% light / 7% dark, with a stronger hover tint. Both the row and the CTA open checkout and close the popover; the popup dismissal shortcut still works.
+- Menu and Settings use one live `PlanStatus`. Free usage counts every successful Fix, Action, and Peek; failed or cancelled requests do not count. Reset and renewal dates come from billing status. The meter boundaries are 1 ink at 0–10, 2 orange at 11–20, 3 orange at 21–29, 3 red at 30, and 3 green for Advanced.
 - Show a compact `Preview & Approve` switch below the status row, bound to the same preference as Settings. Include a one-line status hint that nothing changes until approval.
-- Bottom actions: two rows with 32 pt buttons and 8 pt gaps. Settings and Quit share the upper row at 50% width each; Onboarding spans the full width below. Use 12 pt horizontal and 9 pt vertical outer padding. Settings and Onboarding use the filled shared `PrimaryButton` style. Quit uses the soft shared `QuitButton` style with a light danger tint and warm-to-pink border. Compact primary and Quit buttons use 12 pt horizontal padding and a 28 pt minimum height. The Settings footer uses the same soft Quit style.
+- Bottom actions: two rows with 30 pt buttons and 8 pt gaps. Settings and Quit share the upper row at 50% width each; Onboarding spans the full width below. Use 12 pt horizontal and 9 pt vertical outer padding. Settings and Onboarding use the filled shared `PrimaryButton` style. Quit uses the soft shared `QuitButton` style with a light danger tint and warm-to-pink border. Compact primary and Quit buttons use 12 pt horizontal padding. The Settings footer uses the same soft Quit style.
 - The four sections are the utility strip, status row, review row, and actions row, separated by single horizontal dividers.
 
 Usage may be shown here as persistent plan information. It must not generate a separate 29/30 notification. At 30/30, show the upgrade action.

@@ -11,8 +11,9 @@ struct ShortcutPresentation: Equatable {
 enum HotkeyGoUI {
     typealias Colors = HotkeyGoColor
     typealias Toggle = HotkeyGoToggleStyle
-    typealias ThemePicker = HotkeyGoThemePicker
-    typealias RadioOption<Selection: Hashable> = HotkeyGoRadioOption<Selection>
+    typealias RadioTileGroup<Selection: Hashable> = HotkeyGoRadioTileGroup<Selection>
+    typealias RadioTileOption<Selection: Hashable> = HotkeyGoRadioTileOption<Selection>
+    typealias TileIcon = HotkeyGoTileIcon
     typealias ButtonAppearance = HotkeyGoButtonAppearance
     typealias PrimaryButton = PrimaryButtonStyle
     typealias QuitButton = QuitButtonStyle
@@ -27,10 +28,13 @@ enum HotkeyGoUI {
     typealias AccessBadge = AccessStatusBadge
     typealias ActionPalette = HotkeyGoActionPalette
     typealias ActionPaletteRow = HotkeyGoActionPaletteRow
+    typealias PlanMeter = PlanMeterView
+    typealias UsageTicks = UsageTicksView
 
     /// Choose an icon by meaning, never by an asset or SF Symbol string in a feature view.
     enum IconName {
-        case themeLight, themeDark
+        case themeAuto, themeLight, themeDark
+        case providerOpenAI, providerAnthropic
         case fix, review, actions, peek
         case accessGranted, accessNeeded, plan
         case check, minus
@@ -42,8 +46,11 @@ enum HotkeyGoUI {
 
         fileprivate var source: IconSource {
             switch self {
+            case .themeAuto: .system("circle.lefthalf.filled")
             case .themeLight: .asset("HotkeyGoIconSun")
             case .themeDark: .asset("HotkeyGoIconMoon")
+            case .providerOpenAI: .brandAsset("HotkeyGoIconProviderOpenAI")
+            case .providerAnthropic: .brandAsset("HotkeyGoIconProviderAnthropic")
             case .fix: .asset("HotkeyGoIconFix")
             case .review: .asset("HotkeyGoIconReview")
             case .actions: .asset("HotkeyGoIconActions")
@@ -80,6 +87,7 @@ enum HotkeyGoUI {
 
     fileprivate enum IconSource {
         case asset(String)
+        case brandAsset(String)
         case system(String)
     }
 
@@ -100,6 +108,12 @@ enum HotkeyGoUI {
                     Image(assetName)
                         .resizable()
                         .renderingMode(.template)
+                        .interpolation(.high)
+                        .scaledToFit()
+                case .brandAsset(let assetName):
+                    Image(assetName)
+                        .resizable()
+                        .renderingMode(.original)
                         .interpolation(.high)
                         .scaledToFit()
                 case .system(let systemName):

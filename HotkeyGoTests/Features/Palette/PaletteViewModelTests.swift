@@ -91,6 +91,7 @@ final class PaletteViewModelTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: #function) }
         defaults.set(17, forKey: AppPreferenceKey.quotaRemaining)
         defaults.set("free", forKey: AppPreferenceKey.quotaPlan)
+        defaults.set(HotkeyGoUsage.currentUTCMonth(), forKey: AppPreferenceKey.quotaPeriod)
         defaults.set(DeveloperUsageScenario.limitReached.rawValue, forKey: AppPreferenceKey.developerUsageScenario)
 
         XCTAssertEqual(AppPreferences(defaults: defaults).remainingActions, 0)

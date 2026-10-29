@@ -2,6 +2,19 @@ import AppKit
 import XCTest
 @testable import HotkeyGo
 
+final class PlanMeterTests: XCTestCase {
+    func testFreeMeterThresholdBoundaries() {
+        XCTAssertEqual(meter(plan: .free, used: 0), PlanMeterValue(filled: 1, tone: .ink))
+        XCTAssertEqual(meter(plan: .free, used: 10), PlanMeterValue(filled: 1, tone: .ink))
+        XCTAssertEqual(meter(plan: .free, used: 11), PlanMeterValue(filled: 2, tone: .orange))
+        XCTAssertEqual(meter(plan: .free, used: 20), PlanMeterValue(filled: 2, tone: .orange))
+        XCTAssertEqual(meter(plan: .free, used: 21), PlanMeterValue(filled: 3, tone: .orange))
+        XCTAssertEqual(meter(plan: .free, used: 29), PlanMeterValue(filled: 3, tone: .orange))
+        XCTAssertEqual(meter(plan: .free, used: 30), PlanMeterValue(filled: 3, tone: .red))
+        XCTAssertEqual(meter(plan: .advanced, used: 0), PlanMeterValue(filled: 3, tone: .green))
+    }
+}
+
 @MainActor
 final class SettingsBillingTests: XCTestCase {
     func testCheckoutPollSurvivesRefreshUntilSubscriptionBecomesActive() async throws {

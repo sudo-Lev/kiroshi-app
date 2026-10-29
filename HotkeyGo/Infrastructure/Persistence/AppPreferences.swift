@@ -17,6 +17,8 @@ enum AppPreferenceKey {
     static let quotaRemaining = "quota.remaining"
     static let quotaPlan = "quota.plan"
     static let quotaPeriod = "quota.period"
+    static let quotaResetsAt = "quota.resetsAt"
+    static let quotaRenewsAt = "quota.renewsAt"
 #if DEBUG
     static let developerUsageScenario = "developer.usageScenario"
 #endif
@@ -27,7 +29,7 @@ enum AppPreferenceKey {
             showSuccess, reviewBeforeApplying, animationsEnabled, priorityProcessing, appearance, aiProvider, hasCompletedOnboarding,
             mainHotkeyKeyCode, mainHotkeyModifiers, actionsHotkeyKeyCode, actionsHotkeyModifiers,
             quotaRemaining, quotaPlan,
-            quotaPeriod
+            quotaPeriod, quotaResetsAt, quotaRenewsAt
         ] + PeekPreferenceKey.all
 #if DEBUG
         keys.append(developerUsageScenario)
@@ -37,6 +39,7 @@ enum AppPreferenceKey {
 }
 
 enum AppAppearance: String, CaseIterable, Identifiable {
+    case auto
     case light
     case dark
 
@@ -51,11 +54,42 @@ enum HotkeyGoAIProvider: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String {
+        model.name
+    }
+
+    var model: HotkeyGoAIModel {
         switch self {
-        case .openAI: "GPT-5.6 Luna"
-        case .anthropic: "Claude Haiku 5.5"
+        case .openAI:
+            HotkeyGoAIModel(
+                id: self,
+                name: "GPT-5.6 Luna",
+                provider: "OpenAI",
+                icon: .template(assetName: "HotkeyGoIconProviderOpenAI")
+            )
+        case .anthropic:
+            HotkeyGoAIModel(
+                id: self,
+                name: "Claude Haiku 5.5",
+                provider: "Anthropic",
+                icon: .original(assetName: "HotkeyGoIconProviderAnthropic")
+            )
         }
     }
+
+    static var models: [HotkeyGoAIModel] { allCases.map(\.model) }
+}
+
+struct HotkeyGoAIModel: Identifiable {
+    let id: HotkeyGoAIProvider
+    let name: String
+    let provider: String
+    let icon: HotkeyGoAIModelIcon?
+}
+
+enum HotkeyGoAIModelIcon {
+    case template(assetName: String)
+    case original(assetName: String)
+    case initial(String)
 }
 
 #if DEBUG
@@ -112,7 +146,7 @@ struct AppPreferences {
     var appearance: AppAppearance {
         defaults.string(forKey: AppPreferenceKey.appearance)
             .flatMap(AppAppearance.init(rawValue:))
-            ?? .light
+            ?? .auto
     }
     var aiProvider: HotkeyGoAIProvider {
         defaults.string(forKey: AppPreferenceKey.aiProvider)
@@ -127,6 +161,9 @@ struct AppPreferences {
         case .advanced: return nil
         }
 #endif
+        guard defaults.string(forKey: AppPreferenceKey.quotaPeriod) == HotkeyGoUsage.currentUTCMonth() else {
+            return nil
+        }
         return defaults.object(forKey: AppPreferenceKey.quotaRemaining) as? Int
     }
 

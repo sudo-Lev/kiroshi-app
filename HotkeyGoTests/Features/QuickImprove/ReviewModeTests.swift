@@ -15,6 +15,7 @@ final class ReviewModeTests: XCTestCase {
             accessibility: ReviewAccessibilityStub(),
             improver: FixedImprover(output: "fixed text"),
             feedback: FeedbackPresentingSpy(),
+            accessNotice: AccessibilityAccessNoticeStub(),
             review: review,
             selectionSnapshots: selection,
             preferences: defaults
@@ -48,6 +49,7 @@ final class ReviewModeTests: XCTestCase {
             accessibility: accessibility,
             improver: FixedImprover(output: "fixed text"),
             feedback: FeedbackPresentingSpy(),
+            accessNotice: AccessibilityAccessNoticeStub(),
             review: review,
             selectionSnapshots: selection,
             preferences: defaults
@@ -74,6 +76,7 @@ final class ReviewModeTests: XCTestCase {
             accessibility: ReviewAccessibilityStub(),
             improver: FixedImprover(output: "fixed text"),
             feedback: FeedbackPresentingSpy(),
+            accessNotice: AccessibilityAccessNoticeStub(),
             review: review,
             selectionSnapshots: selection,
             preferences: defaults
@@ -102,6 +105,7 @@ final class ReviewModeTests: XCTestCase {
             accessibility: ReviewAccessibilityStub(),
             improver: FixedImprover(output: "fixed text"),
             feedback: feedback,
+            accessNotice: AccessibilityAccessNoticeStub(),
             recovery: recovery,
             review: review,
             selectionSnapshots: selection,
@@ -132,6 +136,7 @@ final class ReviewModeTests: XCTestCase {
             accessibility: ReviewAccessibilityStub(),
             improver: FixedImprover(output: "fresh correction"),
             feedback: feedback,
+            accessNotice: AccessibilityAccessNoticeStub(),
             recovery: recovery,
             selectionSnapshots: selection,
             preferences: defaults
@@ -158,6 +163,7 @@ final class ReviewModeTests: XCTestCase {
             accessibility: ReviewAccessibilityStub(),
             improver: FixedImprover(output: "fresh correction"),
             feedback: feedback,
+            accessNotice: AccessibilityAccessNoticeStub(),
             recovery: recovery,
             selectionSnapshots: selection,
             preferences: defaults
@@ -181,6 +187,7 @@ final class ReviewModeTests: XCTestCase {
             accessibility: ReviewAccessibilityStub(),
             improver: FixedImprover(output: "fixed text"),
             feedback: FeedbackPresentingSpy(),
+            accessNotice: AccessibilityAccessNoticeStub(),
             selectionSnapshots: selection,
             preferences: defaults
         )
@@ -391,6 +398,7 @@ final class ReviewModeTests: XCTestCase {
                 accessibility: ReviewAccessibilityStub(),
                 improver: FixedImprover(output: nil),
                 feedback: feedback,
+                accessNotice: AccessibilityAccessNoticeStub(),
                 review: review,
                 selectionSnapshots: selection,
                 preferences: defaults
@@ -418,6 +426,7 @@ final class ReviewModeTests: XCTestCase {
             accessibility: ReviewAccessibilityStub(),
             improver: improver,
             feedback: FeedbackPresentingSpy(),
+            accessNotice: AccessibilityAccessNoticeStub(),
             selectionSnapshots: selection,
             preferences: defaults
         )
@@ -514,6 +523,11 @@ private final class ReviewAccessibilityStub: AccessibilityServicing {
     func selectedText() async -> String? { "original" }
     func selectionBounds() -> CGRect? { nil }
     func fallbackPoint() -> CGPoint { .zero }
+}
+
+@MainActor
+private final class AccessibilityAccessNoticeStub: AccessibilityAccessNoticePresenting {
+    func showAccessibilityAccessNeeded(at point: CGPoint) {}
 }
 
 private final class SelectionSnapshotSpy: SelectionSnapshotProviding {

@@ -2,10 +2,17 @@ import AppKit
 import Combine
 import SwiftUI
 
+enum PeekHeaderLayout {
+    static let height: CGFloat = 48
+    static let dragWidth: CGFloat = 72
+}
+
 @MainActor
 final class PeekPanelController {
     private let viewModel: PeekViewModel
     private let popupDismiss: PopupDismissCoordinator
+    private let accessibility: AccessibilityServicing
+    private let accessNotice: AccessibilityAccessNoticePresenting
     private let onUpgrade: () -> Void
     private var panel: PeekPanel?
     private var outsideMonitor: Any?
@@ -13,9 +20,17 @@ final class PeekPanelController {
     private var stateObserver: AnyCancellable?
     private var queryObserver: AnyCancellable?
 
-    init(viewModel: PeekViewModel, popupDismiss: PopupDismissCoordinator, onUpgrade: @escaping () -> Void) {
+    init(
+        viewModel: PeekViewModel,
+        popupDismiss: PopupDismissCoordinator,
+        accessibility: AccessibilityServicing,
+        accessNotice: AccessibilityAccessNoticePresenting,
+        onUpgrade: @escaping () -> Void
+    ) {
         self.viewModel = viewModel
         self.popupDismiss = popupDismiss
+        self.accessibility = accessibility
+        self.accessNotice = accessNotice
         self.onUpgrade = onUpgrade
         // @Published emits before the value changes; hop a run-loop turn so SwiftUI swaps
         // the content first and the panel then grows around the new layout.
@@ -37,6 +52,10 @@ final class PeekPanelController {
     func toggle(selection: PeekSelection?) {
         if isVisible {
             close()
+            return
+        }
+        guard accessibility.isTrusted else {
+            accessNotice.showAccessibilityAccessNeeded(at: NSEvent.mouseLocation)
             return
         }
         activeSelection = selection
@@ -254,8 +273,21 @@ private final class PeekPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     override func sendEvent(_ event: NSEvent) {
+        // The hosted header consumes background clicks. Reserve its visible Peek
+        // title for native dragging, away from the search field and buttons.
+        if event.type == .leftMouseDown, isInDragRegion(event.locationInWindow) {
+            performDrag(with: event)
+            return
+        }
         if event.type == .keyDown, keyHandler?(event) == true { return }
         super.sendEvent(event)
+    }
+
+    private func isInDragRegion(_ point: NSPoint) -> Bool {
+        let bounds = NSRect(origin: .zero, size: frame.size)
+        guard bounds.contains(point) else { return false }
+        return point.y >= bounds.maxY - PeekHeaderLayout.height
+            && point.x <= PeekHeaderLayout.dragWidth
     }
 }
 

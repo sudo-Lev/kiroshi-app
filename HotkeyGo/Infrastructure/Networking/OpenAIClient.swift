@@ -206,7 +206,15 @@ enum HotkeyGoUsage {
         let period = response.value(forHTTPHeaderField: "X-HotkeyGo-Period")
             ?? response.value(forHTTPHeaderField: "X-Qwixit-Period")
             ?? currentUTCMonth()
+        let resetsAt = response.value(forHTTPHeaderField: "X-HotkeyGo-Resets-At").flatMap(parseServerDate)
+        let renewsAt = response.value(forHTTPHeaderField: "X-HotkeyGo-Renews-At").flatMap(parseServerDate)
         update(defaults: defaults) {
+            if let resetsAt { defaults.set(resetsAt, forKey: AppPreferenceKey.quotaResetsAt) }
+            if let renewsAt {
+                defaults.set(renewsAt, forKey: AppPreferenceKey.quotaRenewsAt)
+            } else {
+                defaults.removeObject(forKey: AppPreferenceKey.quotaRenewsAt)
+            }
             if let plan = response.value(forHTTPHeaderField: "X-HotkeyGo-Plan")
                 ?? response.value(forHTTPHeaderField: "X-Qwixit-Plan") {
                 defaults.set(plan, forKey: AppPreferenceKey.quotaPlan)
@@ -228,6 +236,8 @@ enum HotkeyGoUsage {
         update(defaults: defaults) {
             defaults.set("free", forKey: AppPreferenceKey.quotaPlan)
             recordFreeRemaining(0, period: currentUTCMonth(), defaults: defaults)
+            defaults.set(nextUTCMonthStart(), forKey: AppPreferenceKey.quotaResetsAt)
+            defaults.removeObject(forKey: AppPreferenceKey.quotaRenewsAt)
         }
     }
 
@@ -235,6 +245,12 @@ enum HotkeyGoUsage {
         let period = status.period ?? currentUTCMonth()
         update(defaults: defaults) {
             defaults.set(status.plan, forKey: AppPreferenceKey.quotaPlan)
+            defaults.set(status.resetsAt ?? nextUTCMonthStart(), forKey: AppPreferenceKey.quotaResetsAt)
+            if let renewsAt = status.renewsAt {
+                defaults.set(renewsAt, forKey: AppPreferenceKey.quotaRenewsAt)
+            } else {
+                defaults.removeObject(forKey: AppPreferenceKey.quotaRenewsAt)
+            }
             if status.isAdvanced {
                 defaults.removeObject(forKey: AppPreferenceKey.quotaRemaining)
                 defaults.set(period, forKey: AppPreferenceKey.quotaPeriod)
@@ -266,12 +282,27 @@ enum HotkeyGoUsage {
         defaults.set(resolved, forKey: AppPreferenceKey.quotaRemaining)
     }
 
-    private static func currentUTCMonth() -> String {
+    static func currentUTCMonth() -> String {
         let components = Calendar(identifier: .gregorian).dateComponents(
             in: TimeZone(secondsFromGMT: 0)!,
             from: Date()
         )
         return String(format: "%04d-%02d", components.year ?? 0, components.month ?? 0)
+    }
+
+    private static func nextUTCMonthStart(now: Date = .now) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let parts = calendar.dateComponents([.year, .month], from: now)
+        guard let start = calendar.date(from: parts),
+              let next = calendar.date(byAdding: .month, value: 1, to: start) else { return now }
+        return next
+    }
+
+    private static func parseServerDate(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 }
 

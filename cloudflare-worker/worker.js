@@ -548,6 +548,8 @@ export class UsageLedger {
         subscription_status: subscription.status,
         remaining: advanced ? null : Math.max(0, FREE_ACTIONS_PER_MONTH - count),
         period,
+        resets_at: currentUTCMonthResetAt(),
+        renews_at: advanced ? subscription.renewsAt ?? null : null,
       }, { headers: securityHeaders() });
     }
 
@@ -641,6 +643,7 @@ export class UsageLedger {
             id: event.subscriptionID,
             status: event.status,
             priceID: event.priceID,
+            renewsAt: event.renewsAt ?? null,
             updatedAt: event.occurredAt,
           });
         }
@@ -718,9 +721,18 @@ async function quotaSnapshot(txn) {
       remaining: null,
       dailyRemaining: Math.max(0, ADVANCED_ACTIONS_PER_DAY - dayCount),
       period,
+      resetsAt: currentUTCMonthResetAt(),
+      renewsAt: subscription.renewsAt ?? null,
     };
   }
-  return { allowed: count < FREE_ACTIONS_PER_MONTH, advanced: false, remaining: Math.max(0, FREE_ACTIONS_PER_MONTH - count), period };
+  return {
+    allowed: count < FREE_ACTIONS_PER_MONTH,
+    advanced: false,
+    remaining: Math.max(0, FREE_ACTIONS_PER_MONTH - count),
+    period,
+    resetsAt: currentUTCMonthResetAt(),
+    renewsAt: null,
+  };
 }
 
 async function readOptionalJSON(request) {
@@ -764,6 +776,41 @@ async function upstreamFailure(env, installationID, operationID, quota) {
   return errorResponse(502, "The AI service is temporarily unavailable.", { code: "upstream_failed" }, hotkeygoHeaders(current));
 }
 
+function countedPeekResponse(body, headers, env, installationID, operationID, quota) {
+  const reader = body.getReader();
+  let completed = false;
+  let cancelled = false;
+  let refunded = false;
+  const refund = async (reason) => {
+    if (completed || refunded) return;
+    refunded = true;
+    await tryRefund(env, installationID, operationID, quota, reason);
+  };
+  const stream = new ReadableStream({
+    async pull(controller) {
+      try {
+        const result = await reader.read();
+        if (result.done) {
+          completed = !cancelled;
+          controller.close();
+        } else {
+          controller.enqueue(result.value);
+        }
+      } catch (error) {
+        await refund("failure");
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      if (completed) return;
+      cancelled = true;
+      void reader.cancel(reason).catch(() => {});
+      await refund("cancelled");
+    },
+  });
+  return new Response(stream, { status: 200, headers });
+}
+
 function operationExhaustedResponse() {
   return errorResponse(409, "This action can’t be retried again. Your text is unchanged.", { code: "operation_exhausted" });
 }
@@ -803,6 +850,8 @@ function hotkeygoHeaders(quota) {
     "X-HotkeyGo-Remaining": remaining,
     "X-HotkeyGo-Plan": plan,
     "X-HotkeyGo-Period": period,
+    "X-HotkeyGo-Resets-At": quota.resetsAt ?? currentUTCMonthResetAt(),
+    ...(quota.renewsAt ? { "X-HotkeyGo-Renews-At": quota.renewsAt } : {}),
     "X-Qwixit-Limit": limit,
     "X-Qwixit-Remaining": remaining,
     "X-Qwixit-Plan": plan,
@@ -1184,7 +1233,7 @@ async function handleHotkeyGoRequest(request, env, metrics) {
       checkout_url: checkoutURL,
       limit: FREE_ACTIONS_PER_MONTH,
       remaining: 0,
-    });
+    }, hotkeygoHeaders(quota));
   }
 
   // Priority processing costs more, so only Advanced may request it.
@@ -1211,6 +1260,7 @@ async function handleHotkeyGoRequest(request, env, metrics) {
               }),
         },
         body: JSON.stringify(requestBody),
+        signal: request.signal,
       });
     } finally {
       metrics.modelDurationMs += Date.now() - startedAt;
@@ -1239,7 +1289,10 @@ async function handleHotkeyGoRequest(request, env, metrics) {
     else metrics.modelPhaseActive = false;
     const headers = securityHeaders({ "Content-Type": "text/event-stream", ...hotkeygoHeaders(quota) });
     copyHeader(upstream.headers, headers, "x-request-id");
-    return new Response(body, { status: 200, headers });
+    if (!body) {
+      return upstreamFailure(env, installationID, operationID, quota);
+    }
+    return countedPeekResponse(body, headers, env, installationID, operationID, quota);
   }
 
   metrics.stage = "output_check";
@@ -1292,10 +1345,9 @@ async function handleHotkeyGoRequest(request, env, metrics) {
   }
 
   if (outcome.kind === "clean") {
-    metrics.stage = "usage_refund";
-    const current = await tryRefund(env, installationID, operationID, quota, "clean");
     metrics.stage = "response_handling";
-    return Response.json({ result: "clean" }, { headers: securityHeaders(hotkeygoHeaders(current)) });
+    if (request.signal.aborted) return upstreamFailure(env, installationID, operationID, quota);
+    return Response.json({ result: "clean" }, { headers: securityHeaders(hotkeygoHeaders(quota)) });
   }
   if (outcome.kind === "rejected") {
     // Log only provider/task and a fixed reason code; never include selected or generated text.
@@ -1303,6 +1355,7 @@ async function handleHotkeyGoRequest(request, env, metrics) {
     const current = await tryRefund(env, installationID, operationID, quota, "rejected");
     return errorResponse(422, "The result didn’t pass hotkeygo’s checks. Your text is unchanged.", { code: "output_rejected" }, hotkeygoHeaders(current));
   }
+  if (request.signal.aborted) return upstreamFailure(env, installationID, operationID, quota);
   metrics.stage = "response_handling";
   const result = task.task === "fix" ? { result: "fixed", text: outcome.text } : { text: outcome.text };
   return Response.json(result, { headers: securityHeaders(hotkeygoHeaders(quota)) });
@@ -1495,6 +1548,7 @@ async function handlePaddleWebhook(request, env) {
       subscriptionID: event.data?.id ?? null,
       status,
       priceID: matchingItem?.price?.id ?? null,
+      renewsAt: event.data?.next_billed_at ?? null,
       occurredAt: event.occurred_at ?? new Date().toISOString(),
     }),
   });
@@ -1596,6 +1650,9 @@ function notFoundPage() {
 }
 
 function currentUTCMonth() { return new Date().toISOString().slice(0, 7); }
+function currentUTCMonthResetAt(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+}
 function currentUTCDate() { return new Date().toISOString().slice(0, 10); }
 function isObject(value) { return typeof value === "object" && value !== null && !Array.isArray(value); }
 async function readLimitedBody(request, maximumBytes) {

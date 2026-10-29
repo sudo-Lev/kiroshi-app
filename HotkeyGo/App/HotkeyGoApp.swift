@@ -15,8 +15,11 @@ final class AppContainer {
     let settingsViewModel: SettingsViewModel
     let onboardingViewModel: OnboardingViewModel
     let quickImproveViewModel: QuickImproveViewModel
+    let planStatus: PlanStatus
     let popupDismiss = PopupDismissCoordinator()
     let feedback: FeedbackWindowController
+    let accessibility: AccessibilityServicing
+    let accessNotice: AccessibilityAccessNoticePresenting
     let review: ReviewPanelController
     let replacementRecovery: ReplacementRecoveryPanelController
     let peekHotkey = PeekHotkey()
@@ -33,11 +36,14 @@ final class AppContainer {
         AppPreferences.resetDeveloperOverrides()
 #endif
         let accessibility = AccessibilityService()
+        self.accessibility = accessibility
+        let planStatus = PlanStatus.shared
+        self.planStatus = planStatus
         LegacyMigration.run(isAccessibilityTrusted: accessibility.isTrusted)
         let improver = TextImprovementService()
         let languageDetector = LanguageDetector()
         let peekViewModel = PeekViewModel(client: PeekClient(), detector: languageDetector)
-        let settings = SettingsViewModel(accessibility: accessibility)
+        let settings = SettingsViewModel(accessibility: accessibility, planStatus: planStatus)
         settingsViewModel = settings
         onboardingViewModel = OnboardingViewModel(
             accessibility: accessibility,
@@ -45,18 +51,28 @@ final class AppContainer {
         )
         feedback = FeedbackWindowController(
             popupDismiss: popupDismiss,
+            planStatus: planStatus,
             onUpgrade: { settings.openStarterCheckout() }
         )
+        let accessNotice = AccessibilityAccessNoticeController(
+            accessibility: accessibility,
+            onPermissionRequested: { [weak settings] in settings?.pollAccessibilityPermission() }
+        )
+        self.accessNotice = accessNotice
         review = ReviewPanelController(popupDismiss: popupDismiss)
         replacementRecovery = ReplacementRecoveryPanelController(popupDismiss: popupDismiss)
         peekPanel = PeekPanelController(
             viewModel: peekViewModel,
             popupDismiss: popupDismiss,
+            accessibility: accessibility,
+            accessNotice: accessNotice,
             onUpgrade: { settings.openStarterCheckout() }
         )
         palettePanel = PalettePanelController(
             viewModel: PaletteViewModel(registry: ActionRegistry(), detector: languageDetector),
             bridge: AXTextBridge(),
+            accessibility: accessibility,
+            accessNotice: accessNotice,
             improver: improver,
             hud: ResultHUDController(feedback: feedback),
             replacementRecovery: replacementRecovery,
@@ -66,6 +82,7 @@ final class AppContainer {
             accessibility: accessibility,
             improver: improver,
             feedback: feedback,
+            accessNotice: accessNotice,
             recovery: replacementRecovery,
             review: review,
             selectionSnapshots: accessibility
@@ -197,7 +214,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             container.peekPanel.close()
             return
         }
+        guard container.accessibility.isTrusted else {
+            container.accessNotice.showAccessibilityAccessNeeded(at: NSEvent.mouseLocation)
+            return
+        }
         let selection = await container.selectionReader.read()
+        guard container.accessibility.isTrusted else {
+            container.accessNotice.showAccessibilityAccessNeeded(at: NSEvent.mouseLocation)
+            return
+        }
         container.peekPanel.toggle(selection: selection)
     }
 
@@ -249,6 +274,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            container.popupDismiss.dismissTop() {
             return
         }
+        guard container.accessibility.isTrusted else {
+            container.accessNotice.showAccessibilityAccessNeeded(at: NSEvent.mouseLocation)
+            return
+        }
         container.quickImproveViewModel.improveSelection()
     }
 
@@ -276,6 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menuPopover.setContentView(NSHostingView(rootView: MenuBarView(
             settingsViewModel: container.settingsViewModel,
+            planStatus: container.planStatus,
             quickImproveViewModel: container.quickImproveViewModel,
             onShowAbout: { [weak self] in self?.menuPopover.close(); self?.showAbout() },
             onOpenSettings: { [weak self] in self?.menuPopover.close(); self?.showSettings() },
@@ -323,7 +353,7 @@ private final class MenuBarPopoverController: NSObject {
     init(popupDismiss: PopupDismissCoordinator) {
         self.popupDismiss = popupDismiss
         panel = MenuBarPopoverPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 318, height: 1),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 1),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -353,12 +383,12 @@ private final class MenuBarPopoverController: NSObject {
         contentView.wantsLayer = true
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = contentView
-        contentView.frame = NSRect(x: 0, y: 0, width: 318, height: 1)
+        contentView.frame = NSRect(x: 0, y: 0, width: 360, height: 1)
         contentView.layoutSubtreeIfNeeded()
 
         let fittingSize = contentView.fittingSize
         panel.setContentSize(NSSize(
-            width: 318,
+            width: 360,
             height: max(1, fittingSize.height)
         ))
     }

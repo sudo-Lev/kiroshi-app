@@ -10,6 +10,7 @@ final class QuickImproveViewModel: ObservableObject {
     private let accessibility: AccessibilityServicing
     private let improver: TextImproving
     private let feedback: FeedbackPresenting
+    private let accessNotice: AccessibilityAccessNoticePresenting
     private let recovery: ReplacementRecoveryPresenting?
     private let review: ReviewPresenting?
     private let selectionSnapshots: SelectionSnapshotProviding?
@@ -32,6 +33,7 @@ final class QuickImproveViewModel: ObservableObject {
         accessibility: AccessibilityServicing,
         improver: TextImproving,
         feedback: FeedbackPresenting,
+        accessNotice: AccessibilityAccessNoticePresenting,
         recovery: ReplacementRecoveryPresenting? = nil,
         review: ReviewPresenting? = nil,
         selectionSnapshots: SelectionSnapshotProviding? = nil,
@@ -40,6 +42,7 @@ final class QuickImproveViewModel: ObservableObject {
         self.accessibility = accessibility
         self.improver = improver
         self.feedback = feedback
+        self.accessNotice = accessNotice
         self.recovery = recovery
         self.review = review
         self.selectionSnapshots = selectionSnapshots
@@ -82,7 +85,7 @@ final class QuickImproveViewModel: ObservableObject {
         activeFallbackPoint = accessibility.fallbackPoint()
 
         guard accessibility.isTrusted else {
-            show(.permissionDenied, duration: 4)
+            accessNotice.showAccessibilityAccessNeeded(at: accessibility.fallbackPoint())
             return
         }
 

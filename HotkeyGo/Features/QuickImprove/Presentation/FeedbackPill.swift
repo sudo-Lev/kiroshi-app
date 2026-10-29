@@ -1,6 +1,8 @@
 import SwiftUI
 
+@MainActor
 struct FeedbackPill: View {
+    @ObservedObject var planStatus: PlanStatus
     let phase: AppPhase
     let reduceMotion: Bool
     let successDetail: String
@@ -13,9 +15,11 @@ struct FeedbackPill: View {
         reduceMotion: Bool,
         successDetail: String = "TEXT REPLACED",
         embedded: Bool = false,
+        planStatus: PlanStatus,
         onClose: @escaping () -> Void,
         onUpgrade: (() -> Void)? = nil
     ) {
+        self.planStatus = planStatus
         self.phase = phase
         self.reduceMotion = reduceMotion
         self.successDetail = successDetail
@@ -33,8 +37,6 @@ struct FeedbackPill: View {
         Group {
             if phase == .limitReached {
                 upgradeCard
-            } else if phase == .permissionDenied {
-                accessNotice
             } else if usesCyberStatus {
                 cyberStatusBox
             } else {
@@ -55,76 +57,9 @@ struct FeedbackPill: View {
                 withAnimation(.linear(duration: 0.64).repeatForever(autoreverses: false)) { borderSweep = true }
             }
         }
-    }
-
-    private var accessNotice: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                HotkeyGoControlShape(cut: 5)
-                    .fill(HotkeyGoColor.warning.opacity(0.16))
-                    .frame(width: 35, height: 35)
-                HotkeyGoUI.Icon(.lock, size: 13)
-                    .foregroundStyle(HotkeyGoColor.warning)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 12, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-
-                Text(detail ?? "")
-                    .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 3)
-
-            Text("AX")
-                .font(.system(size: 9, weight: .heavy, design: .monospaced))
-                .foregroundStyle(HotkeyGoColor.warning)
-                .padding(.horizontal, 6)
-                .frame(height: 22)
-                .background(
-                    HotkeyGoControlShape(cut: 4)
-                        .fill(HotkeyGoColor.warning.opacity(0.08))
-                )
-                .overlay {
-                    HotkeyGoControlShape(cut: 4)
-                        .stroke(HotkeyGoColor.warning.opacity(0.58), lineWidth: 1)
-                }
+        .onValueChange(of: planStatus.snapshot) { snapshot in
+            if phase == .limitReached, snapshot.plan == .advanced { onClose() }
         }
-        .padding(.horizontal, 12)
-        .frame(width: 314, height: 68)
-        .background {
-            ZStack {
-                HotkeyGoControlShape(cut: 9)
-                    .fill(HotkeyGoColor.cyan)
-                    .offset(x: -1.5, y: 1)
-                HotkeyGoControlShape(cut: 9)
-                    .fill(HotkeyGoColor.magenta)
-                    .offset(x: 1.5, y: -1)
-                HotkeyGoControlShape(cut: 9)
-                    .fill(HotkeyGoColor.primaryAction)
-            }
-        }
-        .overlay {
-            HotkeyGoControlShape(cut: 9)
-                .stroke(HotkeyGoColor.violet.opacity(0.9), lineWidth: 1)
-        }
-        .overlay(alignment: .topLeading) {
-            Rectangle()
-                .fill(.white.opacity(0.72))
-                .frame(width: 28, height: 1)
-                .offset(x: 10, y: 5)
-        }
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(HotkeyGoColor.warning)
-                .frame(width: 2, height: 34)
-        }
-        .shadow(color: HotkeyGoColor.cardShadow, radius: 12, y: 5)
     }
 
     private var cyberStatusBox: some View {
@@ -327,9 +262,6 @@ struct FeedbackPill: View {
             case .noSelection:
                 HotkeyGoUI.Icon(.textCursor, size: 14)
                     .foregroundStyle(tone)
-            case .permissionDenied:
-                HotkeyGoUI.Icon(.lock, size: 12)
-                    .foregroundStyle(tone)
             case .offline:
                 HotkeyGoUI.Icon(.wifiOff, size: 12)
                     .foregroundStyle(tone)
@@ -363,7 +295,11 @@ struct FeedbackPill: View {
             .background(HotkeyGoColor.canvasRaised)
             .overlay(alignment: .bottom) { Rectangle().fill(HotkeyGoColor.line).frame(height: 1) }
 
-            HotkeyGoPaywallUsageStrip(used: 30, remaining: 0, reduceMotion: reduceMotion)
+            HotkeyGoPaywallUsageStrip(
+                used: planStatus.used,
+                remaining: planStatus.remainingActions ?? 0,
+                reduceMotion: reduceMotion
+            )
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("30/30. You ran it dry.")
@@ -411,7 +347,6 @@ struct FeedbackPill: View {
         case .pasteSent: "Success"
         case .alreadyClean: "Already clean"
         case .noSelection: "Select some text first"
-        case .permissionDenied: "Accessibility access needed"
         case .offline: "You’re offline"
         case .retrying: "Retrying connection…"
         case .error(let message): HotkeyGoErrorCopy.title(for: message)
@@ -423,7 +358,6 @@ struct FeedbackPill: View {
         switch phase {
         case .alreadyClean: "Nothing to fix. Your text is unchanged."
         case .noSelection: "Highlight text in any app, then try again."
-        case .permissionDenied: "Allow hotkeygo in Privacy & Security › Accessibility to continue."
         case .offline: "Your text is unchanged. Try again when you’re back online."
         case .retrying(let attempt, let total): "Trying again · \(attempt)/\(total)"
         case .error(let message): HotkeyGoErrorCopy.detail(for: message)
@@ -436,7 +370,6 @@ struct FeedbackPill: View {
         case .success: HotkeyGoColor.success
         case .pasteSent: HotkeyGoColor.success
         case .alreadyClean: HotkeyGoColor.success
-        case .permissionDenied: HotkeyGoColor.warning
         case .offline: HotkeyGoColor.cyan
         case .retrying: HotkeyGoColor.cyan
         case .error: HotkeyGoColor.danger

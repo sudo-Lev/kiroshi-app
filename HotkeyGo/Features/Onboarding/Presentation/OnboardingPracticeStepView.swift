@@ -82,6 +82,7 @@ struct OnboardingPracticeStepView: View {
                 FeedbackPill(
                     phase: feedbackPhase,
                     reduceMotion: reduceMotion,
+                    planStatus: .shared,
                     onClose: {}
                 )
                 .id(viewModel.phase == .done)

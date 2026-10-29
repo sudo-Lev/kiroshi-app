@@ -4,9 +4,13 @@ import AppKit
 struct MenuBarView: View {
     private let wrapperShape = HotkeyGoControlShape(cut: 16)
     @State private var isAboutHovered = false
-    @State private var isEnvironmentMenuPresented = false
+    @State private var isPlanRowHovered = false
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @ObservedObject var settingsViewModel: SettingsViewModel
+    @ObservedObject var planStatus: PlanStatus
     @ObservedObject var quickImproveViewModel: QuickImproveViewModel
     let onShowAbout: () -> Void
     let onOpenSettings: () -> Void
@@ -15,27 +19,13 @@ struct MenuBarView: View {
     let onClose: () -> Void
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(spacing: 0) {
-                utilityBar
-                statusRow
-                reviewModeRow
-                actionsRow
-            }
-
-            if isEnvironmentMenuPresented {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { isEnvironmentMenuPresented = false }
-                    .zIndex(1)
-
-                environmentDropdown
-                    .padding(.trailing, 10)
-                    .offset(y: 24)
-                    .zIndex(2)
-            }
+        VStack(spacing: 0) {
+            utilityBar
+            statusRow
+            reviewModeRow
+            actionsRow
         }
-        .frame(width: 318)
+        .frame(width: 360)
         .background(HotkeyGoColor.canvas, in: wrapperShape)
         .clipShape(wrapperShape)
         .overlay {
@@ -66,7 +56,7 @@ struct MenuBarView: View {
             Text("v1.0")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
             Spacer()
-            environmentMenu
+            accessibilityStatus
         }
         .foregroundStyle(HotkeyGoColor.ink)
         .padding(.horizontal, 12)
@@ -75,152 +65,116 @@ struct MenuBarView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(HotkeyGoColor.line).frame(height: 1) }
     }
 
-    private var environmentMenu: some View {
-        Button {
-            isEnvironmentMenuPresented.toggle()
-        } label: {
-            HStack(spacing: 6) {
-                Text("Cloud")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .tracking(0.3)
-                    .foregroundStyle(HotkeyGoColor.cyan)
-                HotkeyGoUI.Icon(.chevronDown, size: 9)
-                    .foregroundStyle(HotkeyGoColor.ink)
-            }
+    private var accessibilityStatus: some View {
+        HStack(spacing: 4) {
+            Text(settingsViewModel.accessibilityGranted ? "Access" : "Access Needed")
+                .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                .foregroundStyle(settingsViewModel.accessibilityGranted ? HotkeyGoColor.success : HotkeyGoColor.warning)
+            Circle()
+                .fill(settingsViewModel.accessibilityGranted ? HotkeyGoColor.success : HotkeyGoColor.warning)
+                .frame(width: 7, height: 7)
         }
-        .buttonStyle(.plain)
         .fixedSize()
-        .accessibilityLabel("Processing environment")
-        .accessibilityValue("Cloud")
-        .accessibilityHint("Show processing environment options")
-        .help("Choose hotkeygo's processing environment")
-    }
-
-    private var environmentDropdown: some View {
-        VStack(spacing: 4) {
-            environmentOption(title: "Cloud", selected: true) {
-                isEnvironmentMenuPresented = false
-            }
-
-            Rectangle()
-                .fill(HotkeyGoColor.line)
-                .frame(height: 1)
-                .padding(.horizontal, 6)
-
-            environmentOption(title: "Local", detail: "<in development>", isEnabled: false) { }
-        }
-        .padding(6)
-        .frame(width: 188)
-        .background(HotkeyGoColor.surface, in: HotkeyGoControlShape(cut: 8))
-        .overlay(HotkeyGoControlShape(cut: 8).stroke(HotkeyGoColor.line))
-        .shadow(color: HotkeyGoColor.cardShadow, radius: 10, y: 4)
-        .accessibilityElement(children: .contain)
-    }
-
-    private func environmentOption(
-        title: String,
-        detail: String? = nil,
-        selected: Bool = false,
-        isEnabled: Bool = true,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Text(title)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(HotkeyGoColor.ink)
-                Spacer(minLength: 4)
-                if let detail {
-                    Text(detail)
-                        .font(.system(size: 7.5, weight: .bold, design: .monospaced))
-                        .foregroundStyle(HotkeyGoColor.secondary)
-                } else if selected {
-                    HotkeyGoUI.Icon(.check, size: 12)
-                        .foregroundStyle(HotkeyGoColor.cyan)
-                }
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 27)
-            .background(selected ? HotkeyGoColor.cyan.opacity(0.08) : .clear, in: HotkeyGoControlShape(cut: 4))
-            .contentShape(HotkeyGoControlShape(cut: 4))
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.46)
-        .accessibilityLabel(detail == nil ? title : "Local, in development")
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(settingsViewModel.accessibilityGranted
+            ? "Accessibility access granted"
+            : "Accessibility access needed")
+        .help(settingsViewModel.accessibilityGranted ? "Accessibility access granted" : "Accessibility access required")
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: settingsViewModel.accessibilityGranted)
     }
 
     private var statusRow: some View {
-        HStack(spacing: 7) {
-            HotkeyGoFaceView(
-                face: settingsViewModel.isAdvanced ? .advanced : .hello,
-                size: 13,
-                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                color: settingsViewModel.isAdvanced ? HotkeyGoColor.terminalGreen : HotkeyGoColor.ink
-            )
-            .frame(width: 56, height: 30)
-            .accessibilityLabel(settingsViewModel.isAdvanced ? "Advanced plan active" : "Free plan")
-            VStack(alignment: .leading, spacing: 2) {
-                Text(billingTitle)
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundStyle(settingsViewModel.isAdvanced ? HotkeyGoColor.terminalGreen : HotkeyGoColor.ink)
-                Text(billingDetail)
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(HotkeyGoColor.secondary)
-            }
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-
-            if showsCheckoutAction {
-                Button("Get Advanced") {
-                    settingsViewModel.openStarterCheckout()
+        ZStack {
+            if isLimitReached {
+                Button(action: openCheckoutAndClose) {
+                    Rectangle()
+                        .fill(Color.clear)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(HotkeyGoUI.PrimaryButton(compact: true))
-                .help("Open the Paddle sandbox checkout for Advanced · $10/month")
-                .accessibilityLabel("Subscribe to hotkeygo Advanced for ten dollars per month")
-            } else {
-                Spacer(minLength: 0)
-                HotkeyGoUI.PopupCloseButton(
-                    shortcut: settingsViewModel.mainHotkey.presentation,
-                    label: "Close hotkeygo menu",
-                    action: onClose
-                )
+                .buttonStyle(.plain)
+                .accessibilityLabel("Free plan limit reached. Get Advanced.")
+                .help("Open Advanced checkout")
             }
-            Button(action: onOpenSettings) {
-                HotkeyGoUI.AccessBadge(
-                    granted: settingsViewModel.accessibilityGranted,
-                    compact: true,
-                    iconOnly: true
+
+            HStack(spacing: 14) {
+                HotkeyGoFaceView(
+                    face: planStatus.isAdvanced ? .advanced : .hello,
+                    size: 14.45,
+                    reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                    color: planStatus.isAdvanced ? HotkeyGoColor.planGreen : HotkeyGoColor.ink,
+                    chromaticSplit: 1.275,
+                    shouldBlink: false
                 )
+                .accessibilityHidden(true)
+                .contentTransition(.opacity)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(planStatus.isAdvanced ? "Advanced" : "Free")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(HotkeyGoColor.ink)
+                            .fixedSize()
+                        PlanMeterView(value: planStatus.meterValue)
+                    }
+                    Text(planDescription)
+                        .font(.custom("JetBrains Mono Medium", size: 11))
+                        .foregroundStyle(isLimitReached ? HotkeyGoColor.danger : HotkeyGoColor.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(planAccessibilityLabel)
+                .accessibilityHidden(isLimitReached)
+
+                if isLimitReached {
+                    Button("Get Advanced", action: openCheckoutAndClose)
+                        .buttonStyle(HotkeyGoUI.PrimaryButton(compact: true))
+                        .fixedSize()
+                        .transition(.opacity)
+                        .help("Open the Paddle sandbox checkout for Advanced · $10/month")
+                        .accessibilityLabel("Get Advanced")
+                } else {
+                    HotkeyGoUI.PopupCloseButton(
+                        shortcut: settingsViewModel.mainHotkey.presentation,
+                        label: "Close hotkeygo menu",
+                        action: onClose
+                    )
+                    .transition(.opacity)
+                }
+
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(settingsViewModel.accessibilityGranted
-                ? "Accessibility access allowed. Open Settings"
-                : "Accessibility access required. Open Settings")
-            .help(
-                settingsViewModel.accessibilityGranted
-                    ? "hotkeygo can read and replace selected text"
-                    : "Open Settings to allow Accessibility access"
-            )
+            .padding(.leading, 20)
+            .padding(.trailing, 12)
+            .frame(height: 66)
+            .background {
+                if isLimitReached {
+                    HotkeyGoColor.danger.opacity(isPlanRowHovered
+                        ? (colorScheme == .dark ? 0.12 : 0.09)
+                        : (colorScheme == .dark ? 0.07 : 0.05))
+                } else {
+                    HotkeyGoColor.planMenuSurface
+                }
+            }
+            .overlay(alignment: .bottom) {
+                HotkeyGoUI.UsageTicks(
+                    used: planStatus.isAdvanced ? 30 : planStatus.used,
+                    tone: planStatus.meterValue.tone
+                )
+                .padding(.leading, 20)
+                .padding(.trailing, 12)
+            }
         }
-        .padding(.horizontal, 14)
-        .frame(height: 42)
-        .background {
-            if settingsViewModel.isAdvanced {
-                LinearGradient(
-                    colors: [HotkeyGoColor.success.opacity(0.18), HotkeyGoColor.success.opacity(0.07)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            } else {
-                HotkeyGoColor.surface
-            }
-        }
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(settingsViewModel.isAdvanced ? HotkeyGoColor.success.opacity(0.38) : HotkeyGoColor.line)
-                .frame(height: 1)
+        .frame(height: 66)
+        .contentShape(Rectangle())
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: planStatus.snapshot.plan)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isLimitReached)
+        .onHover { hovering in
+            isPlanRowHovered = hovering
+            guard isLimitReached else { return }
+            if hovering { NSCursor.pointingHand.push() }
+            else { NSCursor.pop() }
         }
     }
 
@@ -237,9 +191,9 @@ struct MenuBarView: View {
                         accessibilityLabel: "hotkeygo settings",
                         action: onOpenSettings
                     )
-                        .frame(width: halfWidth, height: 28)
+                        .frame(width: halfWidth, height: 30)
                     quitActionCell
-                        .frame(width: halfWidth, height: 28)
+                        .frame(width: halfWidth, height: 30)
                 }
 
                 actionCell(
@@ -248,13 +202,13 @@ struct MenuBarView: View {
                     accessibilityLabel: "hotkeygo onboarding",
                     action: onShowOnboarding
                 )
-                    .frame(width: contentWidth, height: 28)
+                    .frame(width: contentWidth, height: 30)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .frame(height: 76)
+        .frame(height: 80)
         .background(HotkeyGoColor.canvasRaised)
     }
 
@@ -319,25 +273,36 @@ struct MenuBarView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(HotkeyGoColor.line).frame(height: 1) }
     }
 
-    private var showsCheckoutAction: Bool {
-        settingsViewModel.remainingActions == 0
-            && !settingsViewModel.isAdvanced
+    private var isLimitReached: Bool {
+        !planStatus.isAdvanced && planStatus.used == 30
     }
 
-    private var billingTitle: String {
-        settingsViewModel.isAdvanced ? "Advanced" : "Free"
+    private var planDescription: String {
+        if planStatus.isAdvanced { return "more room to work" }
+        if let usage = planStatus.snapshot.usage, usage.used == usage.limit {
+            return "Resets \(formattedDate(usage.resetsAt))"
+        }
+        return "\(planStatus.used) / 30 used"
     }
 
-    private var billingDetail: String {
-        if settingsViewModel.isAdvanced { return "more room to work" }
-        guard settingsViewModel.remainingActions != nil else { return "30 free / month" }
-        return "\(usedActions) / 30 used"
+    private var planAccessibilityLabel: String {
+        if planStatus.isAdvanced { return "Advanced plan" }
+        if let usage = planStatus.snapshot.usage, usage.used == usage.limit {
+            return "Free plan limit reached, resets \(formattedDate(usage.resetsAt))"
+        }
+        return "Free plan, \(planStatus.used) of 30 actions used this month"
     }
 
-    private var remainingActions: Int {
-        min(max(settingsViewModel.remainingActions ?? 30, 0), 30)
+    private func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
     }
 
-    private var usedActions: Int { 30 - remainingActions }
+    private func openCheckoutAndClose() {
+        if settingsViewModel.openStarterCheckout() { onClose() }
+    }
 
 }

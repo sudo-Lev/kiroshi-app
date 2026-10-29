@@ -6,6 +6,8 @@ import SwiftUI
 final class PalettePanelController {
     private let viewModel: PaletteViewModel
     private let bridge: AXTextBridge
+    private let accessibility: AccessibilityServicing
+    private let accessNotice: AccessibilityAccessNoticePresenting
     private let improver: ActionPerforming
     private let hud: ResultHUDController
     private let replacementRecovery: ReplacementRecoveryPresenting
@@ -19,6 +21,8 @@ final class PalettePanelController {
     init(
         viewModel: PaletteViewModel,
         bridge: AXTextBridge,
+        accessibility: AccessibilityServicing,
+        accessNotice: AccessibilityAccessNoticePresenting,
         improver: ActionPerforming,
         hud: ResultHUDController,
         replacementRecovery: ReplacementRecoveryPresenting,
@@ -26,6 +30,8 @@ final class PalettePanelController {
     ) {
         self.viewModel = viewModel
         self.bridge = bridge
+        self.accessibility = accessibility
+        self.accessNotice = accessNotice
         self.improver = improver
         self.hud = hud
         self.replacementRecovery = replacementRecovery
@@ -43,6 +49,10 @@ final class PalettePanelController {
     func toggle() async {
         if isVisible { close(); return }
         hostApplication = NSWorkspace.shared.frontmostApplication
+        guard accessibility.isTrusted else {
+            accessNotice.showAccessibilityAccessNeeded(at: NSEvent.mouseLocation)
+            return
+        }
         guard let capture = await bridge.capture() else {
             hud.showNeutral("Select some text first.", point: NSEvent.mouseLocation)
             return

@@ -3,9 +3,21 @@ import AppKit
 
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @ObservedObject var planStatus: PlanStatus
     let onShowOnboarding: () -> Void
     let onQuit: () -> Void
     @StateObject private var shortcutRecorder = SettingsHotkeyRecorder()
+
+    init(
+        viewModel: SettingsViewModel,
+        onShowOnboarding: @escaping () -> Void,
+        onQuit: @escaping () -> Void
+    ) {
+        self.viewModel = viewModel
+        planStatus = viewModel.planStatus
+        self.onShowOnboarding = onShowOnboarding
+        self.onQuit = onQuit
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -63,33 +75,70 @@ struct SettingsView: View {
 
     private var appearanceSection: some View {
         SettingsSection(title: "Appearance") {
-            SettingRow(
-                icon: viewModel.appearance == .dark ? .themeDark : .themeLight,
-                title: "Theme",
-                detail: "Choose the look used by hotkeygo windows and feedback."
-            ) {
-                HotkeyGoUI.ThemePicker(selection: $viewModel.appearance)
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Theme")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(HotkeyGoColor.ink)
+                    Text("Auto follows macOS. Light and Dark stay fixed.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(HotkeyGoColor.secondary)
+                }
+
+                HotkeyGoUI.RadioTileGroup(
+                    selection: $viewModel.appearance,
+                    options: appearanceOptions,
+                    layout: .grid(columns: 3),
+                    label: "Theme"
+                )
             }
+            .padding(12)
+        }
+    }
+
+    private var appearanceOptions: [HotkeyGoUI.RadioTileOption<AppAppearance>] {
+        [
+            .init(value: .auto, title: "Auto", preview: AnyView(ThemePreview(appearance: .auto))),
+            .init(value: .light, title: "Light", preview: AnyView(ThemePreview(appearance: .light))),
+            .init(value: .dark, title: "Dark", preview: AnyView(ThemePreview(appearance: .dark)))
+        ]
+    }
+
+    private var modelOptions: [HotkeyGoUI.RadioTileOption<HotkeyGoAIProvider>] {
+        HotkeyGoAIProvider.models.map { model in
+            .init(
+                value: model.id,
+                title: model.name,
+                subtitle: model.provider,
+                icon: tileIcon(for: model.icon, provider: model.provider)
+            )
+        }
+    }
+
+    private func tileIcon(for icon: HotkeyGoAIModelIcon?, provider: String) -> HotkeyGoUI.TileIcon {
+        guard let icon else { return .initial(String(provider.prefix(1))) }
+        switch icon {
+        case .template(let assetName): return .template(Image(assetName))
+        case .original(let assetName): return .original(Image(assetName))
+        case .initial(let value): return .initial(value)
         }
     }
 
     private var modelSection: some View {
         SettingsSection(title: "AI model") {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(HotkeyGoAIProvider.allCases) { provider in
-                    HotkeyGoUI.RadioOption(
-                        title: provider.title,
-                        value: provider,
-                        selection: $viewModel.aiProvider
-                    )
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                HotkeyGoUI.RadioTileGroup(
+                    selection: $viewModel.aiProvider,
+                    options: modelOptions,
+                    layout: .list,
+                    label: "AI model"
+                )
                 Text("Used for Fix, Actions, and Peek.")
-                    .font(.system(size: 9.5))
+                    .font(.system(size: 11))
                     .foregroundStyle(HotkeyGoColor.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 2)
+                    .padding(.horizontal, 12)
             }
-            .padding(8)
+            .padding(12)
         }
     }
 
@@ -235,45 +284,93 @@ struct SettingsView: View {
 
     private var billingSection: some View {
         SettingsSection(title: "Plan · Sandbox") {
-            SettingRow(
-                icon: .plan,
-                iconColor: billingIconColor,
-                title: billingTitle,
-                detail: billingDetail
-            ) {
-                billingControl
+            VStack(alignment: .leading, spacing: 0) {
+                SettingRow(
+                    icon: .plan,
+                    iconColor: billingIconColor,
+                    title: billingTitle,
+                    detail: billingDetail
+                ) {
+                    billingControl
+                }
+
+                PlanMeterView(value: planStatus.meterValue, layout: .settings)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 7)
+
+                HStack {
+                    Text("FREE")
+                        .foregroundStyle(HotkeyGoColor.secondary)
+                    Spacer()
+                    Text("ADVANCED")
+                        .foregroundStyle(planStatus.isAdvanced ? HotkeyGoColor.planGreen : HotkeyGoColor.secondary)
+                }
+                .font(.system(size: 9, weight: .heavy, design: .monospaced))
+                .tracking(1.2)
+                .padding(.horizontal, 12)
+                .padding(.top, 5)
+
+                Text(planUsageDetail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(planStatus.isAdvanced || !isAtPlanLimit ? HotkeyGoColor.secondary : HotkeyGoColor.danger)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 11)
+                    .accessibilityLabel(planUsageAccessibilityLabel)
             }
         }
     }
 
     @ViewBuilder
     private var billingControl: some View {
-        if viewModel.isAdvanced {
-            HStack(spacing: 4) {
-                HotkeyGoUI.Icon(.statusSuccess, size: 10)
-                Text("Active")
-            }
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(HotkeyGoColor.success)
-                .accessibilityLabel("hotkeygo Advanced subscription active")
-        } else {
+        if !planStatus.isAdvanced {
             Button("Get Advanced") { viewModel.openStarterCheckout() }
-                .buttonStyle(PrimaryButtonStyle())
+                .buttonStyle(HotkeyGoUI.PrimaryButton(compact: true))
+                .accessibilityLabel("Get Advanced")
         }
     }
 
     private var billingIconColor: Color {
-        viewModel.isAdvanced ? HotkeyGoColor.success : HotkeyGoColor.violet
+        planStatus.isAdvanced ? HotkeyGoColor.planGreen : HotkeyGoColor.violet
     }
 
     private var billingTitle: String {
-        if viewModel.isAdvanced { return "hotkeygo Advanced" }
+        if planStatus.isAdvanced { return "Advanced" }
         return "30 free AI actions / month"
     }
 
     private var billingDetail: String {
-        if viewModel.isAdvanced { return "Active — more room to work. The same careful Fix quality applies." }
+        if planStatus.isAdvanced, let renewsAt = planStatus.snapshot.renewsAt {
+            return "Renews \(formattedPlanDate(renewsAt))"
+        }
+        if planStatus.isAdvanced { return "More room to work. The same careful Fix quality applies." }
         return "Get Advanced for $10/month. More room to work, same quality bar. Sandbox test payments only."
+    }
+
+    private var isAtPlanLimit: Bool {
+        !planStatus.isAdvanced && planStatus.used == 30
+    }
+
+    private var planUsageDetail: String {
+        if planStatus.isAdvanced { return "More room to work" }
+        guard let usage = planStatus.snapshot.usage else { return "0 / 30 this month" }
+        return "\(usage.used) / \(usage.limit) this month · resets \(formattedPlanDate(usage.resetsAt))"
+    }
+
+    private var planUsageAccessibilityLabel: String {
+        if planStatus.isAdvanced { return "Advanced plan" }
+        if let usage = planStatus.snapshot.usage, usage.used == usage.limit {
+            return "Free plan limit reached, resets \(formattedPlanDate(usage.resetsAt))"
+        }
+        return "Free plan, \(planStatus.used) of 30 actions used this month"
+    }
+
+    private func formattedPlanDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
     }
 
 #if DEBUG
@@ -348,6 +445,72 @@ struct SettingsView: View {
             .fill(HotkeyGoColor.line)
             .frame(height: 1)
             .padding(.leading, 52)
+    }
+}
+
+private struct ThemePreview: View {
+    let appearance: AppAppearance
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            ZStack(alignment: .topLeading) {
+                background
+
+                Rectangle()
+                    .fill(titleBar)
+                    .frame(width: width * 0.4, height: 5)
+                    .offset(x: 14, y: 12)
+
+                line(width: width * 0.56, height: 3)
+                    .offset(x: 14, y: 23)
+                line(width: width * 0.30, height: 3)
+                    .offset(x: 14, y: 30)
+            }
+            .frame(width: width, height: geometry.size.height)
+            .clipped()
+        }
+        .frame(height: 58)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private var background: some View {
+        switch appearance {
+        case .auto:
+            HStack(spacing: 0) {
+                fixed(0xF9F8FC)
+                fixed(0x17141F)
+            }
+        case .light:
+            fixed(0xF9F8FC)
+        case .dark:
+            fixed(0x17141F)
+        }
+    }
+
+    private var titleBar: Color {
+        switch appearance {
+        case .auto: fixed(0x6D28FF)
+        case .light: fixed(0xDCDBE2)
+        case .dark: fixed(0x34323C)
+        }
+    }
+
+    private func line(width: CGFloat, height: CGFloat) -> some View {
+        let colors: (Color, Color) = switch appearance {
+        case .auto: (fixed(0xDCDBE2), fixed(0x34323C))
+        case .light: (fixed(0xE8E6EE), fixed(0xE8E6EE))
+        case .dark: (fixed(0x2A2732), fixed(0x2A2732))
+        }
+        return HStack(spacing: 0) {
+            Rectangle().fill(colors.0)
+            Rectangle().fill(colors.1)
+        }
+        .frame(width: width, height: height)
+    }
+
+    private func fixed(_ value: UInt32) -> Color {
+        Color(nsColor: HotkeyGoColor.hex(value))
     }
 }
 

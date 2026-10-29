@@ -41,10 +41,24 @@ final class TextSelectionSnapshot {
 final class AccessibilityService: AccessibilityServicing, SelectionSnapshotProviding {
     static var isTrusted: Bool { AXIsProcessTrusted() }
     var isTrusted: Bool { Self.isTrusted }
+    private let accessibilitySettingsOpenDelay: TimeInterval = 0.75
 
     func requestPermission() {
+        guard !AXIsProcessTrusted() else { return }
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        guard !AXIsProcessTrustedWithOptions(options) else { return }
+        _ = AXIsProcessTrustedWithOptions(options)
+        openAccessibilitySettings()
+    }
+
+    private func openAccessibilitySettings() {
+        // AXIsProcessTrustedWithOptions presents its prompt asynchronously. Let
+        // macOS register the request before System Settings snapshots the app list.
+        DispatchQueue.main.asyncAfter(deadline: .now() + accessibilitySettingsOpenDelay) { [weak self] in
+            self?.openAccessibilitySettingsNow()
+        }
+    }
+
+    private func openAccessibilitySettingsNow() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }

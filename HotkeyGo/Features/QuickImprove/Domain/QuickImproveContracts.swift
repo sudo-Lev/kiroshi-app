@@ -6,7 +6,6 @@ enum AppPhase: Equatable {
     case success
     case pasteSent
     case noSelection
-    case permissionDenied
     case limitReached
     /// Fix found nothing to change; the selection and clipboard stay untouched.
     case alreadyClean
@@ -32,14 +31,6 @@ protocol SelectionSnapshotProviding: AnyObject {
     func captureSelection() async -> TextSelectionSnapshot?
     func replaceSelection(_ snapshot: TextSelectionSnapshot, with replacement: String) async -> ReplacementAttemptReport
     func restoreFocus(_ snapshot: TextSelectionSnapshot)
-}
-
-protocol AccessibilityServicing: AnyObject {
-    var isTrusted: Bool { get }
-    func requestPermission()
-    func selectedText() async -> String?
-    func selectionBounds() -> CGRect?
-    func fallbackPoint() -> CGPoint
 }
 
 protocol TextImproving: AnyObject {

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 enum ContextPanelPlacement {
     static let edgeInset: CGFloat = 12
@@ -102,6 +103,7 @@ enum HotkeyGoColor {
     static let surface = adaptive(light: .white, dark: rgb(0.09, 0.078, 0.122))
     static let surfaceHover = adaptive(light: rgb(0.965, 0.955, 0.992), dark: rgb(0.145, 0.122, 0.19))
     static let line = adaptive(light: hex(0xDCDBE2), dark: hex(0x34323C))
+    static let tile = adaptive(light: hex(0xEEE8FF), dark: hex(0x241C38))
     static let popupBorder = adaptive(light: hex(0xD6D4DE), dark: hex(0x34323C))
     static let popupDivider = adaptive(light: hex(0xECEBF0), dark: hex(0x34323C))
     static let popupMuted = adaptive(light: hex(0x9A97A8), dark: rgb(0.69, 0.67, 0.75))
@@ -117,6 +119,14 @@ enum HotkeyGoColor {
     static let terminalGreen = adaptive(light: hex(0x0C7332), dark: rgb(0.28, 0.9, 0.49))
     static let warning = adaptive(light: rgb(0.82, 0.45, 0.03), dark: rgb(0.98, 0.65, 0.16))
     static let danger = adaptive(light: rgb(0.9, 0.16, 0.24), dark: rgb(1, 0.37, 0.43))
+    static let planOrange = adaptive(light: hex(0xD17308), dark: hex(0xFAA629))
+    static let planGreen = adaptive(light: hex(0x149E4A), dark: hex(0x47E67D))
+    static let planSegmentEmpty = adaptive(light: hex(0xE3E2E8), dark: hex(0x34323C))
+    static let planMenuSurface = adaptive(light: hex(0xFDFCFF), dark: hex(0x16131F))
+    static let planButtonFill = adaptive(light: hex(0x16131F), dark: hex(0x4B22B8))
+    static let planViolet = Color(nsColor: hex(0x6D28FF))
+    static let planButtonCyan = Color(nsColor: hex(0x00ABC7))
+    static let planCyan = adaptive(light: hex(0x00C2E0), dark: hex(0x26C9E3))
     static let quitFill = adaptive(light: hex(0xD11538), dark: hex(0xA3142F))
     static let quitFillHover = adaptive(light: hex(0xE2173C), dark: hex(0xB71635))
     static let quitBorderStart = Color(nsColor: hex(0xFF8A5C))
@@ -145,14 +155,20 @@ enum HotkeyGoColor {
 }
 
 extension AppAppearance {
-    var colorScheme: ColorScheme { self == .dark ? .dark : .light }
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .auto: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
 }
 
 private struct HotkeyGoThemeModifier: ViewModifier {
-    @AppStorage(AppPreferenceKey.appearance) private var rawAppearance = AppAppearance.light.rawValue
+    @AppStorage(AppPreferenceKey.appearance) private var rawAppearance = AppAppearance.auto.rawValue
 
     func body(content: Content) -> some View {
-        let appearance = AppAppearance(rawValue: rawAppearance) ?? .light
+        let appearance = AppAppearance(rawValue: rawAppearance) ?? .auto
         content
             .preferredColorScheme(appearance.colorScheme)
             .background(HotkeyGoWindowAppearanceBridge(appearance: appearance))
@@ -165,9 +181,15 @@ private struct HotkeyGoWindowAppearanceBridge: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
 
     func updateNSView(_ view: NSView, context: Context) {
-        let name: NSAppearance.Name = appearance == .dark ? .darkAqua : .aqua
+        let name: NSAppearance.Name? = switch appearance {
+        case .auto: nil
+        case .light: .aqua
+        case .dark: .darkAqua
+        }
         guard view.window?.appearance?.name != name else { return }
-        DispatchQueue.main.async { view.window?.appearance = NSAppearance(named: name) }
+        DispatchQueue.main.async {
+            view.window?.appearance = name.flatMap { NSAppearance(named: $0) }
+        }
     }
 }
 
@@ -352,7 +374,7 @@ enum HotkeyGoFace: Int, CaseIterable {
         case .broke: "$_00_$"
         case .empty: "x_x"
         case .upsell: "¬_¬"
-        case .advanced: "$_$"
+        case .advanced: "⌐■_■"
         case .lost: "?_?"
         case .retry: ">_<"
         case .idle: "#_#"
@@ -363,7 +385,7 @@ enum HotkeyGoFace: Int, CaseIterable {
     var shut: String {
         switch self {
         case .broke: "-_00_-"
-        case .advanced: "$_$"
+        case .advanced: "⌐■_■"
         default: "-_-"
         }
     }
@@ -402,6 +424,7 @@ struct HotkeyGoFaceView: View {
     private struct AnimationID: Hashable {
         let face: HotkeyGoFace
         let reduceMotion: Bool
+        let shouldBlink: Bool
     }
 
     let face: HotkeyGoFace
@@ -410,6 +433,10 @@ struct HotkeyGoFaceView: View {
     var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     var color = HotkeyGoColor.ink
     var stagger = 0
+    var chromaticSplit: CGFloat = 0
+    var shouldBlink = true
+
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var closed = false
     @State private var scanningFrame = 0
@@ -428,8 +455,8 @@ struct HotkeyGoFaceView: View {
             Text(face.text(closed: true, bracketed: bracketed))
                 .font(faceFont)
                 .hidden()
-            if size >= 13 {
-                glyph.foregroundStyle(HotkeyGoColor.cyan).offset(x: -split)
+            if size >= 13 || chromaticSplit > 0 {
+                glyph.foregroundStyle(HotkeyGoColor.planCyan).offset(x: -split)
                 glyph.foregroundStyle(HotkeyGoColor.magenta).offset(x: split)
             }
             glyph.foregroundStyle(color)
@@ -437,10 +464,14 @@ struct HotkeyGoFaceView: View {
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(face == .scanning ? "Scanning" : face.accessibilityLabel(bracketed: bracketed))
-        .task(id: AnimationID(face: face, reduceMotion: reduceMotion)) {
+        .shadow(
+            color: face == .advanced && colorScheme == .dark ? HotkeyGoColor.planGreen.opacity(0.5) : .clear,
+            radius: face == .advanced && colorScheme == .dark ? 10 : 0
+        )
+        .task(id: AnimationID(face: face, reduceMotion: reduceMotion, shouldBlink: shouldBlink)) {
             closed = false
             scanningFrame = 0
-            guard !reduceMotion, face != .advanced else { return }
+            guard shouldBlink, !reduceMotion, face != .advanced else { return }
             if face == .scanning {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .milliseconds(320))
@@ -482,7 +513,98 @@ struct HotkeyGoFaceView: View {
         return .system(size: size, weight: .heavy, design: .monospaced)
     }
 
-    private var split: CGFloat { 1.5 * size / 18 }
+    private var split: CGFloat { chromaticSplit > 0 ? chromaticSplit : 1.5 * size / 18 }
+}
+
+struct PlanMeterView: View {
+    enum Layout: Equatable {
+        case menu
+        case settings
+
+        var height: CGFloat { self == .menu ? 9 : 8 }
+        var gap: CGFloat { self == .menu ? 2 : 4 }
+        var slant: CGFloat { self == .menu ? 3 : 4 }
+    }
+
+    let value: PlanMeterValue
+    var layout: Layout = .menu
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: layout.gap) {
+            ForEach(0..<3, id: \.self) { index in
+                ParallelogramShape(slant: layout.slant)
+                    .fill(index < value.filled ? toneColor : HotkeyGoColor.planSegmentEmpty)
+                    .frame(width: layout == .menu ? 9 : nil, height: layout.height)
+                    .frame(maxWidth: layout == .settings ? .infinity : nil)
+                    .animation(
+                        reduceMotion ? nil : .easeInOut(duration: 0.2).delay(value.tone == .green ? Double(index) * 0.08 : 0),
+                        value: value
+                    )
+            }
+        }
+        .frame(maxWidth: layout == .settings ? .infinity : nil)
+        .accessibilityHidden(true)
+    }
+
+    private var toneColor: Color {
+        switch value.tone {
+        case .ink: HotkeyGoColor.ink
+        case .orange: HotkeyGoColor.planOrange
+        case .red: HotkeyGoColor.danger
+        case .green: HotkeyGoColor.planGreen
+        }
+    }
+}
+
+struct UsageTicksView: View {
+    let used: Int
+    let tone: MeterTone
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { geometry in
+            let gap: CGFloat = 2
+            let width = max(0, (geometry.size.width - gap * 29) / 30)
+            HStack(spacing: gap) {
+                ForEach(0..<30, id: \.self) { index in
+                    Rectangle()
+                        .fill(index < min(max(used, 0), 30) ? toneColor : HotkeyGoColor.planSegmentEmpty)
+                        .frame(width: width, height: 2)
+                }
+            }
+            .animation(reduceMotion ? nil : .easeIn(duration: 0.15), value: used)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: tone)
+        }
+        .frame(height: 2)
+        .accessibilityHidden(true)
+    }
+
+    private var toneColor: Color {
+        switch tone {
+        case .ink: HotkeyGoColor.ink
+        case .orange: HotkeyGoColor.planOrange
+        case .red: HotkeyGoColor.danger
+        case .green: HotkeyGoColor.planGreen
+        }
+    }
+}
+
+private struct ParallelogramShape: Shape {
+    let slant: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let cut = min(slant, rect.width / 2)
+        return Path { path in
+            path.move(to: CGPoint(x: rect.minX + cut, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            path.closeSubpath()
+        }
+    }
 }
 
 struct HotkeyGoPaywallUsageStrip: View {
@@ -683,7 +805,7 @@ struct AccessStatusBadge: View {
     }
 }
 
-struct HotkeyGoControlShape: Shape {
+struct CutCornerShape: Shape {
     let cut: CGFloat
 
     func path(in rect: CGRect) -> Path {
@@ -698,6 +820,8 @@ struct HotkeyGoControlShape: Shape {
         }
     }
 }
+
+typealias HotkeyGoControlShape = CutCornerShape
 
 /// A single, self-clearing edge impulse shared by HotkeyGoUI controls. The
 /// trimmed strokes collapse to zero at the end, so no timer or looping effect
@@ -920,177 +1044,504 @@ struct HotkeyGoToggleStyle: ToggleStyle {
     }
 }
 
-/// Branded two-way selector for the app's explicit Light/Dark appearance.
-///
-/// This intentionally keeps segmented-control semantics instead of presenting
-/// a boolean switch: the current theme remains visible at a glance.
-struct HotkeyGoThemePicker: View {
-    @Binding var selection: AppAppearance
+enum HotkeyGoRadioTileLayout: Equatable {
+    case grid(columns: Int)
+    case list
+}
+
+enum HotkeyGoTileIcon {
+    case template(Image)
+    case original(Image)
+    case initial(String)
+}
+
+struct HotkeyGoRadioTileOption<Selection: Hashable>: Identifiable {
+    let value: Selection
+    let title: String
+    let subtitle: String?
+    let icon: HotkeyGoTileIcon?
+    let preview: AnyView?
+    let isDisabled: Bool
+
+    var id: Selection { value }
+
+    init(
+        value: Selection,
+        title: String,
+        subtitle: String? = nil,
+        icon: HotkeyGoTileIcon? = nil,
+        preview: AnyView? = nil,
+        isDisabled: Bool = false
+    ) {
+        self.value = value
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.preview = preview
+        self.isDisabled = isDisabled
+    }
+}
+
+struct HotkeyGoRadioTileGroup<Selection: Hashable>: View {
+    @Binding private var selection: Selection
+    let options: [HotkeyGoRadioTileOption<Selection>]
+    let layout: HotkeyGoRadioTileLayout
+    let label: String
+    var glitchEnabled = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @FocusState private var focusedAppearance: AppAppearance?
+    @FocusState private var focusedValue: Selection?
+    @State private var hoveredValue: Selection?
+    @State private var glitchOpacity = 1.0
+    @State private var glitchTask: Task<Void, Never>?
+    @State private var increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+    @AppStorage(AppPreferenceKey.animationsEnabled) private var animationsEnabled = true
+
+    init(
+        selection: Binding<Selection>,
+        options: [HotkeyGoRadioTileOption<Selection>],
+        layout: HotkeyGoRadioTileLayout,
+        label: String,
+        glitchEnabled: Bool = true
+    ) {
+        _selection = selection
+        self.options = options
+        self.layout = layout
+        self.label = label
+        self.glitchEnabled = glitchEnabled
+    }
+
+    private var showsGlitch: Bool {
+        glitchEnabled && animationsEnabled && !increaseContrast
+    }
+
+    private var shouldReduceMotion: Bool { reduceMotion || !animationsEnabled }
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(AppAppearance.allCases) { appearance in
-                option(appearance)
-            }
-        }
-        .padding(3)
-        .frame(width: 164, height: 36)
-        .background(HotkeyGoControlShape(cut: 9).fill(HotkeyGoColor.surfaceHover))
-        .overlay {
-            HotkeyGoControlShape(cut: 9).stroke(HotkeyGoColor.line, lineWidth: 1)
-        }
-        .clipShape(HotkeyGoControlShape(cut: 9))
-        .animation(
-            reduceMotion ? nil : .snappy(duration: 0.14),
-            value: selection
-        )
-        .onMoveCommand { direction in
-            switch direction {
-            case .left:
-                choose(.light)
-            case .right:
-                choose(.dark)
-            default:
-                break
+        Group {
+            switch layout {
+            case .grid(let columns):
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.flexible(), spacing: 8),
+                        count: max(columns, 1)
+                    ),
+                    spacing: 8
+                ) {
+                    ForEach(options) { option in gridOption(option) }
+                }
+            case .list:
+                VStack(spacing: 8) {
+                    ForEach(options) { option in listOption(option) }
+                }
             }
         }
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(label))
+        .focusSection()
+        .onMoveCommand(perform: moveSelection)
+        .onValueChange(of: selection) { _ in animateGlitch() }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(
+            for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification
+        )) { _ in
+            increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        }
+        .onDisappear { glitchTask?.cancel() }
     }
 
-    private func option(_ appearance: AppAppearance) -> some View {
-        let isSelected = selection == appearance
-        let isFocused = focusedAppearance == appearance
+    private func gridOption(_ option: HotkeyGoRadioTileOption<Selection>) -> some View {
+        let valueIsSelected = selection == option.value
+        let isSelected = valueIsSelected && !option.isDisabled
+        let isHovered = hoveredValue == option.value
+        let isFocused = focusedValue == option.value
 
         return Button {
-            choose(appearance)
+            select(option.value)
         } label: {
-            HStack(spacing: 5) {
-                HotkeyGoUI.Icon(appearance == .light ? .themeLight : .themeDark, size: 13)
-                Text(appearance.title)
-                    .font(.system(size: 10.5, weight: .bold))
-            }
-            .foregroundStyle(isSelected ? .white : HotkeyGoColor.ink)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background {
-                if isSelected {
-                    HotkeyGoControlShape(cut: 5)
-                        .fill(HotkeyGoColor.violet)
-                        .shadow(color: HotkeyGoColor.violet.opacity(0.25), radius: 4, y: 2)
+            VStack(spacing: 5) {
+                RadioTileSurface(
+                    outerCut: 10,
+                    innerCut: 9.4,
+                    selected: isSelected,
+                    hovered: isHovered,
+                    disabled: option.isDisabled,
+                    focused: isFocused,
+                    glitchOpacity: glitchOpacity,
+                    showsGlitch: showsGlitch,
+                    reduceMotion: shouldReduceMotion,
+                    marker: .grid
+                ) {
+                    (option.preview ?? AnyView(Color.clear))
                 }
+                .frame(height: 58)
+
+                Text(option.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(titleColor(for: option, selected: isSelected, grid: true))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .overlay {
-                if isFocused {
-                    HotkeyGoControlShape(cut: 5)
-                        .stroke(HotkeyGoColor.violet, lineWidth: 1.5)
-                }
-            }
-            .hotkeygoElectricTrace(
-                in: HotkeyGoControlShape(cut: 5),
-                on: isSelected,
-                when: isSelected,
-                accent: HotkeyGoColor.cyan
-            )
-            .contentShape(HotkeyGoControlShape(cut: 5))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .focused($focusedAppearance, equals: appearance)
-        .accessibilityLabel(appearance.title)
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .buttonStyle(RadioTileButtonStyle(reduceMotion: shouldReduceMotion))
+        .focused($focusedValue, equals: option.value)
+        .disabled(option.isDisabled)
+        .onHover { updateHover($0, value: option.value) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel(for: option))
+        .accessibilityValue(valueIsSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(valueIsSelected ? .isSelected : [])
     }
 
-    private func choose(_ appearance: AppAppearance) {
-        guard selection != appearance else { return }
-        if reduceMotion {
-            selection = appearance
-        } else {
-            withAnimation(.snappy(duration: 0.14)) {
-                selection = appearance
+    private func listOption(_ option: HotkeyGoRadioTileOption<Selection>) -> some View {
+        let valueIsSelected = selection == option.value
+        let isSelected = valueIsSelected && !option.isDisabled
+        let isHovered = hoveredValue == option.value
+        let isFocused = focusedValue == option.value
+
+        return Button {
+            select(option.value)
+        } label: {
+            RadioTileSurface(
+                outerCut: 9,
+                innerCut: 8.4,
+                selected: isSelected,
+                hovered: isHovered,
+                disabled: option.isDisabled,
+                focused: isFocused,
+                glitchOpacity: glitchOpacity,
+                showsGlitch: showsGlitch,
+                reduceMotion: shouldReduceMotion,
+                marker: .list
+            ) {
+                HStack(spacing: 12) {
+                    if let icon = option.icon {
+                        ProviderTileIcon(icon: icon)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(option.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(titleColor(for: option, selected: isSelected, grid: false))
+                            .lineLimit(1)
+                        if let subtitle = option.subtitle {
+                            Text(subtitle)
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundStyle(HotkeyGoColor.secondary.opacity(option.isDisabled ? 0.6 : 1))
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                    Color.clear.frame(width: 18, height: 18)
+                }
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             }
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(RadioTileButtonStyle(reduceMotion: shouldReduceMotion))
+        .focused($focusedValue, equals: option.value)
+        .disabled(option.isDisabled)
+        .onHover { updateHover($0, value: option.value) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel(for: option))
+        .accessibilityValue(valueIsSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(valueIsSelected ? .isSelected : [])
+    }
+
+    private func titleColor(
+        for option: HotkeyGoRadioTileOption<Selection>,
+        selected: Bool,
+        grid: Bool
+    ) -> Color {
+        if option.isDisabled { return HotkeyGoColor.secondary.opacity(0.6) }
+        return selected && grid ? HotkeyGoColor.violet : HotkeyGoColor.ink
+    }
+
+    private func accessibilityLabel(for option: HotkeyGoRadioTileOption<Selection>) -> String {
+        [option.title, option.subtitle].compactMap { $0 }.joined(separator: ", ")
+    }
+
+    private func updateHover(_ isHovering: Bool, value: Selection) {
+        if isHovering {
+            hoveredValue = value
+        } else if hoveredValue == value {
+            hoveredValue = nil
+        }
+    }
+
+    private func select(_ value: Selection) {
+        guard selection != value else { return }
+        if shouldReduceMotion {
+            selection = value
+        } else {
+            withAnimation(.easeOut(duration: 0.15)) { selection = value }
+        }
+    }
+
+    private func moveSelection(_ direction: MoveCommandDirection) {
+        let step: Int
+        switch (layout, direction) {
+        case (.grid, .left), (.list, .up): step = -1
+        case (.grid, .right), (.list, .down): step = 1
+        default: return
+        }
+
+        let enabledOptions = options.filter { !$0.isDisabled }
+        guard !enabledOptions.isEmpty else { return }
+        let currentValue = focusedValue ?? selection
+        let currentIndex = enabledOptions.firstIndex(where: { $0.value == currentValue })
+        let startingIndex = currentIndex ?? (step > 0 ? -1 : 0)
+        let nextIndex = (startingIndex + step + enabledOptions.count) % enabledOptions.count
+        let nextValue = enabledOptions[nextIndex].value
+        select(nextValue)
+        focusedValue = nextValue
+    }
+
+    private func animateGlitch() {
+        glitchTask?.cancel()
+        guard showsGlitch, !shouldReduceMotion else {
+            glitchOpacity = 1
+            return
+        }
+
+        glitchOpacity = 0
+        glitchTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(15))
+            guard !Task.isCancelled else { return }
+            withAnimation(.linear(duration: 0.025)) { glitchOpacity = 1 }
+            try? await Task.sleep(for: .milliseconds(30))
+            guard !Task.isCancelled else { return }
+            withAnimation(.linear(duration: 0.025)) { glitchOpacity = 0.4 }
+            try? await Task.sleep(for: .milliseconds(10))
+            guard !Task.isCancelled else { return }
+            withAnimation(.linear(duration: 0.015)) { glitchOpacity = 1 }
         }
     }
 }
 
-/// A compact radio option for mutually exclusive settings.
-///
-/// Use a vertical group of options for three or more choices. For two short,
-/// equal-weight choices such as Light/Dark, prefer the segmented theme picker.
-struct HotkeyGoRadioOption<Selection: Hashable>: View {
-    let title: String
-    let value: Selection
-    @Binding var selection: Selection
+private enum RadioTileMarker: Equatable {
+    case grid
+    case list
+}
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var isHovering = false
+private struct RadioTileSurface<Content: View>: View {
+    let outerCut: CGFloat
+    let innerCut: CGFloat
+    let selected: Bool
+    let hovered: Bool
+    let disabled: Bool
+    let focused: Bool
+    let glitchOpacity: Double
+    let showsGlitch: Bool
+    let reduceMotion: Bool
+    let marker: RadioTileMarker
+    let content: Content
 
-    private var isSelected: Bool { selection == value }
+    @Environment(\.hotkeyGoRadioTilePressed) private var pressed
 
-    var body: some View {
-        Button {
-            guard isEnabled, !isSelected else { return }
-            if reduceMotion {
-                selection = value
-            } else {
-                withAnimation(.snappy(duration: 0.12)) {
-                    selection = value
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                indicator
-                Text(title)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(HotkeyGoColor.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 8)
-            .frame(minHeight: 30)
-            .background(
-                isHovering ? HotkeyGoColor.surfaceHover : Color.clear,
-                in: HotkeyGoControlShape(cut: 4)
-            )
-            .overlay {
-                if isHovering {
-                    HotkeyGoControlShape(cut: 4)
-                        .stroke(HotkeyGoColor.line, lineWidth: 1)
-                }
-            }
-            .contentShape(HotkeyGoControlShape(cut: 4))
-        }
-        .buttonStyle(.plain)
-        .opacity(isEnabled ? 1 : 0.45)
-        .onHover { isHovering = isEnabled && $0 }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    private let borderWidth: CGFloat = 1.5
+
+    init(
+        outerCut: CGFloat,
+        innerCut: CGFloat,
+        selected: Bool,
+        hovered: Bool,
+        disabled: Bool,
+        focused: Bool,
+        glitchOpacity: Double,
+        showsGlitch: Bool,
+        reduceMotion: Bool,
+        marker: RadioTileMarker,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.outerCut = outerCut
+        self.innerCut = innerCut
+        self.selected = selected
+        self.hovered = hovered
+        self.disabled = disabled
+        self.focused = focused
+        self.glitchOpacity = glitchOpacity
+        self.showsGlitch = showsGlitch
+        self.reduceMotion = reduceMotion
+        self.marker = marker
+        self.content = content()
     }
 
-    private var indicator: some View {
-        Circle()
-            .fill(HotkeyGoColor.surface)
-            .frame(width: 17, height: 17)
-            .overlay {
-                Circle()
-                    .stroke(isSelected ? HotkeyGoColor.violet : HotkeyGoColor.line, lineWidth: isSelected ? 1.5 : 1)
-            }
-            .overlay {
-                if isSelected {
-                    Circle()
-                        .fill(HotkeyGoColor.violet)
-                        .frame(width: 7, height: 7)
-                }
-            }
-            .shadow(
-                color: isSelected ? HotkeyGoColor.violet.opacity(0.2) : .clear,
-                radius: isHovering ? 4 : 2,
-                y: 1
+    var body: some View {
+        GeometryReader { geometry in
+            let innerSize = CGSize(
+                width: max(0, geometry.size.width - borderWidth * 2),
+                height: max(0, geometry.size.height - borderWidth * 2)
             )
-            .hotkeygoElectricTrace(in: Circle(), on: isSelected, when: isSelected, accent: HotkeyGoColor.violet)
+
+            ZStack {
+                if selected && showsGlitch {
+                    CutCornerShape(cut: outerCut)
+                        .fill(HotkeyGoColor.cyan.opacity(glitchOpacity))
+                        .offset(x: -1)
+                    CutCornerShape(cut: outerCut)
+                        .fill(HotkeyGoColor.magenta.opacity(glitchOpacity))
+                        .offset(x: 1)
+                }
+
+                CutCornerShape(cut: outerCut).fill(selected ? HotkeyGoColor.violet : HotkeyGoColor.line)
+                if (hovered || pressed) && !selected && !disabled {
+                    CutCornerShape(cut: outerCut).fill(HotkeyGoColor.violet.opacity(0.45))
+                }
+                CutCornerShape(cut: innerCut)
+                    .fill(fillColor)
+                    .frame(width: innerSize.width, height: innerSize.height)
+                content
+                    .frame(width: innerSize.width, height: innerSize.height)
+                    .clipShape(CutCornerShape(cut: innerCut))
+
+                if selected {
+                    CutCornerBevel(corner: marker == .grid ? 15 : 14)
+                        .fill(HotkeyGoColor.violet)
+                        .frame(width: innerSize.width, height: innerSize.height, alignment: .topLeading)
+                        .clipShape(CutCornerShape(cut: innerCut))
+                }
+                CheckKey()
+                    .opacity(selected ? 1 : 0)
+                    .scaleEffect(selected ? 1 : 0.4)
+                    .animation(
+                        reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.68),
+                        value: selected
+                    )
+                    .position(checkPosition(in: geometry.size))
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: selected)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: hovered)
+        }
+        .overlay {
+            if focused {
+                CutCornerShape(cut: outerCut + 2)
+                    .stroke(HotkeyGoColor.violet.opacity(0.35), lineWidth: 2)
+                    .padding(-2)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var fillColor: Color {
+        if disabled { return HotkeyGoColor.canvas }
+        if selected { return HotkeyGoColor.tile }
+        return hovered || pressed ? HotkeyGoColor.surfaceHover : HotkeyGoColor.surface
+    }
+
+    private func checkPosition(in size: CGSize) -> CGPoint {
+        switch marker {
+        case .grid:
+            CGPoint(x: size.width - 15, y: size.height - 15)
+        case .list:
+            CGPoint(x: size.width - 21, y: size.height / 2)
+        }
+    }
+}
+
+private struct CutCornerBevel: Shape {
+    let corner: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: rect.origin)
+            path.addLine(to: CGPoint(x: rect.minX + corner, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + corner))
+            path.closeSubpath()
+        }
+    }
+}
+
+private struct CheckKey: View {
+    var body: some View {
+        CutCornerShape(cut: 5)
+            .fill(HotkeyGoColor.violet)
+            .frame(width: 18, height: 18)
+            .overlay {
+                CheckKeyMark()
+                    .stroke(.white, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .frame(width: 9, height: 7)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+private struct CheckKeyMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX + rect.width * 0.06, y: rect.minY + rect.height * 0.53))
+            path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.37, y: rect.minY + rect.height * 0.84))
+            path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.95, y: rect.minY + rect.height * 0.16))
+        }
+    }
+}
+
+private struct ProviderTileIcon: View {
+    let icon: HotkeyGoTileIcon
+
+    var body: some View {
+        ZStack {
+            CutCornerShape(cut: 7).fill(HotkeyGoColor.line)
+            CutCornerShape(cut: 6.6).fill(HotkeyGoColor.canvas).padding(1)
+            glyph
+                .frame(width: 17, height: 17)
+        }
+        .frame(width: 30, height: 30)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private var glyph: some View {
+        switch icon {
+        case .template(let image):
+            image
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .foregroundStyle(HotkeyGoColor.ink)
+        case .original(let image):
+            image
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+        case .initial(let value):
+            Text(String(value.prefix(1)).uppercased())
+                .font(initialFont)
+                .foregroundStyle(HotkeyGoColor.secondary)
+        }
+    }
+
+    private var initialFont: Font {
+        if NSFont(name: "JetBrains Mono ExtraBold", size: 11) != nil {
+            return .custom("JetBrains Mono ExtraBold", fixedSize: 11)
+        }
+        return .system(size: 11, weight: .bold, design: .monospaced)
+    }
+}
+
+private struct RadioTileButtonPressedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private extension EnvironmentValues {
+    var hotkeyGoRadioTilePressed: Bool {
+        get { self[RadioTileButtonPressedKey.self] }
+        set { self[RadioTileButtonPressedKey.self] = newValue }
+    }
+}
+
+private struct RadioTileButtonStyle: ButtonStyle {
+    let reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .environment(\.hotkeyGoRadioTilePressed, configuration.isPressed)
+            .offset(y: configuration.isPressed && !reduceMotion ? 1 : 0)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 
@@ -1110,7 +1561,17 @@ struct PrimaryButtonStyle: ButtonStyle {
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = HotkeyGoControlShape(cut: compact ? 4 : 6)
+        let shape = HotkeyGoControlShape(cut: compact ? 8 : 6)
+        let compactBorder = LinearGradient(
+            stops: [
+                .init(color: HotkeyGoColor.planButtonCyan, location: 0),
+                .init(color: HotkeyGoColor.planViolet, location: 0.3),
+                .init(color: HotkeyGoColor.planViolet, location: 0.7),
+                .init(color: HotkeyGoColor.magenta, location: 1),
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
         let softBorder = LinearGradient(
             colors: [HotkeyGoColor.cyan, HotkeyGoColor.violet, HotkeyGoColor.magenta],
             startPoint: .topLeading,
@@ -1118,15 +1579,24 @@ struct PrimaryButtonStyle: ButtonStyle {
         )
 
         configuration.label
-            .font(.system(size: compact ? 10 : 11.5, weight: .heavy, design: .rounded))
+            .font(.system(size: compact ? 12.5 : 11.5, weight: .bold))
             .foregroundStyle(appearance == .filled ? Color.white : HotkeyGoColor.violet)
             .padding(.horizontal, compact ? 12 : 14)
-            .frame(minHeight: compact ? 28 : 32)
+            .frame(minHeight: compact ? 30 : 32)
             .background {
                 if appearance == .filled {
-                    shape.fill(HotkeyGoColor.cyan).offset(x: -1.5, y: 1)
-                    shape.fill(HotkeyGoColor.magenta).offset(x: 1.5, y: -1)
-                    shape.fill(isHovering ? HotkeyGoColor.primaryActionHover : HotkeyGoColor.primaryAction)
+                    if compact {
+                        shape.fill(compactBorder)
+                            .overlay {
+                                HotkeyGoControlShape(cut: 7.4)
+                                    .fill(isHovering ? HotkeyGoColor.primaryActionHover : HotkeyGoColor.planButtonFill)
+                                    .padding(1.5)
+                            }
+                    } else {
+                        shape.fill(HotkeyGoColor.cyan).offset(x: -1.5, y: 1)
+                        shape.fill(HotkeyGoColor.magenta).offset(x: 1.5, y: -1)
+                        shape.fill(isHovering ? HotkeyGoColor.primaryActionHover : HotkeyGoColor.primaryAction)
+                    }
                 } else {
                     shape.fill(appearance == .ghost
                         ? (isHovering ? HotkeyGoColor.violet.opacity(0.08) : Color.clear)
@@ -1135,7 +1605,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             }
             .overlay {
                 if appearance == .filled {
-                    shape.stroke(HotkeyGoColor.violet.opacity(0.9), lineWidth: 1)
+                    if !compact { shape.stroke(HotkeyGoColor.violet.opacity(0.9), lineWidth: 1) }
                 } else if appearance == .soft {
                     shape.stroke(softBorder, lineWidth: 1)
                 } else {
@@ -1143,10 +1613,17 @@ struct PrimaryButtonStyle: ButtonStyle {
                 }
             }
             .overlay(alignment: .topLeading) {
-                Rectangle()
-                    .fill(appearance == .ghost && !isHovering ? Color.clear : appearance == .filled ? Color.white.opacity(0.72) : HotkeyGoColor.violet.opacity(0.7))
-                    .frame(width: compact ? 12 : 15, height: 1)
-                    .offset(x: compact ? 7 : 9, y: compact ? 4 : 5)
+                if compact && appearance == .filled {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.9))
+                        .frame(width: 14, height: 1.5)
+                        .offset(x: 9, y: 4)
+                } else {
+                    Rectangle()
+                        .fill(appearance == .ghost && !isHovering ? Color.clear : appearance == .filled ? Color.white.opacity(0.72) : HotkeyGoColor.violet.opacity(0.7))
+                        .frame(width: compact ? 12 : 15, height: 1)
+                        .offset(x: compact ? 7 : 9, y: compact ? 4 : 5)
+                }
             }
             .hotkeygoElectricTrace(
                 in: shape,
@@ -1155,10 +1632,10 @@ struct PrimaryButtonStyle: ButtonStyle {
                 accent: HotkeyGoColor.cyan,
                 prominent: appearance == .filled
             )
-            .shadow(color: HotkeyGoColor.violet.opacity(appearance == .filled
-                ? (isHovering ? (colorScheme == .dark ? 0.24 : 0.16) : 0.12)
+            .shadow(color: (compact ? HotkeyGoColor.planViolet : HotkeyGoColor.violet).opacity(appearance == .filled
+                ? (compact ? 0.25 : isHovering ? (colorScheme == .dark ? 0.24 : 0.16) : 0.12)
                 : appearance == .soft ? (isHovering ? 0.10 : 0.04) : 0),
-                radius: isHovering ? (compact ? 6 : 8) : (compact ? 4 : 5), y: compact ? 2 : 3)
+                radius: isHovering ? (compact ? 6 : 8) : (compact ? 6 : 5), y: compact ? 2 : 3)
             .opacity(isEnabled ? (configuration.isPressed ? 0.86 : 1) : 0.45)
             .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? (compact ? 0.97 : 0.96) : isHovering ? (compact ? 1.015 : 1.025) : 1)
             .offset(y: reduceMotion ? 0 : configuration.isPressed ? (compact ? 1 : 2) : 0)

@@ -5,11 +5,13 @@ import AppKit
 final class FeedbackWindowController: FeedbackPresenting {
     private let state = FeedbackWindowState()
     private let popupDismiss: PopupDismissCoordinator
+    private let planStatus: PlanStatus
     private let onUpgrade: () -> Void
     private var panel: NSPanel?
 
-    init(popupDismiss: PopupDismissCoordinator, onUpgrade: @escaping () -> Void) {
+    init(popupDismiss: PopupDismissCoordinator, planStatus: PlanStatus, onUpgrade: @escaping () -> Void) {
         self.popupDismiss = popupDismiss
+        self.planStatus = planStatus
         self.onUpgrade = onUpgrade
     }
 
@@ -28,7 +30,6 @@ final class FeedbackWindowController: FeedbackPresenting {
         else if isError { size = .init(width: 400, height: 72) }
         else if phase == .offline { size = .init(width: 360, height: 56) }
         else if isCyberStatus { size = .init(width: 216, height: 50) }
-        else if phase == .permissionDenied { size = .init(width: 326, height: 86) }
         else if phase == .noSelection { size = .init(width: 306, height: 82) }
         else { size = .init(width: 272, height: 66) }
         if panel == nil {
@@ -42,6 +43,7 @@ final class FeedbackWindowController: FeedbackPresenting {
             panel.contentView = NSHostingView(
                 rootView: FeedbackHost(
                     state: state,
+                    planStatus: planStatus,
                     onClose: { [weak self] in self?.hide() },
                     onUpgrade: onUpgrade
                 )
@@ -104,6 +106,7 @@ private final class FeedbackWindowState: ObservableObject {
 
 private struct FeedbackHost: View {
     @ObservedObject var state: FeedbackWindowState
+    @ObservedObject var planStatus: PlanStatus
     let onClose: () -> Void
     let onUpgrade: () -> Void
 
@@ -112,6 +115,7 @@ private struct FeedbackHost: View {
             FeedbackPill(
                 phase: state.phase,
                 reduceMotion: state.reduceMotion,
+                planStatus: planStatus,
                 onClose: onClose,
                 onUpgrade: onUpgrade
             )
@@ -135,7 +139,6 @@ private struct FeedbackHost: View {
         case .pasteSent: "paste-sent"
         case .alreadyClean: "already-clean"
         case .noSelection: "no-selection"
-        case .permissionDenied: "permission"
         case .limitReached: "limit-reached"
         case .retrying(_, _): "processing"
         case .offline: "offline"

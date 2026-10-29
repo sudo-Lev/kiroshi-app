@@ -151,6 +151,7 @@ struct OnboardingPeekSurface: View {
         FeedbackPill(
             phase: .processing,
             reduceMotion: reduceMotion,
+            planStatus: .shared,
             onClose: {}
         )
         .id("peek-processing")

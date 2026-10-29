@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 private enum PeekPalette {
@@ -43,69 +44,80 @@ struct PeekView: View {
     private var accent: Color { HotkeyGoColor.cyan }
 
     private var header: some View {
-        Group {
-            if viewModel.loadState == .limitReached {
-                HStack {
-                    Text("Peek")
-                        .font(.system(size: 14, weight: .bold))
-                    Spacer(minLength: 0)
-                    Text(viewModel.contextLabel)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(HotkeyGoColor.popupMuted)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                }
-                .padding(.horizontal, 16)
-            } else if viewModel.isAwaitingChoice || viewModel.sourceText.isEmpty {
-                HStack(spacing: 10) {
-                    Rectangle().fill(HotkeyGoColor.violet).frame(width: 1.5, height: 18)
-                    TextField(
-                        "",
-                        text: $viewModel.query,
-                        prompt: Text("Search…").foregroundColor(HotkeyGoColor.popupMuted)
-                    )
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(PeekPalette.text)
-                    .focused($searchFocused)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(viewModel.contextLabel)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(HotkeyGoColor.popupMuted)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                .padding(.horizontal, 16)
-                .onAppear { searchFocused = true }
-                .onValueChange(of: viewModel.wordCount) { _ in searchFocused = true }
-            } else {
-                HStack(spacing: 10) {
-                    Text("\(viewModel.sourceLanguage?.displayName ?? "Unknown language") →")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(HotkeyGoColor.popupMuted)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    Button(viewModel.targetLanguageName) { viewModel.cycleLanguage() }
-                        .buttonStyle(HotkeyGoUI.PopupSelectedButton(compact: true))
-                        .help("Next language")
-                        .accessibilityLabel("Target language: \(viewModel.targetLanguageName). Switch to next language.")
-                    Spacer(minLength: 0)
-                    Button(action: onClose) {
-                        HotkeyGoUI.Icon(.close, size: 10)
-                    }
-                    .buttonStyle(HotkeyGoUI.IconButton(accent: HotkeyGoColor.popupMuted))
-                    .help("Close Peek")
-                    .accessibilityLabel("Close Peek")
-                }
-                .padding(.leading, 16)
-                .padding(.trailing, 10)
-            }
+        HStack(spacing: 0) {
+            Text("Peek")
+                .font(.system(size: 14, weight: .bold))
+                .frame(width: PeekHeaderLayout.dragWidth, height: PeekHeaderLayout.height)
+                .contentShape(Rectangle())
+                .help("Drag to move Peek")
+            headerContent
         }
-        .frame(height: 48)
+        .frame(height: PeekHeaderLayout.height)
         .contentShape(Rectangle())
         .contextMenu {
             Button(viewModel.isPinned ? "Unpin Peek" : "Pin Peek", action: onTogglePin)
+        }
+    }
+
+    @ViewBuilder
+    private var headerContent: some View {
+        if viewModel.loadState == .limitReached {
+            HStack {
+                Spacer(minLength: 0)
+                Text(viewModel.contextLabel)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(HotkeyGoColor.popupMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(.horizontal, 16)
+        } else if viewModel.isAwaitingChoice || viewModel.sourceText.isEmpty {
+            HStack(spacing: 10) {
+                Rectangle().fill(HotkeyGoColor.violet).frame(width: 1.5, height: 18)
+                TextField(
+                    "",
+                    text: $viewModel.query,
+                    prompt: Text("Search…").foregroundColor(HotkeyGoColor.popupMuted)
+                )
+                .textFieldStyle(.plain)
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundStyle(PeekPalette.text)
+                .focused($searchFocused)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(viewModel.contextLabel)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(HotkeyGoColor.popupMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, 16)
+            .onAppear { searchFocused = true }
+            .onValueChange(of: viewModel.wordCount) { _ in searchFocused = true }
+        } else {
+            HStack(spacing: 10) {
+                Text("\(viewModel.sourceLanguage?.displayName ?? "Unknown language") →")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(HotkeyGoColor.popupMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Button(viewModel.targetLanguageName) { viewModel.cycleLanguage() }
+                    .buttonStyle(HotkeyGoUI.PopupSelectedButton(compact: true))
+                    .help("Next language")
+                    .accessibilityLabel("Target language: \(viewModel.targetLanguageName). Switch to next language.")
+                PeekHeaderDragArea()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .help("Drag to move Peek")
+                    .accessibilityHidden(true)
+                Button(action: onClose) {
+                    HotkeyGoUI.Icon(.close, size: 10)
+                }
+                .buttonStyle(HotkeyGoUI.IconButton(accent: HotkeyGoColor.popupMuted))
+                .help("Close Peek")
+                .accessibilityLabel("Close Peek")
+            }
+            .padding(.leading, 16)
+            .padding(.trailing, 10)
         }
     }
 
@@ -238,6 +250,7 @@ struct PeekView: View {
             phase: phase,
             reduceMotion: reduceMotion,
             successDetail: successDetail,
+            planStatus: .shared,
             onClose: {}
         )
         .id(phase == .success ? "peek-success" : "peek-processing")
@@ -283,6 +296,7 @@ struct PeekView: View {
                     : isOffline(message) ? .offline : .error(message),
                 reduceMotion: reduceMotion,
                 embedded: true,
+                planStatus: .shared,
                 onClose: onClose
             )
             if message != "Select some text first." {
@@ -332,6 +346,19 @@ struct PeekView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+}
+
+/// The result header's flexible space is a second native drag handle. Its size
+/// follows the language button, so a long language name never becomes a drag hit target.
+private struct PeekHeaderDragArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragView { DragView() }
+    func updateNSView(_ nsView: DragView, context: Context) {}
+
+    final class DragView: NSView {
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
+    }
 }
 
 private struct PeekMarkdownText: View {

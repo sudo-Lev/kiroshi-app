@@ -16,6 +16,7 @@ import worker, {
 
 globalThis.crypto ??= webcrypto;
 const currentPeriod = new Date().toISOString().slice(0, 7);
+const currentResetAt = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toISOString();
 
 test("the legacy instruction proxy is gone", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
@@ -59,7 +60,7 @@ test("atomically stops the free plan after 30 actions", async () => {
   for (let index = 0; index < 30; index += 1) {
     assert.equal((await authorizeNew(ledger)).allowed, true);
   }
-  assert.deepEqual(await authorizeNew(ledger), { allowed: false, advanced: false, remaining: 0, period: currentPeriod });
+  assert.deepEqual(await authorizeNew(ledger), { allowed: false, advanced: false, remaining: 0, period: currentPeriod, resetsAt: currentResetAt, renewsAt: null });
 });
 
 test("active subscription unlocks Advanced", async () => {
@@ -75,7 +76,7 @@ test("active subscription unlocks Advanced", async () => {
       occurredAt: "2026-10-03T12:00:00Z",
     }),
   }));
-  assert.deepEqual(await authorizeNew(ledger), { allowed: true, advanced: true, remaining: null, dailyRemaining: 299, period: currentPeriod });
+  assert.deepEqual(await authorizeNew(ledger), { allowed: true, advanced: true, remaining: null, dailyRemaining: 299, period: currentPeriod, resetsAt: currentResetAt, renewsAt: null });
 });
 
 test("signed Paddle webhook activates Advanced in billing status", async () => {
@@ -94,6 +95,7 @@ test("signed Paddle webhook activates Advanced in billing status", async () => {
       id: "sub_advanced",
       status: "active",
       custom_data: { hotkeygo_installation_id: installationID },
+      next_billed_at: "2026-11-03T12:00:00Z",
       items: [{ price: { id: "pri_01m4135bkhzgwp4y51nf8wjkgp" } }],
     },
   });
@@ -110,7 +112,7 @@ test("signed Paddle webhook activates Advanced in billing status", async () => {
     new Request(`https://example.test/billing/status?installation_id=${installationID}`),
     { USAGE_LEDGER: namespace },
   );
-  assert.deepEqual(await status.json(), { plan: "advanced", subscription_status: "active", remaining: null, period: currentPeriod });
+  assert.deepEqual(await status.json(), { plan: "advanced", subscription_status: "active", remaining: null, period: currentPeriod, resets_at: currentResetAt, renews_at: "2026-11-03T12:00:00Z" });
 });
 
 test("rejects an oversized Paddle webhook before parsing or signature work", async () => {
@@ -124,11 +126,11 @@ test("rejects an oversized Paddle webhook before parsing or signature work", asy
 test("reports billing status without consuming a free action", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
   const before = await ledger.fetch(new Request("https://usage.hotkeygo/status"));
-  assert.deepEqual(await before.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod });
+  assert.deepEqual(await before.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod, resets_at: currentResetAt, renews_at: null });
 
   await authorizeNew(ledger);
   const after = await ledger.fetch(new Request("https://usage.hotkeygo/status"));
-  assert.deepEqual(await after.json(), { plan: "free", subscription_status: "none", remaining: 29, period: currentPeriod });
+  assert.deepEqual(await after.json(), { plan: "free", subscription_status: "none", remaining: 29, period: currentPeriod, resets_at: currentResetAt, renews_at: null });
 });
 
 test("exposes the read-only billing status for the mac app", async () => {
@@ -143,7 +145,7 @@ test("exposes the read-only billing status for the mac app", async () => {
     { USAGE_LEDGER: namespace },
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod });
+  assert.deepEqual(await response.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod, resets_at: currentResetAt, renews_at: null });
 });
 
 test("development reset requires its secret and clears the installation ledger", async () => {
@@ -217,7 +219,7 @@ test("development reset requires its secret and clears the installation ledger",
   assert.deepEqual(JSON.parse(paddleRequests[1].init.body), { effective_from: "immediately" });
 
   const status = await ledger.fetch(new Request("https://usage.hotkeygo/status"));
-  assert.deepEqual(await status.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod });
+  assert.deepEqual(await status.json(), { plan: "free", subscription_status: "none", remaining: 30, period: currentPeriod, resets_at: currentResetAt, renews_at: null });
 });
 
 test("development reset keeps the ledger intact when Paddle cancellation fails", async () => {
@@ -265,7 +267,7 @@ test("development reset keeps the ledger intact when Paddle cancellation fails",
 
   assert.equal(response.status, 502);
   const status = await ledger.fetch(new Request("https://usage.hotkeygo/status"));
-  assert.deepEqual(await status.json(), { plan: "advanced", subscription_status: "active", remaining: null, period: currentPeriod });
+  assert.deepEqual(await status.json(), { plan: "advanced", subscription_status: "active", remaining: null, period: currentPeriod, resets_at: currentResetAt, renews_at: null });
 });
 
 test("Paddle cancellation helper uses the sandbox API and immediate cancellation", async () => {
@@ -372,7 +374,7 @@ test("retrying the last free action passes instead of hitting the paywall", asyn
   const storage = new MemoryStorage();
   storage.values.set("usage", { period: currentPeriod, count: 29 });
   const ledger = new UsageLedger({ storage });
-  assert.deepEqual(await authorize(ledger, operationA), { allowed: true, advanced: false, remaining: 0, period: currentPeriod });
+  assert.deepEqual(await authorize(ledger, operationA), { allowed: true, advanced: false, remaining: 0, period: currentPeriod, resetsAt: currentResetAt, renewsAt: null });
   assert.equal((await authorize(ledger, operationA)).allowed, true);
   assert.equal((await authorize(ledger, operationB)).allowed, false);
 });
@@ -770,15 +772,16 @@ test("Fix output evaluation: clean verdict, unchanged text, real fix, and reject
   assert.deepEqual(evaluateHotkeyGoOutput(long, json({ verdict: "fixed", text: "def main():\n" + "  print(1)\n".repeat(40) })), { kind: "rejected", reason: "implausible_length" });
 });
 
-test("v2 Fix with nothing to fix refunds the action", async () => {
+test("v2 Fix with nothing to fix counts as a successful action", async () => {
   const ledger = new UsageLedger({ storage: new MemoryStorage() });
   await withOpenAI(() => modelResponse(JSON.stringify({ verdict: "clean", text: "" })), async () => {
     const response = await worker.fetch(hotkeygoRequest({ task: "fix", text: "Hello there." }), { USAGE_LEDGER: ledgerNamespace(ledger), OPENAI_API_KEY: "sk-test" });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { result: "clean" });
-    assert.equal(response.headers.get("X-HotkeyGo-Remaining"), "30");
+    assert.equal(response.headers.get("X-HotkeyGo-Remaining"), "29");
+    assert.equal(response.headers.get("X-HotkeyGo-Resets-At"), currentResetAt);
   });
-  assert.equal(await remaining(ledger), 30);
+  assert.equal(await remaining(ledger), 29);
 });
 
 test("v2 Fix with a real fix charges once and returns the text", async () => {
@@ -823,7 +826,7 @@ test("the twenty-first clean Fix of the day stays charged but still reports clea
   assert.equal(await remaining(ledger), 29);
 });
 
-test("retrying a clean operation neither charges nor counts another clean", async () => {
+test("retrying a clean operation charges only once", async () => {
   const storage = new MemoryStorage();
   const ledger = new UsageLedger({ storage });
   const env = { USAGE_LEDGER: ledgerNamespace(ledger), OPENAI_API_KEY: "sk-test" };
@@ -831,8 +834,8 @@ test("retrying a clean operation neither charges nor counts another clean", asyn
     await worker.fetch(hotkeygoRequest({ task: "fix", text: "Hello there." }), env);
     await worker.fetch(hotkeygoRequest({ task: "fix", text: "Hello there." }), env);
   });
-  assert.equal(await remaining(ledger), 30);
-  assert.equal(storage.values.get("clean").count, 1);
+  assert.equal(await remaining(ledger), 29);
+  assert.equal(storage.values.get("clean"), undefined);
 });
 
 test("Slack style may compress a long message, but not to nothing", () => {
@@ -876,6 +879,7 @@ test("Peek streams through and charges once", async () => {
     const response = await worker.fetch(hotkeygoRequest({ task: "peek", text: "Dzień dobry", mode: "translate", language: "uk" }), { USAGE_LEDGER: ledgerNamespace(ledger), OPENAI_API_KEY: "sk-test" }, executionContext);
     assert.equal(response.status, 200);
     assert.match(await response.text(), /response\.completed/);
+    assert.equal(response.headers.get("X-HotkeyGo-Resets-At"), currentResetAt);
     assert.equal(JSON.parse(calls[0].init.body).stream, true);
   });
   await Promise.all(pending);
@@ -885,6 +889,23 @@ test("Peek streams through and charges once", async () => {
   assert.equal(analytics.events[0].modelLatencyCount, 1);
   assert.equal(analytics.events[0].latencyCount, 1);
   assert.equal(await remaining(ledger), 29);
+});
+
+test("cancelled Peek refunds the reserved action", async () => {
+  const storage = new MemoryStorage();
+  const ledger = new UsageLedger({ storage });
+  const unfinishedStream = new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode("data: partial\n\n")); },
+  });
+  await withOpenAI(() => new Response(unfinishedStream, { headers: { "content-type": "text/event-stream" } }), async () => {
+    const response = await worker.fetch(
+      hotkeygoRequest({ task: "peek", text: "Dzień dobry", mode: "translate", language: "uk" }),
+      { USAGE_LEDGER: ledgerNamespace(ledger), OPENAI_API_KEY: "sk-test" },
+    );
+    await response.body.cancel();
+  });
+  assert.equal(storage.values.get(`op:${operationA}`)?.state, "refunded");
+  assert.equal(await remaining(ledger), 30);
 });
 
 test("client timing stores only daily provider and feature aggregates", async () => {
